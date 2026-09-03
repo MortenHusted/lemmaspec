@@ -1,0 +1,27 @@
+{
+  "name": "lemmaspec",
+  "description": "The official LemmaSpec plugin marketplace.",
+  "owner": {
+    "name": "Morten Lochmann"
+  },
+  "plugins": [
+    {
+      "name": "lemmaspec",
+      "source": "./plugins/lemmaspec",
+      "description": "Author and verify typed, executable LemmaSpec artifacts.",
+      "author": {
+        "name": "Morten Lochmann"
+      },
+      "homepage": "https://github.com/MortenHusted/lemmaspec",
+      "repository": "https://github.com/MortenHusted/lemmaspec",
+      "license": "MIT",
+      "category": "development",
+      "keywords": [
+        "specification",
+        "mutation-testing",
+        "datalog",
+        "software-development"
+      ]
+    }
+  ]
+}

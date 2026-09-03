@@ -1,0 +1,32 @@
+{
+  "name": "lemmaspec",
+  "version": "0.1.0",
+  "description": "Author and verify typed, executable LemmaSpec artifacts.",
+  "author": {
+    "name": "Morten Lochmann",
+    "email": "45610088+MortenHusted@users.noreply.github.com",
+    "url": "https://github.com/MortenHusted"
+  },
+  "homepage": "https://github.com/MortenHusted/lemmaspec",
+  "repository": "https://github.com/MortenHusted/lemmaspec",
+  "license": "MIT",
+  "keywords": [
+    "specification",
+    "mutation-testing",
+    "datalog",
+    "software-development"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "LemmaSpec",
+    "shortDescription": "Author and verify executable specifications.",
+    "longDescription": "Use LemmaSpec to model typed facts, rules, expectations, mutation policies, and deterministic graph projections.",
+    "developerName": "Morten Lochmann",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive"
+    ],
+    "websiteURL": "https://github.com/MortenHusted/lemmaspec",
+    "defaultPrompt": "Use LemmaSpec to turn these requirements into a typed executable specification and verify it."
+  }
+}

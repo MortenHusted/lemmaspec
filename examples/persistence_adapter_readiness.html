@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en" data-status="incomplete">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Persistence adapter readiness · LemmaSpec</title>
+<style>
+  :root {
+    --bg:#0d1418; --panel:#131f25; --panel2:#18262d; --line:#283a43; --hover:#0f1b20;
+    --ink:#e5eff2; --dim:#9cb4bc; --faint:#6a818a;
+    --stable:#3fb950; --stable-bg:#0f2a17; --stable-br:#1d4427;
+    --additive:#58a6ff; --additive-bg:#0f1f33; --additive-br:#1d3a5c;
+    --attention:#d29922; --attention-bg:#2a2210; --attention-br:#4a3c14;
+    --critical:#f85149; --critical-bg:#2a1316; --critical-br:#5c1d1f;
+    --neutral:#8b949e; --neutral-bg:#1a1f26; --neutral-br:#333b44;
+    --accent:#74b6dc;
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"Inter","Noto Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  }
+  * { box-sizing:border-box }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 var(--sans); -webkit-font-smoothing:antialiased }
+  .wrap { max-width:1440px; margin:0 auto; padding:36px 28px 80px }
+  code, pre { font-family:var(--mono) }
+  header { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; padding-bottom:22px; border-bottom:1px solid var(--line) }
+  h1 { margin:0 0 6px; font-size:30px; letter-spacing:-.5px }
+  h1 span { color:var(--accent); font:14px var(--mono) }
+  .sub, .empty { margin:0; color:var(--dim) }
+  h2 { margin:42px 0 16px; padding-top:22px; border-top:1px solid var(--line); color:var(--faint); font-size:12px; font-weight:650; letter-spacing:1.5px; text-transform:uppercase }
+  .status { border:1px solid; border-radius:999px; padding:5px 11px; font:12px var(--mono) }
+  html[data-status="clean"] .status { color:var(--stable); background:var(--stable-bg); border-color:var(--stable-br) }
+  html[data-status="incomplete"] .status { color:var(--critical); background:var(--critical-bg); border-color:var(--critical-br) }
+  .def { margin-top:26px; padding:18px 21px; border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:10px; background:linear-gradient(180deg,var(--panel2),var(--panel)); font-size:18px }
+  html[data-status="incomplete"] .def { border-left-color:var(--critical) }
+  .def small { display:block; margin-top:7px; color:var(--dim); font-size:13px }
+  .stats { display:grid; grid-template-columns:repeat(8,minmax(90px,1fr)); gap:10px; margin-top:18px }
+  .stat { padding:12px 14px; border:1px solid var(--line); border-radius:9px; background:var(--panel) }
+  .stat strong { display:block; font:21px var(--mono) }
+  .stat span { color:var(--faint); font-size:11px; text-transform:uppercase; letter-spacing:.7px }
+  .legend { display:flex; flex-wrap:wrap; gap:10px 18px }
+  .lg { display:flex; align-items:center; gap:8px; color:var(--dim); font-size:13px }
+  .dot { width:10px; height:10px; border-radius:3px }
+  .graph-layout { display:grid; grid-template-columns:minmax(0,1fr) 320px; min-height:580px; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--panel) }
+  .graph-viewport { overflow:auto; min-height:580px; background-image:radial-gradient(var(--line) 1px,transparent 1px); background-size:20px 20px }
+  #graph { display:block }
+  .inspector { padding:18px; border-left:1px solid var(--line); background:var(--panel2) }
+  .inspector h3 { margin:0 0 8px; font-size:15px }
+  .inspector p { color:var(--dim); font-size:13px }
+  .inspector pre { overflow:auto; max-height:470px; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--dim); font-size:11px; white-space:pre-wrap }
+  .edge { fill:none; stroke:var(--faint); stroke-width:1.2; opacity:.58; marker-end:url(#arrow); cursor:pointer }
+  .edge:hover, .edge.selected { stroke:var(--ink); opacity:1; stroke-width:2 }
+  .node { cursor:pointer }
+  .node rect { fill:var(--neutral-bg); stroke:var(--neutral-br); stroke-width:1.4; rx:8 }
+  .node:hover rect, .node.selected rect { stroke:var(--ink); stroke-width:2.2 }
+  .node[data-tone="stable"] rect { fill:var(--stable-bg); stroke:var(--stable-br) }
+  .node[data-tone="additive"] rect { fill:var(--additive-bg); stroke:var(--additive-br) }
+  .node[data-tone="attention"] rect { fill:var(--attention-bg); stroke:var(--attention-br) }
+  .node[data-tone="critical"] rect { fill:var(--critical-bg); stroke:var(--critical-br) }
+  .node text { fill:var(--ink); pointer-events:none; font:12px var(--mono) }
+  .node .kind { fill:var(--faint); font:9px var(--sans); letter-spacing:1px; text-transform:uppercase }
+  .constraint-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px }
+  .constraint { padding:15px 17px; border:1px solid var(--line); border-left:3px solid var(--attention); border-radius:10px; background:var(--panel) }
+  .constraint[data-status="passed"] { border-left-color:var(--stable) }
+  .constraint[data-status="failed"] { border-left-color:var(--critical) }
+  .constraint-head { display:flex; align-items:center; gap:9px; margin-bottom:10px }
+  .constraint-head .result { margin-left:auto; font:11px var(--mono) }
+  .constraint ol { margin:9px 0 0; padding-left:22px; color:var(--dim) }
+  .constraint p { margin:8px 0 0; color:var(--dim); font-size:13px }
+  .chip { display:inline-flex; width:fit-content; padding:2px 7px; border:1px solid; border-radius:6px; font:10px var(--mono) }
+  .c-stable { color:var(--stable); border-color:var(--stable-br); background:var(--stable-bg) }
+  .c-additive { color:var(--additive); border-color:var(--additive-br); background:var(--additive-bg) }
+  .c-attention { color:var(--attention); border-color:var(--attention-br); background:var(--attention-bg) }
+  .c-critical { color:var(--critical); border-color:var(--critical-br); background:var(--critical-bg) }
+  table { width:100%; border-collapse:collapse; font-size:13px }
+  th { padding:8px 11px; border-bottom:1px solid var(--line); color:var(--faint); font-size:10px; letter-spacing:.7px; text-align:left; text-transform:uppercase }
+  td { padding:10px 11px; border-bottom:1px solid var(--line); vertical-align:top }
+  tr:hover td { background:var(--hover) }
+  .table-scroll { overflow:auto }
+  details { margin-top:16px; border:1px solid var(--line); border-radius:10px; background:var(--panel) }
+  summary { cursor:pointer; padding:13px 16px; color:var(--dim) }
+  details pre { overflow:auto; max-height:520px; margin:0; padding:18px; border-top:1px solid var(--line); color:var(--dim); font-size:12px; white-space:pre }
+  footer { margin-top:48px; padding-top:17px; border-top:1px solid var(--line); color:var(--faint); font-size:12px }
+  @media(max-width:1000px) { .stats { grid-template-columns:repeat(4,1fr) } .graph-layout { grid-template-columns:1fr } .inspector { border-left:0; border-top:1px solid var(--line) } }
+  @media(max-width:720px) { .wrap { padding:24px 16px 60px } .stats { grid-template-columns:repeat(2,1fr) } .constraint-grid { grid-template-columns:1fr } header { flex-direction:column } }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <div><h1>Persistence adapter readiness <span>// persistence_adapter_readiness</span></h1><p class="sub">Deterministic facts, derivations, and executable constraints from one self-contained artifact.</p></div>
+    <span class="status">incomplete</span>
+  </header>
+
+  <section class="def">1 expectation needs attention<small>0 of 1 executable constraints matched; failed expectations remain visible as unresolved work.</small></section>
+  <div class="stats"><div class="stat"><strong>3</strong><span>relations</span></div><div class="stat"><strong>4</strong><span>asserted</span></div><div class="stat"><strong>0</strong><span>derived</span></div><div class="stat"><strong>1</strong><span>rules</span></div><div class="stat"><strong>1</strong><span>expectations</span></div><div class="stat"><strong>1</strong><span>failed</span></div><div class="stat"><strong>20</strong><span>nodes</span></div><div class="stat"><strong>32</strong><span>edges</span></div></div>
+
+  <h2>Legend</h2>
+  <div class="legend">
+    <span class="lg"><span class="dot" style="background:var(--stable)"></span>asserted fact / passing expectation</span>
+    <span class="lg"><span class="dot" style="background:var(--additive)"></span>derived fact</span>
+    <span class="lg"><span class="dot" style="background:var(--attention)"></span>derivation rule / mutation policy</span>
+    <span class="lg"><span class="dot" style="background:var(--critical)"></span>failed expectation</span>
+    <span class="lg"><span class="dot" style="background:var(--neutral)"></span>relation / symbol</span>
+  </div>
+
+  <h2>Graph</h2>
+  <div class="graph-layout">
+    <div class="graph-viewport"><svg id="graph" role="img" aria-label="LemmaSpec dependency graph"></svg></div>
+    <aside class="inspector"><h3>Inspect the projection</h3><p>Select any node or edge to see its exact projected fields, including proof witnesses and evidence.</p><pre id="node-detail">Nothing selected.</pre></aside>
+  </div>
+
+  <h2>Rules, mutations, and expectations</h2>
+  <div class="constraint-grid"><article class="constraint" data-kind="expectation" data-status="failed"><div class="constraint-head"><span class="chip c-critical">expect</span><strong>candidate_is_ready_for_durable_persistence</strong><span class="result c-critical">failed</span></div><code>persistence_ready(lemmaspec_projection, store_adapter)</code><p>Expected <b>1</b> result(s); found <b>0</b>.</p></article><article class="constraint" data-kind="rule"><div class="constraint-head"><span class="chip c-attention">rule</span><strong>ready_only_when_adapter_owns_persistence_semantics</strong></div><code>persistence_ready(Projection, Adapter)</code><ol><li><code>projection_is_deterministic: projection_capability(Projection, deterministic)</code></li><li><code>projection_is_closed: projection_capability(Projection, internally_closed)</code></li><li><code>projection_ids_are_stable: projection_capability(Projection, stable_ids)</code></li><li><code>adapter_validates_projection: adapter_provides(Adapter, projection_validation)</code></li><li><code>adapter_adds_ingest_envelope: adapter_provides(Adapter, ingest_envelope)</code></li><li><code>adapter_defines_event_time: adapter_provides(Adapter, event_time_policy)</code></li><li><code>adapter_defines_revision_identity: adapter_provides(Adapter, revision_identity)</code></li><li><code>adapter_maps_entity_identity: adapter_provides(Adapter, entity_identity_mapping)</code></li></ol></article></div>
+
+  <h2>Relations</h2>
+  <table><thead><tr><th>Relation</th><th>Argument types</th></tr></thead><tbody><tr><td><code>adapter_provides</code></td><td><code>(symbol, symbol)</code></td></tr><tr><td><code>persistence_ready</code></td><td><code>(symbol, symbol)</code></td></tr><tr><td><code>projection_capability</code></td><td><code>(symbol, symbol)</code></td></tr></tbody></table>
+
+  <h2>Materialized facts</h2>
+  <div class="table-scroll"><table><thead><tr><th>Origin</th><th>Fact</th><th>Confidence</th><th>Provenance</th><th>Declarations</th></tr></thead><tbody><tr><td><span class="chip c-stable">asserted</span></td><td><code>projection_capability(lemmaspec_projection, stable_ids)</code></td><td>100%</td><td>README.md, projection_has_stable_ids, src/projection.rs</td><td>projection_has_stable_ids</td></tr><tr><td><span class="chip c-stable">asserted</span></td><td><code>adapter_provides(store_adapter, projection_validation)</code></td><td>100%</td><td>candidate_validates_projection</td><td>candidate_validates_projection</td></tr><tr><td><span class="chip c-stable">asserted</span></td><td><code>projection_capability(lemmaspec_projection, internally_closed)</code></td><td>100%</td><td>README.md, projection_is_closed, src/projection.rs</td><td>projection_is_closed</td></tr><tr><td><span class="chip c-stable">asserted</span></td><td><code>projection_capability(lemmaspec_projection, deterministic)</code></td><td>100%</td><td>README.md, projection_is_deterministic</td><td>projection_is_deterministic</td></tr></tbody></table></div>
+
+  <details><summary>Original .lemmaspec source</summary><pre id="artifact-source">// Models the boundary between LemmaSpec&#39;s deterministic projection and a
+// hypothetical durable-store adapter. The candidate is intentionally missing
+// datastore-owned semantics, so its expectation remains unsatisfied.
+
+spec persistence_adapter_readiness {
+  relation projection_capability {
+    args: [symbol, symbol]
+  }
+
+  relation adapter_provides {
+    args: [symbol, symbol]
+  }
+
+  relation persistence_ready {
+    args: [symbol, symbol]
+  }
+
+  fact projection_is_deterministic {
+    relation: projection_capability
+    args: [lemmaspec_projection, deterministic]
+    provenance: [&quot;README.md&quot;]
+  }
+
+  fact projection_is_closed {
+    relation: projection_capability
+    args: [lemmaspec_projection, internally_closed]
+    provenance: [&quot;README.md&quot;, &quot;src/projection.rs&quot;]
+  }
+
+  fact projection_has_stable_ids {
+    relation: projection_capability
+    args: [lemmaspec_projection, stable_ids]
+    provenance: [&quot;README.md&quot;, &quot;src/projection.rs&quot;]
+  }
+
+  fact candidate_validates_projection {
+    relation: adapter_provides
+    args: [store_adapter, projection_validation]
+  }
+
+  rule ready_only_when_adapter_owns_persistence_semantics {
+    derive: &quot;persistence_ready(Projection, Adapter)&quot;
+    when: {
+      projection_is_deterministic: &quot;projection_capability(Projection, deterministic)&quot;
+      projection_is_closed: &quot;projection_capability(Projection, internally_closed)&quot;
+      projection_ids_are_stable: &quot;projection_capability(Projection, stable_ids)&quot;
+      adapter_validates_projection: &quot;adapter_provides(Adapter, projection_validation)&quot;
+      adapter_adds_ingest_envelope: &quot;adapter_provides(Adapter, ingest_envelope)&quot;
+      adapter_defines_event_time: &quot;adapter_provides(Adapter, event_time_policy)&quot;
+      adapter_defines_revision_identity: &quot;adapter_provides(Adapter, revision_identity)&quot;
+      adapter_maps_entity_identity: &quot;adapter_provides(Adapter, entity_identity_mapping)&quot;
+    }
+  }
+
+  expect candidate_is_ready_for_durable_persistence {
+    query: &quot;persistence_ready(lemmaspec_projection, store_adapter)&quot;
+    count: 1
+  }
+}
+</pre></details>
+  <footer>Self-contained — open in any browser, no network or build step. · Generated deterministically from <code>persistence_adapter_readiness</code>.</footer>
+</main>
+<script type="application/json" id="lemmaspec-graph">{"spec":"persistence_adapter_readiness","status":"incomplete","nodes":[{"kind":"node","id":"lemmaspec:persistence_adapter_readiness:expectation:candidate_is_ready_for_durable_persistence","spec":"persistence_adapter_readiness","type":"expectation","name":"candidate_is_ready_for_durable_persistence","query":"persistence_ready(lemmaspec_projection, store_adapter)","expected_count":1,"actual_count":0,"satisfied":false},{"kind":"node","id":"lemmaspec:persistence_adapter_readiness:fact:0e9b1e2c1841d3bdfe43ccc7ae1b8e5ff020d38e7a6a31cbb05dbf36c3281e49","spec":"persistence_adapter_readiness","type":"fact","relation":"projection_capability","args":["lemmaspec_projection","stable_ids"],"origin":"asserted","confidence":1.0,"provenance":["README.md","projection_has_stable_ids","src/projection.rs"],"declarations":["projection_has_stable_ids"]},{"kind":"node","id":"lemmaspec:persistence_adapter_readiness:fact:a4e5dd8cce57d882b05b4852d8fef2294f5e5136bb21f3738411ffa076e269d2","spec":"persistence_adapter_readiness","type":"fact","relation":"adapter_provides","args":["store_adapter","projection_validation"],"origin":"asserted","confidence":1.0,"provenance":["candidate_validates_projection"],"declarations":["candidate_validates_projection"]},{"kind":"node","id":"lemmaspec:persistence_adapter_readiness:fact:ed671d260b0c4b96a3c4cb27066e745bf891f7bb9d505d0df2456bc85420e1d2","spec":"persistence_adapter_readiness","type":"fact","relation":"projection_capability","args":["lemmaspec_projection","internally_closed"],"origin":"asserted","confidence":1.0,"provenance":["README.md","projection_is_closed","src/projection.rs"],"declarations":["projection_is_closed"]},{"kind":"node","id":"lemmaspec:persistence_adapter_readiness:fact:fa0c84f949fe8447bff07b27340b830a727b39ab5b63bcc63f3acc12e0bced05","spec":"persistence_adapter_readiness","type":"fact","relation":"projection_capability","args":["lemmaspec_projection","deterministic"],"origin":"asserted","confidence":1.0,"provenance":["README.md","projection_is_deterministic"],"declarations":["projection_is_deterministic"]},{"kind":"node","id":"lemmaspec:persistence_adapter_readiness:relation:adapter_provides","spec":"persistence_adapter_readiness","type":"relation","name":"adapter_provides","args":["symbol","symbol"]},{"kind":"node","id":"lemmaspec:persistence_adapter_readiness:relation:persistence_ready","spec":"persistence_adapter_readiness","type":"relation","name":"persistence_ready","args":["symbol","symbol"]},{"kind":"node","id":"lemmaspec:persistence_adapter_readiness:relation:projection_capability","spec":"persistence_adapter_readiness","type":"relation","name":"projection_capability","args":["symbol","symbol"]},{"kind":"node","id":"lemmaspec:persistence_adapter_readiness:rule:ready_only_when_adapter_owns_persistence_semantics","spec":"persistence_adapter_readiness","type":"rule","name":"ready_only_when_adapter_owns_persistence_semantics","derive":"persistence_ready(Projection, Adapter)","when":["projection_capability(Projection, deterministic)","projection_capability(Projection, internally_closed)","projection_capability(Projection, stable_ids)","adapter_provides(Adapter, projection_validation)","adapter_provides(Adapter, ingest_envelope)","adapter_provides(Adapter, event_time_policy)","adapter_provides(Adapter, revision_identity)","adapter_provides(Adapter, entity_identity_mapping)"],"condition_ids":["projection_is_deterministic","projection_is_closed","projection_ids_are_stable","adapter_validates_projection","adapter_adds_ingest_envelope","adapter_defines_event_time","adapter_defines_revision_identity","adapter_maps_entity_identity"]},{"kind":"node","id":"lemmaspec:persistence_adapter_readiness:spec:persistence_adapter_readiness","spec":"persistence_adapter_readiness","type":"spec","name":"persistence_adapter_readiness","status":"incomplete"},{"kind":"node","id":"lemmaspec:persistence_adapter_readiness:symbol:1b99a42aa95af4c552b07659ac8d309ad82602dee0a5dc6623d915bc7190bcc6","spec":"persistence_adapter_readiness","type":"symbol","value":"internally_closed"},{"kind":"node","id":"lemmaspec:persistence_adapter_readiness:symbol:29f02190331e4e5ff28f079179e186dd86ef3ce31e55275478f483417e17ade6","spec":"persistence_adapter_readiness","type":"symbol","value":"ingest_envelope"},{"kind":"node","id":"lemmaspec:persistence_adapter_readiness:symbol:4d39cba5aaffdc7d30bd5ef62755b6947d386127387209c1b8571f4219b8536f","spec":"persistence_adapter_readiness","type":"symbol","value":"revision_identity"},{"kind":"node","id":"lemmaspec:persistence_adapter_readiness:symbol:5a23bfa813534802cdd99d4008ec7faee950a8d204328390665c7baf329cc799","spec":"persistence_adapter_readiness","type":"symbol","value":"stable_ids"},{"kind":"node","id":"lemmaspec:persistence_adapter_readiness:symbol:5edb7c139c4cd6721bf1fd1274f376ec87829040421e4ae8f7df3e060d947403","spec":"persistence_adapter_readiness","type":"symbol","value":"store_adapter"},{"kind":"node","id":"lemmaspec:persistence_adapter_readiness:symbol:6b59c2fc1368ffc389c07fd989dc067ef1c4203e7441c41a286f237c17a3310f","spec":"persistence_adapter_readiness","type":"symbol","value":"projection_validation"},{"kind":"node","id":"lemmaspec:persistence_adapter_readiness:symbol:bfa476ff0cfef8820f5d8cca4f16392957bed20c0ae9d567a2e78c1fda080d02","spec":"persistence_adapter_readiness","type":"symbol","value":"event_time_policy"},{"kind":"node","id":"lemmaspec:persistence_adapter_readiness:symbol:c76d348b7df5129442e1b3cb5c04c1910711cd911861573e7ebb86645273729e","spec":"persistence_adapter_readiness","type":"symbol","value":"lemmaspec_projection"},{"kind":"node","id":"lemmaspec:persistence_adapter_readiness:symbol:e8b699dad88d4b53794d7b8646c859096ba03063af759954be71c896fada71d0","spec":"persistence_adapter_readiness","type":"symbol","value":"deterministic"},{"kind":"node","id":"lemmaspec:persistence_adapter_readiness:symbol:fea681292b0a64e0880814e4f9636b3713324a5f8b3380f7ce284453ea740d9e","spec":"persistence_adapter_readiness","type":"symbol","value":"entity_identity_mapping"}],"edges":[{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:001e9a200352d4e458312202376e8b0a8355a0a8916c82a57cd447f6c7435da4","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:rule:ready_only_when_adapter_owns_persistence_semantics","to":"lemmaspec:persistence_adapter_readiness:relation:adapter_provides","rel":"depends_on","basis":"rule_body","position":6,"negated":false},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:090d00ff7110b9cc9e8f73bdec677e274dc11da41f9f456a2edafaeb7574f328","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:spec:persistence_adapter_readiness","to":"lemmaspec:persistence_adapter_readiness:fact:0e9b1e2c1841d3bdfe43ccc7ae1b8e5ff020d38e7a6a31cbb05dbf36c3281e49","rel":"asserts","basis":"declaration","evidence":["projection_has_stable_ids"]},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:1086f1198b718d046b47a735da50bfa28104ae233ff45ab9fed5c2d22c5ab0ef","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:rule:ready_only_when_adapter_owns_persistence_semantics","to":"lemmaspec:persistence_adapter_readiness:symbol:4d39cba5aaffdc7d30bd5ef62755b6947d386127387209c1b8571f4219b8536f","rel":"references_symbol","basis":"rule_body","position":15},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:1956791d4b1911c17afd3a3801ae9b93ad8303bc2220f193fffca2ea54ea5d52","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:fact:fa0c84f949fe8447bff07b27340b830a727b39ab5b63bcc63f3acc12e0bced05","to":"lemmaspec:persistence_adapter_readiness:symbol:e8b699dad88d4b53794d7b8646c859096ba03063af759954be71c896fada71d0","rel":"references_symbol","basis":"fact_argument","position":1},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:1cb94891c0a49f778f08ab64a3881804c23d1dc3bb01e703a3c33de8710bd908","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:rule:ready_only_when_adapter_owns_persistence_semantics","to":"lemmaspec:persistence_adapter_readiness:relation:adapter_provides","rel":"depends_on","basis":"rule_body","position":4,"negated":false},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:1d73a163910fc59a2db7b665a0dd0ad0e6b69d01c3bb61b349f75d3cee7b425d","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:expectation:candidate_is_ready_for_durable_persistence","to":"lemmaspec:persistence_adapter_readiness:symbol:5edb7c139c4cd6721bf1fd1274f376ec87829040421e4ae8f7df3e060d947403","rel":"references_symbol","basis":"expectation_query","position":1},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:29fe28cf09d1e03c34101f2060c24aaf7caf2f860e805651dcb4679a3a86c9f3","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:fact:0e9b1e2c1841d3bdfe43ccc7ae1b8e5ff020d38e7a6a31cbb05dbf36c3281e49","to":"lemmaspec:persistence_adapter_readiness:symbol:5a23bfa813534802cdd99d4008ec7faee950a8d204328390665c7baf329cc799","rel":"references_symbol","basis":"fact_argument","position":1},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:2f9485442516c8a0fbce60074fdb8663f17a4ee164424352dcb39d7998848de8","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:fact:fa0c84f949fe8447bff07b27340b830a727b39ab5b63bcc63f3acc12e0bced05","to":"lemmaspec:persistence_adapter_readiness:symbol:c76d348b7df5129442e1b3cb5c04c1910711cd911861573e7ebb86645273729e","rel":"references_symbol","basis":"fact_argument","position":0},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:59eadf0cfd9f309904ec3e3882ff4db214c55a0d718dad7bbb14c40ac447caad","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:rule:ready_only_when_adapter_owns_persistence_semantics","to":"lemmaspec:persistence_adapter_readiness:relation:persistence_ready","rel":"derives","basis":"declaration"},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:613ca7d33ef30d6b65fbe1b09468a4aa9db051795b612646bc2aadf64d10eff1","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:rule:ready_only_when_adapter_owns_persistence_semantics","to":"lemmaspec:persistence_adapter_readiness:symbol:e8b699dad88d4b53794d7b8646c859096ba03063af759954be71c896fada71d0","rel":"references_symbol","basis":"rule_body","position":3},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:667e92729df659d250d4e83c6a6f85bee1b0d5bf58f6a2113ceb0443d4918e44","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:spec:persistence_adapter_readiness","to":"lemmaspec:persistence_adapter_readiness:fact:ed671d260b0c4b96a3c4cb27066e745bf891f7bb9d505d0df2456bc85420e1d2","rel":"asserts","basis":"declaration","evidence":["projection_is_closed"]},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:72c2141d0f20ae203f80116170c6cf68bf37cf7c12dc170dc9aaba01e43ca473","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:fact:ed671d260b0c4b96a3c4cb27066e745bf891f7bb9d505d0df2456bc85420e1d2","to":"lemmaspec:persistence_adapter_readiness:symbol:1b99a42aa95af4c552b07659ac8d309ad82602dee0a5dc6623d915bc7190bcc6","rel":"references_symbol","basis":"fact_argument","position":1},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:7a7c777652976159b7d85cbc5965127a187fa0607f6d73149131cfc13ae4993f","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:expectation:candidate_is_ready_for_durable_persistence","to":"lemmaspec:persistence_adapter_readiness:relation:persistence_ready","rel":"expects","basis":"query"},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:7ac41ef464029ffb6ea7a906467ba8ec21b88bc3dd1e92cb6730fa7aca3ac264","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:rule:ready_only_when_adapter_owns_persistence_semantics","to":"lemmaspec:persistence_adapter_readiness:symbol:fea681292b0a64e0880814e4f9636b3713324a5f8b3380f7ce284453ea740d9e","rel":"references_symbol","basis":"rule_body","position":17},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:822b95e18bb802180ad464c5df1baeef974c845f51656b21c7a6678053509271","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:fact:a4e5dd8cce57d882b05b4852d8fef2294f5e5136bb21f3738411ffa076e269d2","to":"lemmaspec:persistence_adapter_readiness:symbol:5edb7c139c4cd6721bf1fd1274f376ec87829040421e4ae8f7df3e060d947403","rel":"references_symbol","basis":"fact_argument","position":0},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:833c6bcacfd80676523748d936c4439b38bd0b6b2b867cea2f0b4a201f7bce1f","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:fact:0e9b1e2c1841d3bdfe43ccc7ae1b8e5ff020d38e7a6a31cbb05dbf36c3281e49","to":"lemmaspec:persistence_adapter_readiness:symbol:c76d348b7df5129442e1b3cb5c04c1910711cd911861573e7ebb86645273729e","rel":"references_symbol","basis":"fact_argument","position":0},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:8dd6e06745951be7628bb8efcc9feae580f6241e27e31fbbeab072320323b521","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:rule:ready_only_when_adapter_owns_persistence_semantics","to":"lemmaspec:persistence_adapter_readiness:symbol:bfa476ff0cfef8820f5d8cca4f16392957bed20c0ae9d567a2e78c1fda080d02","rel":"references_symbol","basis":"rule_body","position":13},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:903891a8cfed51ba5ceaaae2f4888e30e09b812bbbc635750e6906f948871bf5","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:rule:ready_only_when_adapter_owns_persistence_semantics","to":"lemmaspec:persistence_adapter_readiness:relation:adapter_provides","rel":"depends_on","basis":"rule_body","position":7,"negated":false},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:91929e03b192a674f8eb037dad92198e21a3f70648e55b6a565b21593e94626b","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:rule:ready_only_when_adapter_owns_persistence_semantics","to":"lemmaspec:persistence_adapter_readiness:symbol:29f02190331e4e5ff28f079179e186dd86ef3ce31e55275478f483417e17ade6","rel":"references_symbol","basis":"rule_body","position":11},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:94ae21829815e62f7bb47c8560cb181e07b94110d599b41f00065cfcf4792adf","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:rule:ready_only_when_adapter_owns_persistence_semantics","to":"lemmaspec:persistence_adapter_readiness:symbol:5a23bfa813534802cdd99d4008ec7faee950a8d204328390665c7baf329cc799","rel":"references_symbol","basis":"rule_body","position":7},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:a30bb45b15579e11d36a1fbab9022eb0fb39f18baa401ee89fbccb6b37fe9b94","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:spec:persistence_adapter_readiness","to":"lemmaspec:persistence_adapter_readiness:fact:fa0c84f949fe8447bff07b27340b830a727b39ab5b63bcc63f3acc12e0bced05","rel":"asserts","basis":"declaration","evidence":["projection_is_deterministic"]},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:a6530ef43b1bc0182bc0e95f8803dce7d2c44ce8d3569ab5816de0a684df03f6","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:fact:ed671d260b0c4b96a3c4cb27066e745bf891f7bb9d505d0df2456bc85420e1d2","to":"lemmaspec:persistence_adapter_readiness:symbol:c76d348b7df5129442e1b3cb5c04c1910711cd911861573e7ebb86645273729e","rel":"references_symbol","basis":"fact_argument","position":0},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:b04f67f231a6e5a7f44985a86031eeaa384002d3797e88a3d28068a162da7f4c","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:rule:ready_only_when_adapter_owns_persistence_semantics","to":"lemmaspec:persistence_adapter_readiness:relation:projection_capability","rel":"depends_on","basis":"rule_body","position":2,"negated":false},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:b23a447662ced0dda1a81083a12004ecbd23b626ce5e5542330b1e228dda39c1","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:rule:ready_only_when_adapter_owns_persistence_semantics","to":"lemmaspec:persistence_adapter_readiness:symbol:1b99a42aa95af4c552b07659ac8d309ad82602dee0a5dc6623d915bc7190bcc6","rel":"references_symbol","basis":"rule_body","position":5},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:c6a02bf9bd874f76586d5d851adb7c7f0b2837555f6f904152120afac60b0457","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:rule:ready_only_when_adapter_owns_persistence_semantics","to":"lemmaspec:persistence_adapter_readiness:relation:adapter_provides","rel":"depends_on","basis":"rule_body","position":5,"negated":false},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:c74a4ebcbb2a1040cba5eca6bc0bb8f0b57b5b816d6f80463e6943ec6f98dc4c","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:fact:a4e5dd8cce57d882b05b4852d8fef2294f5e5136bb21f3738411ffa076e269d2","to":"lemmaspec:persistence_adapter_readiness:symbol:6b59c2fc1368ffc389c07fd989dc067ef1c4203e7441c41a286f237c17a3310f","rel":"references_symbol","basis":"fact_argument","position":1},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:c791ec48a2af5839e8cb472fa73eba70d4f7f7179c9341c8e52658c5d82bf968","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:rule:ready_only_when_adapter_owns_persistence_semantics","to":"lemmaspec:persistence_adapter_readiness:relation:projection_capability","rel":"depends_on","basis":"rule_body","position":0,"negated":false},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:cde9ae0744121c8a841fbbca29aafcdedcd7a40b3c30f24db34d7b3fac037248","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:spec:persistence_adapter_readiness","to":"lemmaspec:persistence_adapter_readiness:fact:a4e5dd8cce57d882b05b4852d8fef2294f5e5136bb21f3738411ffa076e269d2","rel":"asserts","basis":"declaration","evidence":["candidate_validates_projection"]},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:de18a43902061b2e5fb96614b74489ad048425b5d1c0f5f8800745dfad5de6bc","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:rule:ready_only_when_adapter_owns_persistence_semantics","to":"lemmaspec:persistence_adapter_readiness:relation:adapter_provides","rel":"depends_on","basis":"rule_body","position":3,"negated":false},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:dff123323329b70ba8bc9b3820f6af1dba4dcf4fa13b20c482766cdb4a9c8881","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:expectation:candidate_is_ready_for_durable_persistence","to":"lemmaspec:persistence_adapter_readiness:symbol:c76d348b7df5129442e1b3cb5c04c1910711cd911861573e7ebb86645273729e","rel":"references_symbol","basis":"expectation_query","position":0},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:e66e39700b31f9ce603cc8267d5ab5f0575a263fe192e6a7069b0eb18e486cf7","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:rule:ready_only_when_adapter_owns_persistence_semantics","to":"lemmaspec:persistence_adapter_readiness:symbol:6b59c2fc1368ffc389c07fd989dc067ef1c4203e7441c41a286f237c17a3310f","rel":"references_symbol","basis":"rule_body","position":9},{"kind":"edge","id":"lemmaspec:persistence_adapter_readiness:edge:e797a84eaf63991c468ebf8e185e0a7bdffaa3f1a6442bb8161476d6cb3a9084","spec":"persistence_adapter_readiness","from":"lemmaspec:persistence_adapter_readiness:rule:ready_only_when_adapter_owns_persistence_semantics","to":"lemmaspec:persistence_adapter_readiness:relation:projection_capability","rel":"depends_on","basis":"rule_body","position":1,"negated":false}]}</script>
+<script>
+(function () {
+  "use strict";
+  const data = JSON.parse(document.getElementById("lemmaspec-graph").textContent);
+  const svg = document.getElementById("graph");
+  const detail = document.getElementById("node-detail");
+  let selected = null;
+  const ns = "http://www.w3.org/2000/svg";
+  const width = 190, height = 58, gapX = 74, gapY = 34, pad = 38;
+  const order = ["spec", "relation", "rule", "mutation", "fact", "expectation", "symbol"];
+  const groups = new Map(order.map(type => [type, []]));
+  data.nodes.forEach(node => (groups.get(node.type) || groups.get("symbol")).push(node));
+  const present = order.filter(type => groups.get(type).length > 0);
+  const positions = new Map();
+  let maxRows = 1;
+  present.forEach((type, column) => {
+    const nodes = groups.get(type);
+    maxRows = Math.max(maxRows, nodes.length);
+    nodes.forEach((node, row) => positions.set(node.id, {
+      x: pad + column * (width + gapX),
+      y: pad + row * (height + gapY)
+    }));
+  });
+  const canvasWidth = Math.max(760, pad * 2 + present.length * width + Math.max(0, present.length - 1) * gapX);
+  const canvasHeight = Math.max(560, pad * 2 + maxRows * height + Math.max(0, maxRows - 1) * gapY);
+  svg.setAttribute("width", canvasWidth);
+  svg.setAttribute("height", canvasHeight);
+  svg.setAttribute("viewBox", `0 0 ${canvasWidth} ${canvasHeight}`);
+
+  function element(name, attrs) {
+    const value = document.createElementNS(ns, name);
+    Object.entries(attrs || {}).forEach(([key, item]) => value.setAttribute(key, item));
+    return value;
+  }
+
+  function installSelection(element, value) {
+    const select = function () {
+      if (selected) selected.classList.remove("selected");
+      selected = element;
+      selected.classList.add("selected");
+      detail.textContent = JSON.stringify(value, null, 2);
+    };
+    element.addEventListener("click", select);
+    element.addEventListener("keydown", event => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        select();
+      }
+    });
+  }
+
+  const defs = element("defs");
+  const marker = element("marker", { id:"arrow", markerWidth:"8", markerHeight:"8", refX:"7", refY:"3", orient:"auto", markerUnits:"strokeWidth" });
+  marker.appendChild(element("path", { d:"M0,0 L0,6 L7,3 z", fill:"var(--faint)" }));
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+
+  data.edges.forEach(edge => {
+    const from = positions.get(edge.from), to = positions.get(edge.to);
+    if (!from || !to) return;
+    let startX = from.x + width, startY = from.y + height / 2;
+    let endX = to.x, endY = to.y + height / 2;
+    let path;
+    if (from.x === to.x) {
+      startX = from.x + width;
+      endX = to.x + width;
+      const bend = startX + 54;
+      path = `M${startX},${startY} C${bend},${startY} ${bend},${endY} ${endX},${endY}`;
+    } else {
+      if (to.x < from.x) {
+        startX = from.x;
+        endX = to.x + width;
+      }
+      const mid = (startX + endX) / 2;
+      path = `M${startX},${startY} C${mid},${startY} ${mid},${endY} ${endX},${endY}`;
+    }
+    const line = element("path", { d:path, class:"edge", "data-relation":edge.rel, tabindex:"0", role:"button" });
+    const title = element("title");
+    title.textContent = `${edge.rel}\n${edge.from}\n→ ${edge.to}`;
+    line.appendChild(title);
+    installSelection(line, edge);
+    svg.appendChild(line);
+  });
+
+  function label(node) {
+    if (node.type === "fact") return `${node.relation}(${node.args.join(", ")})`;
+    if (node.type === "symbol") return node.value;
+    return node.name || node.type;
+  }
+
+  function tone(node) {
+    if (node.type === "expectation") return node.satisfied ? "stable" : "critical";
+    if (node.type === "fact") return node.origin === "asserted" ? "stable" : "additive";
+    if (node.type === "rule" || node.type === "mutation") return "attention";
+    return "neutral";
+  }
+
+  data.nodes.forEach(node => {
+    const point = positions.get(node.id);
+    const group = element("g", { class:"node", transform:`translate(${point.x} ${point.y})`, tabindex:"0", role:"button", "data-tone":tone(node) });
+    group.appendChild(element("rect", { width, height }));
+    const kind = element("text", { x:"12", y:"18", class:"kind" });
+    kind.textContent = node.type.toUpperCase();
+    group.appendChild(kind);
+    const name = element("text", { x:"12", y:"40" });
+    const full = label(node);
+    name.textContent = full.length > 24 ? full.slice(0, 23) + "…" : full;
+    group.appendChild(name);
+    const title = element("title");
+    title.textContent = full;
+    group.appendChild(title);
+    installSelection(group, node);
+    svg.appendChild(group);
+  });
+})();
+</script>
+</body>
+</html>

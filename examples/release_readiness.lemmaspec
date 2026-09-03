@@ -1,0 +1,37 @@
+spec release_readiness {
+  relation depends_on {
+    args: [symbol, symbol]
+  }
+
+  relation incomplete {
+    args: [symbol]
+  }
+
+  relation blocked {
+    args: [symbol]
+  }
+
+  fact release_needs_tests {
+    relation: depends_on
+    args: [release, tests]
+  }
+
+  fact tests_are_incomplete {
+    relation: incomplete
+    args: [tests]
+    provenance: ["plan:test-gate"]
+  }
+
+  rule blocked_by_incomplete_dependency {
+    derive: "blocked(Item)"
+    when: [
+      "depends_on(Item, Dependency)",
+      "incomplete(Dependency)",
+    ]
+  }
+
+  expect release_is_blocked {
+    query: "blocked(\"release\")"
+    count: 1
+  }
+}

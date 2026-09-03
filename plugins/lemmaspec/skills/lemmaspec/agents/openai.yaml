@@ -1,0 +1,4 @@
+interface:
+  display_name: "LemmaSpec"
+  short_description: "Author and verify self-contained logic specs"
+  default_prompt: "Use $lemmaspec to model this change as a typed specification and verify its graph."

@@ -1,0 +1,20 @@
+[workspace]
+members = ["cargo:."]
+
+[dist]
+cargo-dist-version = "0.32.0"
+ci = "github"
+plan-jobs = ["./release-tests"]
+installers = ["shell", "powershell", "homebrew"]
+tap = "MortenHusted/homebrew-tap"
+publish-jobs = ["homebrew"]
+targets = [
+  "aarch64-apple-darwin",
+  "aarch64-unknown-linux-gnu",
+  "x86_64-apple-darwin",
+  "x86_64-pc-windows-msvc",
+  "x86_64-unknown-linux-gnu",
+]
+install-path = "CARGO_HOME"
+install-updater = false
+include = ["NOTICE", "THIRD_PARTY_NOTICES.md"]

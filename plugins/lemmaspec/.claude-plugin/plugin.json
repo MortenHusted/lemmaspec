@@ -1,0 +1,17 @@
+{
+  "name": "lemmaspec",
+  "description": "Author and verify typed, executable LemmaSpec artifacts.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Morten Lochmann"
+  },
+  "homepage": "https://github.com/MortenHusted/lemmaspec",
+  "repository": "https://github.com/MortenHusted/lemmaspec",
+  "license": "MIT",
+  "keywords": [
+    "specification",
+    "mutation-testing",
+    "datalog",
+    "software-development"
+  ]
+}

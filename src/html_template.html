@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en" data-status="@@STATUS_LABEL@@">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>@@TITLE@@ · LemmaSpec</title>
+<style>
+  :root {
+    --bg:#0d1418; --panel:#131f25; --panel2:#18262d; --line:#283a43; --hover:#0f1b20;
+    --ink:#e5eff2; --dim:#9cb4bc; --faint:#6a818a;
+    --stable:#3fb950; --stable-bg:#0f2a17; --stable-br:#1d4427;
+    --additive:#58a6ff; --additive-bg:#0f1f33; --additive-br:#1d3a5c;
+    --attention:#d29922; --attention-bg:#2a2210; --attention-br:#4a3c14;
+    --critical:#f85149; --critical-bg:#2a1316; --critical-br:#5c1d1f;
+    --neutral:#8b949e; --neutral-bg:#1a1f26; --neutral-br:#333b44;
+    --accent:#74b6dc;
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"Inter","Noto Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  }
+  * { box-sizing:border-box }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 var(--sans); -webkit-font-smoothing:antialiased }
+  .wrap { max-width:1440px; margin:0 auto; padding:36px 28px 80px }
+  code, pre { font-family:var(--mono) }
+  header { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; padding-bottom:22px; border-bottom:1px solid var(--line) }
+  h1 { margin:0 0 6px; font-size:30px; letter-spacing:-.5px }
+  h1 span { color:var(--accent); font:14px var(--mono) }
+  .sub, .empty { margin:0; color:var(--dim) }
+  h2 { margin:42px 0 16px; padding-top:22px; border-top:1px solid var(--line); color:var(--faint); font-size:12px; font-weight:650; letter-spacing:1.5px; text-transform:uppercase }
+  .status { border:1px solid; border-radius:999px; padding:5px 11px; font:12px var(--mono) }
+  html[data-status="clean"] .status { color:var(--stable); background:var(--stable-bg); border-color:var(--stable-br) }
+  html[data-status="incomplete"] .status { color:var(--critical); background:var(--critical-bg); border-color:var(--critical-br) }
+  .def { margin-top:26px; padding:18px 21px; border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:10px; background:linear-gradient(180deg,var(--panel2),var(--panel)); font-size:18px }
+  html[data-status="incomplete"] .def { border-left-color:var(--critical) }
+  .def small { display:block; margin-top:7px; color:var(--dim); font-size:13px }
+  .stats { display:grid; grid-template-columns:repeat(8,minmax(90px,1fr)); gap:10px; margin-top:18px }
+  .stat { padding:12px 14px; border:1px solid var(--line); border-radius:9px; background:var(--panel) }
+  .stat strong { display:block; font:21px var(--mono) }
+  .stat span { color:var(--faint); font-size:11px; text-transform:uppercase; letter-spacing:.7px }
+  .legend { display:flex; flex-wrap:wrap; gap:10px 18px }
+  .lg { display:flex; align-items:center; gap:8px; color:var(--dim); font-size:13px }
+  .dot { width:10px; height:10px; border-radius:3px }
+  .graph-layout { display:grid; grid-template-columns:minmax(0,1fr) 320px; min-height:580px; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--panel) }
+  .graph-viewport { overflow:auto; min-height:580px; background-image:radial-gradient(var(--line) 1px,transparent 1px); background-size:20px 20px }
+  #graph { display:block }
+  .inspector { padding:18px; border-left:1px solid var(--line); background:var(--panel2) }
+  .inspector h3 { margin:0 0 8px; font-size:15px }
+  .inspector p { color:var(--dim); font-size:13px }
+  .inspector pre { overflow:auto; max-height:470px; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--dim); font-size:11px; white-space:pre-wrap }
+  .edge { fill:none; stroke:var(--faint); stroke-width:1.2; opacity:.58; marker-end:url(#arrow); cursor:pointer }
+  .edge:hover, .edge.selected { stroke:var(--ink); opacity:1; stroke-width:2 }
+  .node { cursor:pointer }
+  .node rect { fill:var(--neutral-bg); stroke:var(--neutral-br); stroke-width:1.4; rx:8 }
+  .node:hover rect, .node.selected rect { stroke:var(--ink); stroke-width:2.2 }
+  .node[data-tone="stable"] rect { fill:var(--stable-bg); stroke:var(--stable-br) }
+  .node[data-tone="additive"] rect { fill:var(--additive-bg); stroke:var(--additive-br) }
+  .node[data-tone="attention"] rect { fill:var(--attention-bg); stroke:var(--attention-br) }
+  .node[data-tone="critical"] rect { fill:var(--critical-bg); stroke:var(--critical-br) }
+  .node text { fill:var(--ink); pointer-events:none; font:12px var(--mono) }
+  .node .kind { fill:var(--faint); font:9px var(--sans); letter-spacing:1px; text-transform:uppercase }
+  .constraint-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px }
+  .constraint { padding:15px 17px; border:1px solid var(--line); border-left:3px solid var(--attention); border-radius:10px; background:var(--panel) }
+  .constraint[data-status="passed"] { border-left-color:var(--stable) }
+  .constraint[data-status="failed"] { border-left-color:var(--critical) }
+  .constraint-head { display:flex; align-items:center; gap:9px; margin-bottom:10px }
+  .constraint-head .result { margin-left:auto; font:11px var(--mono) }
+  .constraint ol { margin:9px 0 0; padding-left:22px; color:var(--dim) }
+  .constraint p { margin:8px 0 0; color:var(--dim); font-size:13px }
+  .chip { display:inline-flex; width:fit-content; padding:2px 7px; border:1px solid; border-radius:6px; font:10px var(--mono) }
+  .c-stable { color:var(--stable); border-color:var(--stable-br); background:var(--stable-bg) }
+  .c-additive { color:var(--additive); border-color:var(--additive-br); background:var(--additive-bg) }
+  .c-attention { color:var(--attention); border-color:var(--attention-br); background:var(--attention-bg) }
+  .c-critical { color:var(--critical); border-color:var(--critical-br); background:var(--critical-bg) }
+  table { width:100%; border-collapse:collapse; font-size:13px }
+  th { padding:8px 11px; border-bottom:1px solid var(--line); color:var(--faint); font-size:10px; letter-spacing:.7px; text-align:left; text-transform:uppercase }
+  td { padding:10px 11px; border-bottom:1px solid var(--line); vertical-align:top }
+  tr:hover td { background:var(--hover) }
+  .table-scroll { overflow:auto }
+  details { margin-top:16px; border:1px solid var(--line); border-radius:10px; background:var(--panel) }
+  summary { cursor:pointer; padding:13px 16px; color:var(--dim) }
+  details pre { overflow:auto; max-height:520px; margin:0; padding:18px; border-top:1px solid var(--line); color:var(--dim); font-size:12px; white-space:pre }
+  footer { margin-top:48px; padding-top:17px; border-top:1px solid var(--line); color:var(--faint); font-size:12px }
+  @media(max-width:1000px) { .stats { grid-template-columns:repeat(4,1fr) } .graph-layout { grid-template-columns:1fr } .inspector { border-left:0; border-top:1px solid var(--line) } }
+  @media(max-width:720px) { .wrap { padding:24px 16px 60px } .stats { grid-template-columns:repeat(2,1fr) } .constraint-grid { grid-template-columns:1fr } header { flex-direction:column } }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <div><h1>@@TITLE@@ <span>// @@SPEC_NAME@@</span></h1><p class="sub">Deterministic facts, derivations, and executable constraints from one self-contained artifact.</p></div>
+    <span class="status">@@STATUS_LABEL@@</span>
+  </header>
+
+  <section class="def">@@THESIS@@<small>@@THESIS_DETAIL@@</small></section>
+  <div class="stats">@@SUMMARY@@</div>
+
+  <h2>Legend</h2>
+  <div class="legend">
+    <span class="lg"><span class="dot" style="background:var(--stable)"></span>asserted fact / passing expectation</span>
+    <span class="lg"><span class="dot" style="background:var(--additive)"></span>derived fact</span>
+    <span class="lg"><span class="dot" style="background:var(--attention)"></span>derivation rule / mutation policy</span>
+    <span class="lg"><span class="dot" style="background:var(--critical)"></span>failed expectation</span>
+    <span class="lg"><span class="dot" style="background:var(--neutral)"></span>relation / symbol</span>
+  </div>
+
+  <h2>Graph</h2>
+  <div class="graph-layout">
+    <div class="graph-viewport"><svg id="graph" role="img" aria-label="LemmaSpec dependency graph"></svg></div>
+    <aside class="inspector"><h3>Inspect the projection</h3><p>Select any node or edge to see its exact projected fields, including proof witnesses and evidence.</p><pre id="node-detail">Nothing selected.</pre></aside>
+  </div>
+
+  <h2>Rules, mutations, and expectations</h2>
+  <div class="constraint-grid">@@CONSTRAINTS@@</div>
+
+  <h2>Relations</h2>
+  @@RELATIONS@@
+
+  <h2>Materialized facts</h2>
+  @@FACTS@@
+
+  <details><summary>Original .lemmaspec source</summary><pre id="artifact-source">@@SOURCE@@</pre></details>
+  <footer>Self-contained — open in any browser, no network or build step. · Generated deterministically from <code>@@SPEC_NAME@@</code>.</footer>
+</main>
+<script type="application/json" id="lemmaspec-graph">@@GRAPH_JSON@@</script>
+<script>
+(function () {
+  "use strict";
+  const data = JSON.parse(document.getElementById("lemmaspec-graph").textContent);
+  const svg = document.getElementById("graph");
+  const detail = document.getElementById("node-detail");
+  let selected = null;
+  const ns = "http://www.w3.org/2000/svg";
+  const width = 190, height = 58, gapX = 74, gapY = 34, pad = 38;
+  const order = ["spec", "relation", "rule", "mutation", "fact", "expectation", "symbol"];
+  const groups = new Map(order.map(type => [type, []]));
+  data.nodes.forEach(node => (groups.get(node.type) || groups.get("symbol")).push(node));
+  const present = order.filter(type => groups.get(type).length > 0);
+  const positions = new Map();
+  let maxRows = 1;
+  present.forEach((type, column) => {
+    const nodes = groups.get(type);
+    maxRows = Math.max(maxRows, nodes.length);
+    nodes.forEach((node, row) => positions.set(node.id, {
+      x: pad + column * (width + gapX),
+      y: pad + row * (height + gapY)
+    }));
+  });
+  const canvasWidth = Math.max(760, pad * 2 + present.length * width + Math.max(0, present.length - 1) * gapX);
+  const canvasHeight = Math.max(560, pad * 2 + maxRows * height + Math.max(0, maxRows - 1) * gapY);
+  svg.setAttribute("width", canvasWidth);
+  svg.setAttribute("height", canvasHeight);
+  svg.setAttribute("viewBox", `0 0 ${canvasWidth} ${canvasHeight}`);
+
+  function element(name, attrs) {
+    const value = document.createElementNS(ns, name);
+    Object.entries(attrs || {}).forEach(([key, item]) => value.setAttribute(key, item));
+    return value;
+  }
+
+  function installSelection(element, value) {
+    const select = function () {
+      if (selected) selected.classList.remove("selected");
+      selected = element;
+      selected.classList.add("selected");
+      detail.textContent = JSON.stringify(value, null, 2);
+    };
+    element.addEventListener("click", select);
+    element.addEventListener("keydown", event => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        select();
+      }
+    });
+  }
+
+  const defs = element("defs");
+  const marker = element("marker", { id:"arrow", markerWidth:"8", markerHeight:"8", refX:"7", refY:"3", orient:"auto", markerUnits:"strokeWidth" });
+  marker.appendChild(element("path", { d:"M0,0 L0,6 L7,3 z", fill:"var(--faint)" }));
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+
+  data.edges.forEach(edge => {
+    const from = positions.get(edge.from), to = positions.get(edge.to);
+    if (!from || !to) return;
+    let startX = from.x + width, startY = from.y + height / 2;
+    let endX = to.x, endY = to.y + height / 2;
+    let path;
+    if (from.x === to.x) {
+      startX = from.x + width;
+      endX = to.x + width;
+      const bend = startX + 54;
+      path = `M${startX},${startY} C${bend},${startY} ${bend},${endY} ${endX},${endY}`;
+    } else {
+      if (to.x < from.x) {
+        startX = from.x;
+        endX = to.x + width;
+      }
+      const mid = (startX + endX) / 2;
+      path = `M${startX},${startY} C${mid},${startY} ${mid},${endY} ${endX},${endY}`;
+    }
+    const line = element("path", { d:path, class:"edge", "data-relation":edge.rel, tabindex:"0", role:"button" });
+    const title = element("title");
+    title.textContent = `${edge.rel}\n${edge.from}\n→ ${edge.to}`;
+    line.appendChild(title);
+    installSelection(line, edge);
+    svg.appendChild(line);
+  });
+
+  function label(node) {
+    if (node.type === "fact") return `${node.relation}(${node.args.join(", ")})`;
+    if (node.type === "symbol") return node.value;
+    return node.name || node.type;
+  }
+
+  function tone(node) {
+    if (node.type === "expectation") return node.satisfied ? "stable" : "critical";
+    if (node.type === "fact") return node.origin === "asserted" ? "stable" : "additive";
+    if (node.type === "rule" || node.type === "mutation") return "attention";
+    return "neutral";
+  }
+
+  data.nodes.forEach(node => {
+    const point = positions.get(node.id);
+    const group = element("g", { class:"node", transform:`translate(${point.x} ${point.y})`, tabindex:"0", role:"button", "data-tone":tone(node) });
+    group.appendChild(element("rect", { width, height }));
+    const kind = element("text", { x:"12", y:"18", class:"kind" });
+    kind.textContent = node.type.toUpperCase();
+    group.appendChild(kind);
+    const name = element("text", { x:"12", y:"40" });
+    const full = label(node);
+    name.textContent = full.length > 24 ? full.slice(0, 23) + "…" : full;
+    group.appendChild(name);
+    const title = element("title");
+    title.textContent = full;
+    group.appendChild(title);
+    installSelection(group, node);
+    svg.appendChild(group);
+  });
+})();
+</script>
+</body>
+</html>

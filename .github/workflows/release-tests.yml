@@ -1,0 +1,36 @@
+name: Release tests
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  homebrew-tap:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    steps:
+      - name: Verify Homebrew tap access
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::HOMEBREW_TAP_TOKEN is not configured"
+            exit 1
+          fi
+
+          can_push="$(gh api repos/MortenHusted/homebrew-tap --jq '.permissions.push')"
+          if [ "$can_push" != "true" ]; then
+            echo "::error::HOMEBREW_TAP_TOKEN cannot push to MortenHusted/homebrew-tap"
+            exit 1
+          fi
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked --all-targets
+      - run: cargo build --locked --profile dist

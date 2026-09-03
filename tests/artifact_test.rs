@@ -1,0 +1,261 @@
+use lemmaspec::{parse_artifact, walk_artifact};
+
+const EXAMPLE: &str = include_str!("../examples/release_readiness.lemmaspec");
+
+#[test]
+fn parses_typed_self_contained_artifact() {
+    let artifact = parse_artifact(EXAMPLE).expect("parse example");
+
+    assert_eq!(artifact.name, "release_readiness");
+    assert_eq!(artifact.relations.len(), 3);
+    assert_eq!(artifact.facts.len(), 2);
+    assert_eq!(artifact.rules.len(), 1);
+    assert_eq!(artifact.expectations.len(), 1);
+}
+
+#[test]
+fn walk_derives_expected_fact_with_proof() {
+    let report = walk_artifact(EXAMPLE).expect("walk example");
+
+    assert_eq!(report.status, "clean");
+    assert!(report
+        .expectations
+        .iter()
+        .all(|expectation| expectation.satisfied));
+    let blocked = report
+        .facts
+        .iter()
+        .find(|fact| fact.relation == "blocked" && fact.args == ["release"])
+        .expect("derived blocked fact");
+    assert_eq!(blocked.origin, "derived");
+    assert!(blocked.why.contains("blocked_by_incomplete_dependency"));
+    assert!(blocked.why.contains("release_needs_tests"));
+    assert!(blocked.why.contains("tests_are_incomplete"));
+    assert!(blocked.why.contains("plan:test-gate"));
+}
+
+#[test]
+fn rejects_unknown_relation_and_wrong_arity() {
+    let unknown = EXAMPLE.replace("relation: incomplete", "relation: missing");
+    let error = walk_artifact(&unknown).expect_err("unknown relation must fail");
+    assert!(
+        error.to_string().contains("unknown relation `missing`"),
+        "{error}"
+    );
+
+    let wrong_arity = EXAMPLE.replace("args: [release, tests]", "args: [release]");
+    let error = walk_artifact(&wrong_arity).expect_err("wrong arity must fail");
+    assert!(
+        error.to_string().contains("expects 2 arguments, got 1"),
+        "{error}"
+    );
+}
+
+#[test]
+fn rejects_rule_type_mismatch() {
+    let source = EXAMPLE
+        .replace("args: [symbol, symbol]", "args: [symbol, integer]")
+        .replace("args: [release, tests]", "args: [release, 1]");
+    let error = walk_artifact(&source).expect_err("rule variable type mismatch must fail");
+    assert!(
+        error
+            .to_string()
+            .contains("variable `Dependency` has incompatible types"),
+        "{error}"
+    );
+}
+
+#[test]
+fn repeated_walk_is_byte_stable() {
+    let first = serde_json::to_vec_pretty(&walk_artifact(EXAMPLE).unwrap()).unwrap();
+    let second = serde_json::to_vec_pretty(&walk_artifact(EXAMPLE).unwrap()).unwrap();
+
+    assert_eq!(first, second);
+}
+
+#[test]
+fn validates_aggregate_input_types() {
+    let source = r#"
+spec aggregate_types {
+  relation dependency { args: [symbol, symbol] }
+  relation aggregate_result { args: [symbol, integer] }
+
+  fact dependency_on_tests {
+    relation: dependency
+    args: [release, tests]
+  }
+
+  rule aggregate_dependencies {
+    derive: "aggregate_result(Item, AGGREGATE(Dependency))"
+    when: ["dependency(Item, Dependency)"]
+  }
+}
+"#;
+
+    for aggregate in ["min", "max"] {
+        let source = source.replace("AGGREGATE", aggregate);
+        let error = walk_artifact(&source).expect_err("numeric aggregate over symbol must fail");
+        assert!(
+            error
+                .to_string()
+                .contains(&format!("aggregate `{aggregate}` requires integer input")),
+            "{error}"
+        );
+    }
+
+    let sum = source.replace("AGGREGATE", "sum");
+    let error = walk_artifact(&sum).expect_err("sum requires checked integer evaluation");
+    assert!(
+        error.to_string().contains(
+            "aggregate `sum` is unavailable until checked integer evaluation is implemented"
+        ),
+        "{error}"
+    );
+
+    let count = source.replace("AGGREGATE", "count");
+    let report = walk_artifact(&count).expect("count may aggregate symbols");
+    assert!(report
+        .facts
+        .iter()
+        .any(|fact| fact.relation == "aggregate_result" && fact.args == ["release", "1"]));
+}
+
+#[test]
+fn validates_comparison_operand_types() {
+    let symbol_ordering = r#"
+spec symbol_ordering {
+  relation named { args: [symbol] }
+  relation selected { args: [symbol] }
+  fact release_name { relation: named args: [release] }
+  rule choose { derive: "selected(Name)" when: ["named(Name)", "Name < z"] }
+}
+"#;
+    let error = walk_artifact(symbol_ordering).expect_err("symbol ordering must fail");
+    assert!(
+        error
+            .to_string()
+            .contains("ordering comparison requires integer operands"),
+        "{error}"
+    );
+
+    let symbol_arithmetic = r#"
+spec symbol_arithmetic {
+  relation named { args: [symbol] }
+  relation result { args: [integer] }
+  fact release_name { relation: named args: [release] }
+  rule calculate { derive: "result(Result)" when: ["named(Name)", "Result = Name + 1"] }
+}
+"#;
+    let error = walk_artifact(symbol_arithmetic).expect_err("symbol arithmetic must fail");
+    assert!(
+        error
+            .to_string()
+            .contains("arithmetic expression requires integer operands"),
+        "{error}"
+    );
+
+    let incompatible_equality = r#"
+spec incompatible_equality {
+  relation named { args: [symbol] }
+  relation selected { args: [symbol] }
+  fact release_name { relation: named args: [release] }
+  rule choose { derive: "selected(Name)" when: ["named(Name)", "Name = 1"] }
+}
+"#;
+    let error = walk_artifact(incompatible_equality).expect_err("mixed equality must fail");
+    assert!(
+        error
+            .to_string()
+            .contains("equality comparison has incompatible symbol and integer operands"),
+        "{error}"
+    );
+
+    let valid = r#"
+spec valid_comparisons {
+  relation alias { args: [symbol, symbol] }
+  relation rank { args: [symbol, integer] }
+  relation selected { args: [symbol, integer] }
+
+  fact release_alias { relation: alias args: [release, release] }
+  fact release_rank { relation: rank args: [release, 1] }
+
+  rule choose {
+    derive: "selected(Item, Next)"
+    when: [
+      "rank(Item, Current)",
+      "alias(Item, Alias)",
+      "Item = Alias",
+      "Next = Current + 1",
+      "Next > Current",
+    ]
+  }
+}
+"#;
+    let report = walk_artifact(valid).expect("compatible comparisons must pass");
+    assert!(report
+        .facts
+        .iter()
+        .any(|fact| fact.relation == "selected" && fact.args == ["release", "2"]));
+}
+
+#[test]
+fn rejects_nondeterministic_time_and_mixed_asserted_derived_relations() {
+    let time = r#"
+spec time {
+  relation active { args: [symbol] }
+  rule current { derive: "active(Item)" when: ["now(Item)"] }
+}
+"#;
+    let error = walk_artifact(time).expect_err("now requires an artifact clock");
+    assert!(error.to_string().contains("deterministic artifact clock"));
+
+    let mixed = r#"
+spec mixed {
+  relation source { args: [symbol] }
+  relation blocked { args: [symbol] }
+  fact source_release { relation: source args: [release] }
+  fact manual_block { relation: blocked args: [release] }
+  rule derived_block { derive: "blocked(Item)" when: ["source(Item)"] }
+}
+"#;
+    let error = walk_artifact(mixed).expect_err("asserted and derived relations are disjoint");
+    assert!(
+        error
+            .to_string()
+            .contains("fact `manual_block` asserts relation `blocked`, which is derived by rule `derived_block`"),
+        "{error}"
+    );
+}
+
+#[test]
+fn malformed_artifacts_return_diagnostics() {
+    for (source, expected) in [
+        ("spec broken { /*", "unterminated block comment"),
+        (
+            "spec broken { relation item { args: [\"",
+            "unterminated string",
+        ),
+        (
+            "spec broken { relation item { args: [symbol] args: [symbol] } }",
+            "duplicate field `args`",
+        ),
+        (
+            "spec broken { relation item { args: [[symbol]] } }",
+            "nested lists are not supported",
+        ),
+    ] {
+        let error = parse_artifact(source).expect_err("malformed artifact must fail");
+        assert!(error.to_string().contains(expected), "{error}");
+        assert!(error.to_string().starts_with("1:"), "{error}");
+    }
+}
+
+#[test]
+fn failed_expectation_marks_walk_incomplete() {
+    let source = EXAMPLE.replace("count: 1", "count: 0");
+    let report = walk_artifact(&source).expect("walk incomplete example");
+
+    assert_eq!(report.status, "incomplete");
+    assert_eq!(report.expectations[0].actual_count, 1);
+    assert!(!report.expectations[0].satisfied);
+}

@@ -1,0 +1,30 @@
+[package]
+name = "lemmaspec"
+version = "0.1.0"
+edition = "2021"
+description = "Typed, deterministic specifications compiled to deductive logic"
+license = "MIT"
+authors = ["Morten Lochmann"]
+repository = "https://github.com/MortenHusted/lemmaspec"
+homepage = "https://github.com/MortenHusted/lemmaspec"
+readme = "README.md"
+keywords = ["datalog", "specification", "mutation-testing", "cli", "logic"]
+categories = ["command-line-utilities", "development-tools"]
+exclude = [
+  ".agents",
+  ".claude",
+  ".claude-plugin",
+  ".codex",
+  ".github",
+  "dist-workspace.toml",
+  "plugins",
+]
+
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"

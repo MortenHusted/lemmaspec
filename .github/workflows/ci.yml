@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Formatting, lint, and package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo package --locked
+      - run: cargo build --locked --profile dist
+      - name: Install dist
+        shell: bash
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.32.0/cargo-dist-installer.sh | sh
+      - name: Verify release configuration
+        shell: bash
+        run: |
+          dist generate --check
+          dist plan --output-format=json > "$RUNNER_TEMP/dist-plan.json"
+          jq -e '
+            (.artifacts | has("lemmaspec-installer.sh")) and
+            (.artifacts | has("lemmaspec-installer.ps1")) and
+            (.artifacts | has("lemmaspec.rb"))
+          ' "$RUNNER_TEMP/dist-plan.json"
+      - name: Verify agent distribution
+        shell: bash
+        run: |
+          jq -e . .agents/plugins/marketplace.json > /dev/null
+          jq -e . .claude-plugin/marketplace.json > /dev/null
+          jq -e . plugins/lemmaspec/.claude-plugin/plugin.json > /dev/null
+          jq -e . plugins/lemmaspec/.codex-plugin/plugin.json > /dev/null
+
+          test -f plugins/lemmaspec/skills/lemmaspec/SKILL.md
+          test -f plugins/lemmaspec/skills/lemmaspec/agents/openai.yaml
+
+          package_version="$(cargo metadata --locked --no-deps --format-version=1 | jq -r '.packages[] | select(.name == "lemmaspec") | .version')"
+          test "$(jq -r .version plugins/lemmaspec/.claude-plugin/plugin.json)" = "$package_version"
+          test "$(jq -r .version plugins/lemmaspec/.codex-plugin/plugin.json)" = "$package_version"
+
+  test:
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked --all-targets
