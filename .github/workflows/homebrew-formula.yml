@@ -1,0 +1,137 @@
+name: Publish Homebrew formula
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+    secrets:
+      HOMEBREW_TAP_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: macos-latest
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_FROM_API: "1"
+    outputs:
+      formula-name: ${{ steps.formula.outputs.name }}
+    steps:
+      - name: Download generated formula
+        uses: actions/download-artifact@v8
+        with:
+          pattern: artifacts-*
+          path: generated
+          merge-multiple: true
+
+      - name: Locate generated formula
+        id: formula
+        env:
+          PLAN: ${{ inputs.plan }}
+        run: |
+          formula_name="$(ruby -rjson <<'RUBY'
+          plan = JSON.parse(ENV.fetch("PLAN"))
+          names = plan.fetch("artifacts").values.map do |artifact|
+            name = artifact["name"]
+            name if artifact["kind"] == "installer" && name&.end_with?(".rb")
+          end.compact.uniq
+
+          abort "expected exactly one generated Homebrew formula" unless names.one?
+
+          name = names.first
+          abort "unsafe Homebrew formula filename" unless name.match?(/\A[A-Za-z0-9][A-Za-z0-9._-]*\.rb\z/)
+
+          puts name
+          RUBY
+          )"
+          test -f "generated/$formula_name"
+          echo "name=$formula_name" >> "$GITHUB_OUTPUT"
+
+      - name: Normalize generated formula
+        env:
+          FORMULA_PATH: generated/${{ steps.formula.outputs.name }}
+        run: |
+          ruby <<'RUBY'
+          path = ENV.fetch("FORMULA_PATH")
+          formula = File.read(path)
+
+          version = formula.sub!(/^  version "[^"]+"\n/, "")
+          abort "expected one generated version declaration" unless version
+          abort "formula already contains a test block" if formula.include?("\n  test do\n")
+
+          closing = "\nend\n"
+          abort "unexpected formula ending" unless formula.end_with?(closing)
+
+          test_block = %q{
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/lemmaspec --version")
+            end
+          }
+
+          File.write(path, formula.delete_suffix(closing) + test_block + "end\n")
+          RUBY
+
+      - name: Audit and test formula
+        env:
+          FORMULA_NAME: ${{ steps.formula.outputs.name }}
+        run: |
+          brew tap MortenHusted/tap
+          tap_path="$(brew --repository MortenHusted/tap)"
+          cp "generated/$FORMULA_NAME" "$tap_path/Formula/lemmaspec.rb"
+          brew style \
+            --except-cops FormulaAudit/Homepage,FormulaAudit/Desc,FormulaAuditStrict \
+            --fix "$tap_path/Formula/lemmaspec.rb" || true
+          brew style \
+            --except-cops FormulaAudit/Homepage,FormulaAudit/Desc,FormulaAuditStrict \
+            "$tap_path/Formula/lemmaspec.rb"
+          cp "$tap_path/Formula/lemmaspec.rb" "generated/$FORMULA_NAME"
+          brew audit --strict MortenHusted/tap/lemmaspec
+          brew install --formula MortenHusted/tap/lemmaspec
+          brew test MortenHusted/tap/lemmaspec
+
+      - name: Upload verified formula
+        uses: actions/upload-artifact@v7
+        with:
+          name: verified-homebrew-formula
+          path: generated/${{ steps.formula.outputs.name }}
+          if-no-files-found: error
+
+  publish:
+    needs: verify
+    runs-on: macos-latest
+    steps:
+      - name: Download verified formula
+        uses: actions/download-artifact@v8
+        with:
+          name: verified-homebrew-formula
+          path: verified
+
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@v6
+        with:
+          repository: MortenHusted/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Publish formula
+        env:
+          FORMULA_NAME: ${{ needs.verify.outputs.formula-name }}
+        run: |
+          cp "verified/$FORMULA_NAME" tap/Formula/lemmaspec.rb
+          cd tap
+
+          if git diff --quiet -- Formula/lemmaspec.rb; then
+            exit 0
+          fi
+
+          git config user.name "axo bot"
+          git config user.email "admin+bot@axo.dev"
+          git add Formula/lemmaspec.rb
+          git commit -m "lemmaspec ${GITHUB_REF_NAME#v}"
+          git push

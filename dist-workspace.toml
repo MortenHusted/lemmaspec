@@ -7,7 +7,8 @@ ci = "github"
 plan-jobs = ["./release-tests"]
 installers = ["shell", "powershell", "homebrew"]
 tap = "MortenHusted/homebrew-tap"
-publish-jobs = ["homebrew"]
+publish-jobs = ["./homebrew-formula"]
+github-custom-job-permissions = { "homebrew-formula" = { contents = "read" } }
 targets = [
   "aarch64-apple-darwin",
   "aarch64-unknown-linux-gnu",
