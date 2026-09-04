@@ -174,11 +174,12 @@ which can translate the stable projection into a datastore-specific contract.
 [examples/persistence_adapter_readiness.lemmaspec](examples/persistence_adapter_readiness.lemmaspec)
 models that boundary as a deliberately incomplete executable specification.
 
-`render` writes one offline HTML file that reads as a guide for a human:
-the question the artifact answers, its observations, assumptions, relationships,
-reasoning, conclusions with proof trees, claims, and stress tests, then the
-same argument as an interactive graph clustered by relation. Comments in the
-source become the prose. Relations can declare `roles` for their arguments and a
+`render` writes one offline HTML file with the graph on stage and a journey
+beside it: the question the artifact answers, then observations, assumptions,
+reasoning, conclusions with proof trees, claims, stress tests, and reference.
+Each step lights its part of the graph; selecting a card or a node follows one
+thread through the argument. The page carries its own guide: press `?` or the
+guide button for how to read it. Comments in the source become the prose. Relations can declare `roles` for their arguments and a
 `reads` sentence template so facts and rule conditions render as sentences:
 
 ```text

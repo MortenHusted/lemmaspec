@@ -13,10 +13,12 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   comment touching a declaration documents that declaration.
 - Relations accept optional `roles` naming each argument and a `reads`
   sentence template; facts carry a `reading` in the projection.
-- The HTML render opens with a human guide: the question, observations,
-  assumptions with their blast radius, relationships and vocabulary,
-  reasoning, conclusions with proof trees, claims, and stress tests, each
-  card linked to its graph node.
+- The HTML render is a journey beside the graph: the question, observations,
+  assumptions with their blast radius, reasoning, conclusions with proof
+  trees, claims, stress tests, and reference. Each step lights its part of
+  the graph; a card and its node are one selection; open claims link to the
+  facts found instead; labels are placed so they never overlap; the page
+  explains itself behind `?`.
 
 ### Changed
 

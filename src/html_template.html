@@ -73,6 +73,13 @@
   .legend .l-attention::before { background:var(--attention) } .legend .l-critical::before { background:var(--critical) }
   .weights { margin-top:10px; color:var(--faint); font-size:11px; line-height:1.6 }
   .help { position:absolute; right:14px; bottom:10px; color:var(--faint); font-size:11px; pointer-events:none }
+  .tip { position:absolute; z-index:4; max-width:340px; padding:9px 11px; border:1px solid var(--line); border-radius:8px; background:rgba(19,31,37,.97); box-shadow:0 10px 24px rgba(0,0,0,.4); pointer-events:none; font-size:12px; color:var(--dim) }
+  .tip .kind { color:var(--faint); font:10px var(--mono); letter-spacing:.6px; text-transform:uppercase }
+  .tip .what { margin:2px 0 4px; color:var(--ink); font-size:13px }
+  .tip .more { margin:2px 0 0 }
+  .tip .more li { margin:1px 0 }
+  .tip ul { margin:2px 0 0; padding-left:16px }
+  .tip .foot { margin-top:6px; color:var(--faint); font-size:10px }
   .stage-note { position:absolute; left:14px; bottom:10px; max-width:45%; color:var(--faint); font-size:11px; pointer-events:none }
 
   /* ------------------------------------------------------------ graph */
@@ -208,6 +215,28 @@
   .source pre { overflow:auto; max-height:480px; margin:0; padding:12px; border-top:1px solid var(--line); color:var(--dim); font-size:11px; white-space:pre }
   footer { margin-top:18px; color:var(--faint); font-size:11px }
 
+
+  /* ------------------------------------------------------------ help */
+  .help-button { padding:3px 9px; border:1px solid var(--line); border-radius:999px; background:none; color:var(--dim); font:12px var(--mono); cursor:pointer }
+  .help-button:hover { color:var(--ink); border-color:var(--faint) }
+  .help-backdrop { position:fixed; inset:0; z-index:20; display:flex; align-items:center; justify-content:center; padding:24px; background:rgba(6,10,12,.72) }
+  .help-panel { width:min(720px,100%); max-height:100%; display:flex; flex-direction:column; border:1px solid var(--line); border-radius:12px; background:var(--panel); box-shadow:0 24px 60px rgba(0,0,0,.5) }
+  .help-panel header { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid var(--line) }
+  .help-panel h2 { margin:0; font-size:16px }
+  #help-close { border:0; background:none; color:var(--faint); font-size:22px; line-height:1; cursor:pointer }
+  #help-close:hover { color:var(--ink) }
+  .help-body { overflow:auto; padding:6px 20px 20px; font-size:13px; color:var(--dim) }
+  .help-lead { margin:12px 0 4px; font-size:14px; color:var(--ink) }
+  .help-body h3 { margin:20px 0 8px; color:var(--faint); font-size:10px; letter-spacing:1px; text-transform:uppercase }
+  .help-steps { display:grid; grid-template-columns:max-content 1fr; gap:6px 14px; margin:0 }
+  .help-steps dt { color:var(--ink); font-weight:600 }
+  .help-steps dd { margin:0 }
+  .help-list { margin:0; padding-left:18px }
+  .help-list li { margin:4px 0 }
+  .help-body .l-stable { color:var(--stable) } .help-body .l-additive { color:var(--additive) }
+  .help-body .l-attention { color:var(--attention) } .help-body .l-critical { color:var(--critical) }
+  .help-keys kbd { display:inline-block; padding:0 6px; border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; background:var(--bg); color:var(--ink); font:11px var(--mono) }
+  .howto a { color:var(--accent) }
   @media(max-width:1500px) { .top h1 span { display:none } .stepper button { padding:6px 8px } }
   @media(max-width:1000px) {
     body { overflow:auto }
@@ -222,7 +251,7 @@
 <body>
 <header class="top">
   <h1>@@TITLE@@<span>@@SPEC_NAME@@</span></h1>
-  <div class="verdict"><span class="status">@@STATUS_LABEL@@</span></div>
+  <div class="verdict"><span class="status">@@STATUS_LABEL@@</span><button type="button" class="help-button" id="help-open" title="How to read this page (?)">? guide</button></div>
   <nav class="stepper" id="stepper" aria-label="Journey"></nav>
 </header>
 
@@ -245,6 +274,7 @@
       <div class="weights">Node size follows connections. Fill opacity follows confidence. Edge width follows evidence; dashed edges are negated; dotted rings sit in a cycle.</div>
     </div>
     <div class="stage-note" id="stage-note"></div>
+    <div class="tip" id="tip" hidden></div>
     <div class="help">drag · wheel to zoom · double-click to focus · ← → journey</div>
   </div>
 
@@ -262,6 +292,7 @@
             <li>Move along the journey with the steps above, the arrows, or the buttons below.</li>
             <li>Each step lights the part of the graph it is about.</li>
             <li>Select a card or a node to follow one thread through the argument.</li>
+            <li><a href="#" id="help-link">How to read this page</a>, or press <code>?</code> at any time.</li>
           </ol>
         </div>
       </section>
@@ -293,6 +324,56 @@
     </div>
   </aside>
 </main>
+
+
+<div class="help-backdrop" id="help" hidden>
+  <div class="help-panel" role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <header><h2 id="help-title">How to read this page</h2><button type="button" id="help-close" aria-label="Close">×</button></header>
+    <div class="help-body">
+      <p class="help-lead">One specification, evaluated deterministically. The graph and the journey beside it are two views of the same argument: every card is a node, every node has a story.</p>
+
+      <h3>The journey</h3>
+      <dl class="help-steps">
+        <dt>Question</dt><dd>What the author set out to determine, in their own words, and the verdict the engine reached.</dd>
+        <dt>Observations</dt><dd>Facts asserted with evidence attached. Start here when you want to know what this argument stands on.</dd>
+        <dt>Assumptions</dt><dd>Facts taken on trust: no evidence, or less than full confidence. Each one says how many conclusions and claims fall if it turns out to be wrong. This is where decisions and missing evidence live.</dd>
+        <dt>Reasoning</dt><dd>The rules. Read each as: this follows whenever all of these hold. Named conditions are the handles for mutation tests.</dd>
+        <dt>Conclusions</dt><dd>What the rules derived. Select one to unfold why: the rule, then the facts it needed, back to the observations.</dd>
+        <dt>Claims</dt><dd>What the specification commits to, checked against the walk. Open claims come first and show what was found instead of the expected count.</dd>
+        <dt>Stress tests</dt><dd>Mutation policies: which parts of the reasoning must be load-bearing. Run <code>lemmaspec mutate</code> to see which mutants survive.</dd>
+        <dt>Reference</dt><dd>Concepts, the shared vocabulary grouped by role, the raw tables, and the source this page was generated from.</dd>
+      </dl>
+
+      <h3>The graph</h3>
+      <ul class="help-list">
+        <li>Nodes cluster around the relation they describe; the hollow ring in each cluster is the relation itself.</li>
+        <li><span class="l-stable">green</span> is an observation or a confirmed claim, <span class="l-additive">blue</span> a conclusion, <span class="l-attention">amber</span> a rule, stress test, or assumption, <span class="l-critical">red</span> an open claim.</li>
+        <li>Node size follows connections; on the Assumptions step it follows how much rests on the node. Fill opacity follows confidence.</li>
+        <li>Edges are coloured by what they mean: blue depends on, amber derives, green proves, red matches an open claim or targets a rule. Dashed edges are negated conditions; dotted rings sit in a recursive cycle.</li>
+        <li>Symbols, the spec node, and the spec-to-fact links start hidden because they connect to almost everything. The filters button switches them on; selecting a symbol from the vocabulary reveals just that one.</li>
+      </ul>
+
+      <h3>Following a thread</h3>
+      <ul class="help-list">
+        <li><strong>Hover</strong> a card or a node to preview its thread. <strong>Click</strong> to hold it: the card opens, the node centres, everything unrelated dims.</li>
+        <li>A conclusion lights what it rests on. An assumption lights what rests on it. A claim lights the facts that prove it, or the ones found instead. A rule lights what it reads and writes.</li>
+        <li><strong>Double-click</strong> a node to keep only its neighbourhood; Escape or the clear button brings the rest back.</li>
+        <li>Labels are placed so they never overlap; zoom in to see more, or set labels to all.</li>
+      </ul>
+
+      <h3>Typical questions</h3>
+      <dl class="help-steps">
+        <dt>Is this claim right?</dt><dd>Claims, select it, read what supports it or what was found instead.</dd>
+        <dt>What breaks if this is wrong?</dt><dd>Assumptions, hover it, watch the graph.</dd>
+        <dt>Why is this true?</dt><dd>Conclusions, select it, unfold because.</dd>
+        <dt>What is this thing?</dt><dd>Reference, find it in the vocabulary, select it to see every fact it appears in.</dd>
+      </dl>
+
+      <h3>Keys</h3>
+      <p class="help-keys"><kbd>←</kbd> <kbd>→</kbd> move along the journey · <kbd>Esc</kbd> clear the selection or focus · <kbd>?</kbd> this guide · <kbd>Enter</kbd> on a focused node selects it</p>
+    </div>
+  </div>
+</div>
 
 <script type="application/json" id="lemmaspec-graph">@@GRAPH_JSON@@</script>
 <script>
@@ -695,9 +776,6 @@
       const text = element("text", { x: r + 5, y: 4 });
       text.textContent = full.length > 34 ? full.slice(0, 33) + "…" : full;
       group.appendChild(text);
-      const title = element("title");
-      title.textContent = `${node.type}: ${full}\n${degree(node.id)} connections`;
-      group.appendChild(title);
       nodeLayer.appendChild(group);
       nodeElements.set(node.id, group);
     });
@@ -1007,9 +1085,18 @@
     card.querySelector(".card-detail").appendChild(raw);
   });
 
+  const help = document.getElementById("help");
+  function showHelp(on) { help.hidden = !on; if (on) document.getElementById("help-close").focus(); }
+  document.getElementById("help-open").addEventListener("click", () => showHelp(true));
+  document.getElementById("help-close").addEventListener("click", () => showHelp(false));
+  document.getElementById("help-link").addEventListener("click", event => { event.preventDefault(); showHelp(true); });
+  help.addEventListener("click", event => { if (event.target === help) showHelp(false); });
+
   document.addEventListener("keydown", event => {
     const tag = (event.target.tagName || "").toLowerCase();
     if (tag === "input" || tag === "textarea") return;
+    if (event.key === "?") { showHelp(help.hidden); return; }
+    if (!help.hidden) { if (event.key === "Escape") showHelp(false); return; }
     if (event.key === "ArrowRight") setStep(current + 1);
     if (event.key === "ArrowLeft") setStep(current - 1);
     if (event.key === "Escape") { if (focus) setFocus(null); else clearSelection(); }
@@ -1103,12 +1190,63 @@
     view.k = k;
     applyView();
   }, { passive: false });
+  // ------------------------------------------------------------ tooltip
+  // The tooltip is a preview of the node's card: what it is, in words.
+  const tip = document.getElementById("tip");
+  const KIND = { relation: "concept", fact: "fact", rule: "rule", expectation: "claim", mutation: "stress test", symbol: "vocabulary", spec: "specification" };
+  function clip(text, max) { text = text.replace(/\s+/g, " ").trim(); return text.length > max ? text.slice(0, max - 1) + "…" : text; }
+  function tipFor(node) {
+    tip.replaceChildren();
+    const kind = document.createElement("div"); kind.className = "kind";
+    const what = document.createElement("div"); what.className = "what";
+    const more = document.createElement("div"); more.className = "more";
+    const card = cardFor(node.id);
+    if (card) {
+      const chip = card.querySelector(".chip");
+      kind.textContent = chip ? chip.textContent : KIND[node.type] || node.type;
+      what.textContent = clip(card.querySelector(".sentence").textContent, 140);
+      const lines = [];
+      card.querySelectorAll(".card-detail > .lead, .card-detail > .verdict, .card-detail > .radius, .card-detail > .reads, .card-detail > .meta, .card-detail > .doc p").forEach(el => {
+        if (lines.length < 3) lines.push(clip(el.textContent, 160));
+      });
+      lines.forEach(text => { const p = document.createElement("div"); p.textContent = text; more.appendChild(p); });
+      const conditions = card.querySelectorAll(".conditions li");
+      if (conditions.length) {
+        const list = document.createElement("ul");
+        [...conditions].slice(0, 5).forEach(li => { const item = document.createElement("li"); item.textContent = clip(li.textContent, 110); list.appendChild(item); });
+        if (conditions.length > 5) { const item = document.createElement("li"); item.textContent = `and ${conditions.length - 5} more`; list.appendChild(item); }
+        more.appendChild(list);
+      }
+    } else {
+      kind.textContent = KIND[node.type] || node.type;
+      what.textContent = clip(label(node), 140);
+      if (node.type === "symbol") {
+        const uses = into.get(node.id).length;
+        const p = document.createElement("div"); p.textContent = `appears in ${uses} place${uses === 1 ? "" : "s"}`; more.appendChild(p);
+      }
+    }
+    const foot = document.createElement("div"); foot.className = "foot";
+    foot.textContent = card ? "click to follow this thread · double-click to focus" : "click to see where it appears";
+    tip.append(kind, what, more, foot);
+  }
+  function placeTip(event) {
+    const box = viewport.getBoundingClientRect();
+    let x = event.clientX - box.left + 16, y = event.clientY - box.top + 16;
+    tip.hidden = false;
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    if (x + w > box.width - 8) x = Math.max(8, event.clientX - box.left - w - 12);
+    if (y + h > box.height - 8) y = Math.max(8, event.clientY - box.top - h - 12);
+    tip.style.left = `${x}px`; tip.style.top = `${y}px`;
+  }
   svg.addEventListener("pointerover", event => {
     const node = event.target.closest(".node");
     const id = node ? node.dataset.id : null;
     if (id !== hovered) { hovered = id; applyEmphasis(); }
+    if (id) { tipFor(nodeById.get(id)); placeTip(event); } else tip.hidden = true;
   });
-  svg.addEventListener("pointerleave", () => { if (hovered) { hovered = null; applyEmphasis(); } });
+  svg.addEventListener("pointermove", event => { if (!tip.hidden && !drag) placeTip(event); });
+  svg.addEventListener("pointerdown", () => { tip.hidden = true; });
+  svg.addEventListener("pointerleave", () => { tip.hidden = true; if (hovered) { hovered = null; applyEmphasis(); } });
   svg.addEventListener("keydown", event => {
     if (event.key === "Enter" || event.key === " ") {
       const node = event.target.closest(".node");
