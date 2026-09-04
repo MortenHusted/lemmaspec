@@ -14,6 +14,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   checker can be applied to evidence about real code.
 - `examples/state_as_records.lemmaspec`, a Rails checker for the convention
   that togglable state is a record rather than a boolean column.
+- Walk reports carry the facts each expectation `found`, and the human
+  output lists them under a failed expectation so a finding names its rows.
 
 ## [0.2.0] - 2026-09-04
 

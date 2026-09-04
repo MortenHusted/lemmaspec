@@ -546,6 +546,10 @@ fn check_command_evaluates_evidence_with_the_checker_rules() {
             .len(),
         1
     );
+    assert_eq!(
+        report["expectations"][0]["found"],
+        serde_json::json!(["M=webhook, C=active"])
+    );
     let violation = report["facts"]
         .as_array()
         .expect("facts")
