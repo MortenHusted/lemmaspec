@@ -335,3 +335,91 @@ spec aggregate_projection {
     let serialized = serde_json::to_string(&projection).expect("serialize aggregate graph");
     assert!(!serialized.contains("__agg"), "{serialized}");
 }
+
+#[test]
+fn open_claims_link_to_the_facts_found_instead() {
+    let source = r#"
+spec open_claim {
+  relation loose_end { args: [symbol] }
+  fact one { relation: loose_end args: [popup] }
+  fact two { relation: loose_end args: [prompt] }
+  expect no_loose_ends { query: "loose_end(X)" count: 0 }
+}
+"#;
+    let projection = project_artifact(source).expect("project open claim");
+    projection.validate_closed().expect("closed");
+    let matches: Vec<_> = projection
+        .edges
+        .iter()
+        .filter(|edge| edge.rel == "matches")
+        .collect();
+    assert_eq!(matches.len(), 2);
+    assert!(matches
+        .iter()
+        .all(|edge| edge.basis.as_deref() == Some("unsatisfied_query")
+            && edge.to.ends_with(":expectation:no_loose_ends")));
+    assert!(projection.edges.iter().all(|edge| edge.rel != "proves"));
+}
+
+#[test]
+fn projects_authored_prose_roles_and_readings() {
+    let source = r#"
+// Which mutants does each policy govern?
+
+spec prose {
+  // Ties a mutant to the policy that judges it.
+  relation governed_by {
+    args: [symbol, symbol]
+    roles: [mutation, policy]
+    reads: "{mutation} is governed by {policy}"
+  }
+  // Recorded from the fixture manifest.
+  fact m { relation: governed_by args: [rule_deletion_caught, rule_coverage] }
+  expect one { query: "governed_by(M, P)" count: 1 }
+}
+"#;
+    let projection = project_artifact(source).expect("project prose");
+    let json = serde_json::to_value(&projection).expect("serialize");
+    let nodes = json["nodes"].as_array().expect("nodes");
+    let node = |kind: &str| {
+        nodes
+            .iter()
+            .find(|node| node["type"] == kind)
+            .unwrap_or_else(|| panic!("{kind} node"))
+    };
+
+    assert_eq!(
+        node("spec")["doc"],
+        "Which mutants does each policy govern?"
+    );
+    assert_eq!(
+        node("relation")["roles"],
+        serde_json::json!(["mutation", "policy"])
+    );
+    assert_eq!(
+        node("relation")["reads"],
+        "{mutation} is governed by {policy}"
+    );
+    assert_eq!(
+        node("relation")["doc"],
+        "Ties a mutant to the policy that judges it."
+    );
+    assert_eq!(
+        node("fact")["reading"],
+        "rule_deletion_caught is governed by rule_coverage"
+    );
+    assert_eq!(node("fact")["doc"], "Recorded from the fixture manifest.");
+    assert!(node("expectation").get("doc").is_none());
+
+    let bare = project_artifact(
+        "spec bare { relation input { args: [symbol] } fact one { relation: input args: [a] } expect one_input { query: \"input(X)\" count: 1 } }",
+    )
+    .expect("project bare artifact");
+    let bare = serde_json::to_value(&bare).expect("serialize");
+    assert!(bare["nodes"]
+        .as_array()
+        .expect("nodes")
+        .iter()
+        .filter(|node| node["type"] == "relation")
+        .all(|node| node.get("roles").is_none() && node.get("reads").is_none()));
+}

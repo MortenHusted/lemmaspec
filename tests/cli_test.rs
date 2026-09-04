@@ -545,6 +545,139 @@ fn missing_artifact_exits_two() {
     assert!(String::from_utf8_lossy(&output.stderr).contains("read `does-not-exist.lemmaspec`"));
 }
 
+#[test]
+fn intro_orients_an_agent() {
+    let output = Command::new(env!("CARGO_BIN_EXE_lemmaspec"))
+        .arg("intro")
+        .output()
+        .expect("run intro");
+    assert_eq!(output.status.code(), Some(0));
+    let intro = String::from_utf8_lossy(&output.stdout);
+    for expected in [
+        "lemmaspec walk FILE --json",
+        "lemmaspec mutate FILE --json",
+        "lemmaspec render FILE",
+        "assumption",
+        "Never promote a guess to a fact",
+        "lemmaspec agent install",
+    ] {
+        assert!(
+            intro.contains(expected),
+            "intro lacks {expected:?}:\n{intro}"
+        );
+    }
+
+    let via_help = Command::new(env!("CARGO_BIN_EXE_lemmaspec"))
+        .args(["help", "intro"])
+        .output()
+        .expect("run help intro");
+    assert_eq!(via_help.stdout, output.stdout);
+}
+
+#[test]
+fn agent_install_writes_this_binarys_skill_into_a_project() {
+    let project = temporary_directory("agent-install");
+    let output = Command::new(env!("CARGO_BIN_EXE_lemmaspec"))
+        .args(["agent", "install", "--dir", project.to_str().unwrap()])
+        .output()
+        .expect("run agent install");
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let claude = project.join(".claude/skills/lemmaspec/SKILL.md");
+    let codex = project.join(".codex/skills/lemmaspec/SKILL.md");
+    let openai = project.join(".codex/skills/lemmaspec/agents/openai.yaml");
+    let skill = include_str!("../plugins/lemmaspec/skills/lemmaspec/SKILL.md");
+    assert_eq!(
+        std::fs::read_to_string(&claude).expect("claude skill"),
+        skill
+    );
+    assert_eq!(std::fs::read_to_string(&codex).expect("codex skill"), skill);
+    assert_eq!(
+        std::fs::read_to_string(&openai).expect("codex agent metadata"),
+        include_str!("../plugins/lemmaspec/skills/lemmaspec/agents/openai.yaml")
+    );
+    assert!(!project.join(".claude/skills/lemmaspec/agents").exists());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Claude Code: wrote"), "{stdout}");
+    assert!(stdout.contains("Codex: wrote"), "{stdout}");
+    assert!(
+        stdout.contains("skill version matches lemmaspec"),
+        "{stdout}"
+    );
+
+    let again = Command::new(env!("CARGO_BIN_EXE_lemmaspec"))
+        .args(["agent", "install", "--dir", project.to_str().unwrap()])
+        .output()
+        .expect("run agent install again");
+    let again = String::from_utf8_lossy(&again.stdout);
+    assert!(again.contains("Claude Code: unchanged"), "{again}");
+    assert!(!again.contains("wrote"), "{again}");
+
+    std::fs::write(&codex, "stale").expect("age the codex skill");
+    let refreshed = Command::new(env!("CARGO_BIN_EXE_lemmaspec"))
+        .args(["agent", "install", "--dir", project.to_str().unwrap()])
+        .output()
+        .expect("run agent install over a stale skill");
+    let refreshed = String::from_utf8_lossy(&refreshed.stdout);
+    assert!(refreshed.contains("Codex: updated"), "{refreshed}");
+    assert_eq!(std::fs::read_to_string(&codex).expect("codex skill"), skill);
+
+    let only_codex = temporary_directory("agent-install-codex");
+    let output = Command::new(env!("CARGO_BIN_EXE_lemmaspec"))
+        .args([
+            "agent",
+            "install",
+            "--codex",
+            "--dir",
+            only_codex.to_str().unwrap(),
+        ])
+        .output()
+        .expect("run codex-only install");
+    assert_eq!(output.status.code(), Some(0));
+    assert!(only_codex.join(".codex/skills/lemmaspec/SKILL.md").exists());
+    assert!(!only_codex.join(".claude").exists());
+
+    let bad = Command::new(env!("CARGO_BIN_EXE_lemmaspec"))
+        .args([
+            "agent",
+            "install",
+            "--dir",
+            project.join("missing").to_str().unwrap(),
+        ])
+        .output()
+        .expect("run install into a missing directory");
+    assert_eq!(bad.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&bad.stderr).contains("is not a directory"));
+
+    std::fs::remove_dir_all(&project).ok();
+    std::fs::remove_dir_all(&only_codex).ok();
+}
+
+#[test]
+fn upgrade_rejects_unknown_arguments_and_is_listed_in_help() {
+    let output = Command::new(env!("CARGO_BIN_EXE_lemmaspec"))
+        .args(["upgrade", "--now"])
+        .output()
+        .expect("run upgrade with a bad flag");
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("unexpected argument `--now`"));
+
+    let help = Command::new(env!("CARGO_BIN_EXE_lemmaspec"))
+        .arg("--help")
+        .output()
+        .expect("run help");
+    let help = String::from_utf8_lossy(&help.stdout);
+    assert!(help.contains("lemmaspec upgrade [--check]"), "{help}");
+    assert!(help.contains("lemmaspec agent install"), "{help}");
+    assert!(help.contains("lemmaspec intro"), "{help}");
+}
+
 fn temporary_directory(label: &str) -> std::path::PathBuf {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)

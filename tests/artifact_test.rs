@@ -259,3 +259,148 @@ fn failed_expectation_marks_walk_incomplete() {
     assert_eq!(report.expectations[0].actual_count, 1);
     assert!(!report.expectations[0].satisfied);
 }
+
+const MUTATION_ANALYSIS: &str = include_str!("../examples/mutation_analysis.lemmaspec");
+
+#[test]
+fn comments_document_the_spec_and_its_declarations() {
+    let source = r#"
+// Which releases are blocked?
+//
+// A release is blocked while any dependency is incomplete.
+
+spec docs {
+  // ======================================================= schema
+
+  // A dependency between two named deliverables.
+  relation depends_on { args: [symbol, symbol] } // release, dependency
+  relation incomplete { args: [symbol] }
+  relation blocked { args: [symbol] }
+
+  # Observed in the tracker on release day.
+  # Still true after the freeze.
+  fact release_needs_tests { relation: depends_on args: [release, tests] }
+  fact tests_are_incomplete { relation: incomplete args: [tests] }
+
+  /* Blocking propagates
+   * through any dependency. */
+  rule blocked_by_incomplete_dependency {
+    derive: "blocked(Release)"
+    when: ["depends_on(Release, Dependency)", "incomplete(Dependency)"]
+  }
+
+  // ------------------------------------------------ acceptance claims
+  expect release_is_blocked { query: "blocked(release)" count: 1 }
+}
+"#;
+    let artifact = parse_artifact(source).expect("parse documented artifact");
+
+    assert_eq!(
+        artifact.doc.as_deref(),
+        Some("Which releases are blocked?\n\nA release is blocked while any dependency is incomplete.")
+    );
+    let relation = |name: &str| {
+        artifact
+            .relations
+            .iter()
+            .find(|relation| relation.name == name)
+            .expect("relation")
+    };
+    assert_eq!(
+        relation("depends_on").doc.as_deref(),
+        Some("A dependency between two named deliverables.\nrelease, dependency")
+    );
+    assert_eq!(
+        relation("incomplete").doc,
+        None,
+        "section headings belong to nobody"
+    );
+    assert_eq!(
+        artifact.facts[0].doc.as_deref(),
+        Some("Observed in the tracker on release day.\nStill true after the freeze.")
+    );
+    assert_eq!(artifact.facts[1].doc, None);
+    assert_eq!(
+        artifact.rules[0].doc.as_deref(),
+        Some("Blocking propagates\nthrough any dependency.")
+    );
+    assert_eq!(
+        artifact.expectations[0].doc, None,
+        "a ruled divider touching a declaration is still a heading"
+    );
+}
+
+#[test]
+fn existing_examples_keep_their_authored_prose() {
+    let artifact = parse_artifact(MUTATION_ANALYSIS).expect("parse mutation analysis");
+
+    assert!(artifact.doc.as_deref().is_some_and(
+        |doc| doc.starts_with("Executable model of LemmaSpec mutation-analysis semantics.")
+    ));
+    let deferred = artifact
+        .facts
+        .iter()
+        .find(|fact| fact.id == "defer_comparison_flip")
+        .expect("deferred operator fact");
+    assert!(deferred
+        .doc
+        .as_deref()
+        .is_some_and(|doc| doc.starts_with("These need richer term mutation")));
+    let oracle = artifact
+        .relations
+        .iter()
+        .find(|relation| relation.name == "oracle")
+        .expect("oracle relation");
+    assert_eq!(oracle.roles, ["policy", "mode"]);
+}
+
+#[test]
+fn relations_read_as_sentences_through_roles() {
+    let source = r#"
+spec roles {
+  relation governed_by {
+    args: [symbol, symbol]
+    roles: [mutation, policy]
+    reads: "{mutation} is governed by {policy}"
+  }
+  fact m { relation: governed_by args: [rule_deletion_caught, rule_coverage] }
+  expect one { query: "governed_by(M, P)" count: 1 }
+}
+"#;
+    let artifact = parse_artifact(source).expect("parse roles");
+    assert_eq!(artifact.relations[0].roles, ["mutation", "policy"]);
+    assert_eq!(
+        artifact.relations[0].reads.as_deref(),
+        Some("{mutation} is governed by {policy}")
+    );
+
+    let rejects = |replacement: &str, message: &str| {
+        let broken = source.replace("roles: [mutation, policy]", replacement);
+        let error = parse_artifact(&broken).expect_err(message).to_string();
+        assert!(error.contains(message), "{error}");
+    };
+    rejects("roles: [mutation]", "declares 1 roles for 2 arguments");
+    rejects("roles: [mutation, mutation]", "repeats role `mutation`");
+    rejects("roles: [mutation, \"a policy\"]", "must be an identifier");
+
+    let unknown = source.replace("{policy}", "{oracle}");
+    let error = parse_artifact(&unknown)
+        .expect_err("unknown placeholder")
+        .to_string();
+    assert!(
+        error.contains("`{oracle}` names no role or argument position"),
+        "{error}"
+    );
+
+    let unclosed = source.replace("{policy}", "{policy");
+    let error = parse_artifact(&unclosed)
+        .expect_err("unclosed placeholder")
+        .to_string();
+    assert!(error.contains("unclosed `{`"), "{error}");
+
+    let positional = source.replace("roles: [mutation, policy]\n", "").replace(
+        "{mutation} is governed by {policy}",
+        "{0} is governed by {1}",
+    );
+    parse_artifact(&positional).expect("positional placeholders need no roles");
+}

@@ -4,14 +4,18 @@
 //! Agent memory, LLM extraction, MCP, episodes, retrieval, and persistence
 //! are deliberately outside this crate.
 
+pub mod agent;
 pub mod artifact;
 pub mod ast;
 pub mod eval;
+mod guide;
 pub mod html;
 pub mod intern;
 pub mod magic;
 pub mod mutation;
-pub mod projection;
+mod narrative;
+mod projection;
+pub mod upgrade;
 
 pub use artifact::{
     parse_artifact, walk_artifact, Artifact, ArtifactError, ExpectationDecl, FactDecl, FactValue,
@@ -26,6 +30,7 @@ pub use mutation::{
     mutate_artifact, MutationPolicyReport, MutationReport, MutationResult, MutationStatus,
     MutationSummary, MutationTarget,
 };
+pub use narrative::read_fact;
 pub use projection::{
     project_artifact, GraphEdge, GraphNode, GraphNodeData, GraphProjection, ProjectionError,
 };

@@ -9,6 +9,7 @@ use sha2::{Digest, Sha256};
 use crate::artifact::{evaluate_artifact, ArtifactError, FactValue, MutationOperator, ValueType};
 use crate::ast::{Atom, Expr, Lit};
 use crate::eval::Support;
+use crate::narrative::read_fact;
 use crate::{parse_program, Interner, Term, Value};
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -48,10 +49,18 @@ pub enum GraphNodeData {
     Spec {
         name: String,
         status: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        doc: Option<String>,
     },
     Relation {
         name: String,
         args: Vec<ValueType>,
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        roles: Vec<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reads: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        doc: Option<String>,
     },
     Fact {
         relation: String,
@@ -60,6 +69,11 @@ pub enum GraphNodeData {
         confidence: f64,
         provenance: Vec<String>,
         declarations: Vec<String>,
+        /// The fact read through its relation's `reads` template.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reading: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        doc: Option<String>,
     },
     Rule {
         name: String,
@@ -67,6 +81,8 @@ pub enum GraphNodeData {
         when: Vec<String>,
         #[serde(skip_serializing_if = "Vec::is_empty")]
         condition_ids: Vec<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        doc: Option<String>,
     },
     Mutation {
         name: String,
@@ -74,6 +90,8 @@ pub enum GraphNodeData {
         relation: Option<String>,
         except: Vec<String>,
         must_fail: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        doc: Option<String>,
     },
     Expectation {
         name: String,
@@ -81,6 +99,8 @@ pub enum GraphNodeData {
         expected_count: usize,
         actual_count: usize,
         satisfied: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        doc: Option<String>,
     },
     Symbol {
         value: String,
@@ -208,7 +228,7 @@ fn valid_edge_signature(relation: &str, from: &str, to: &str) -> bool {
         "asserts" => from == "spec" && to == "fact",
         "derives" => from == "rule" && matches!(to, "relation" | "fact"),
         "depends_on" => (from == "rule" && to == "relation") || (from == "fact" && to == "fact"),
-        "proves" => from == "fact" && to == "expectation",
+        "proves" | "matches" => from == "fact" && to == "expectation",
         "expects" => from == "expectation" && to == "relation",
         "targets" => from == "mutation" && matches!(to, "rule" | "relation"),
         "must_fail" => from == "mutation" && to == "expectation",
@@ -302,6 +322,11 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
             declarations
         },
     );
+    let docs_by_declaration: BTreeMap<&str, &str> = artifact
+        .facts
+        .iter()
+        .filter_map(|fact| Some((fact.id.as_str(), fact.doc.as_deref()?)))
+        .collect();
     let walked_expectations: BTreeMap<_, _> = report
         .expectations
         .iter()
@@ -313,6 +338,7 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
         GraphNodeData::Spec {
             name: artifact.name.clone(),
             status: report.status.clone(),
+            doc: artifact.doc.clone(),
         },
     );
 
@@ -323,6 +349,9 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
             GraphNodeData::Relation {
                 name: relation.name.clone(),
                 args: relation.args.clone(),
+                roles: relation.roles.clone(),
+                reads: relation.reads.clone(),
+                doc: relation.doc.clone(),
             },
         );
         relation_ids.insert(relation.name.as_str(), id);
@@ -337,6 +366,7 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
                 derive: rule.derive.clone(),
                 when: rule.when.clone(),
                 condition_ids: rule.condition_ids.clone(),
+                doc: rule.doc.clone(),
             },
         );
         rule_ids.insert(rule.id.as_str(), id);
@@ -353,6 +383,7 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
                 expected_count: expectation.count,
                 actual_count: walked.actual_count,
                 satisfied: walked.satisfied,
+                doc: expectation.doc.clone(),
             },
         );
         expectation_ids.insert(expectation.id.as_str(), id);
@@ -368,6 +399,7 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
                 relation: mutation.relation.clone(),
                 except: mutation.except.clone(),
                 must_fail: mutation.must_fail.clone(),
+                doc: mutation.doc.clone(),
             },
         );
         mutation_ids.insert(mutation.id.as_str(), id);
@@ -448,6 +480,15 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
             } else {
                 "derived"
             };
+            let reading = relation
+                .reads
+                .as_deref()
+                .map(|template| read_fact(template, &relation.roles, &args));
+            let doc = declarations
+                .iter()
+                .filter_map(|declaration| docs_by_declaration.get(declaration.as_str()))
+                .map(|doc| doc.to_string())
+                .collect::<Vec<_>>();
             let id = builder.node(
                 digest_id(&artifact.name, "fact", &(&relation.name, &args)),
                 GraphNodeData::Fact {
@@ -457,6 +498,8 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
                     confidence: row.fact.ann.conf,
                     provenance: row.fact.ann.prov.iter().cloned().collect(),
                     declarations: declarations.clone(),
+                    reading,
+                    doc: (!doc.is_empty()).then(|| doc.join("\n\n")),
                 },
             );
             fact_ids.insert((relation.name.clone(), row.key.clone()), id.clone());
@@ -764,11 +807,18 @@ fn add_expectation_proof_edges(
     satisfied: bool,
     actual_count: usize,
 ) {
-    if !satisfied || actual_count == 0 {
+    if actual_count == 0 {
         return;
     }
     let Some(relation) = engine.relations.get(&atom.pred) else {
         return;
+    };
+    // Matching facts prove a satisfied claim. For an open claim they are the
+    // facts a reader has to confront: what was found instead of the count.
+    let (rel, basis) = if satisfied {
+        ("proves", "satisfied_query")
+    } else {
+        ("matches", "unsatisfied_query")
     };
     for row in &relation.rows {
         if !atom_matches(atom, &row.key, &engine.interner) {
@@ -780,9 +830,9 @@ fn add_expectation_proof_edges(
         builder.edge(
             fact_id,
             expectation_id,
-            "proves",
+            rel,
             EdgeMetadata {
-                basis: Some("satisfied_query"),
+                basis: Some(basis),
                 ..EdgeMetadata::default()
             },
         );
