@@ -289,6 +289,7 @@ spec docs {
     when: ["depends_on(Release, Dependency)", "incomplete(Dependency)"]
   }
 
+  // ------------------------------------------------ acceptance claims
   expect release_is_blocked { query: "blocked(release)" count: 1 }
 }
 "#;
@@ -323,7 +324,10 @@ spec docs {
         artifact.rules[0].doc.as_deref(),
         Some("Blocking propagates\nthrough any dependency.")
     );
-    assert_eq!(artifact.expectations[0].doc, None);
+    assert_eq!(
+        artifact.expectations[0].doc, None,
+        "a ruled divider touching a declaration is still a heading"
+    );
 }
 
 #[test]

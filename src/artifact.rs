@@ -464,6 +464,15 @@ fn is_identifier_continue(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_'
 }
 
+/// A ruled divider such as `// ------ policies` is a section heading even
+/// when it sits directly above a declaration.
+fn is_heading(text: &str) -> bool {
+    let first = text.lines().next().unwrap_or_default().trim_start();
+    first.chars().next().is_some_and(|rule| {
+        "-=#*~".contains(rule) && first.starts_with(&rule.to_string().repeat(3))
+    })
+}
+
 /// Whitespace spanning at most one line break: the gap between a comment
 /// and the declaration it documents.
 fn touches(gap: &str) -> bool {
@@ -560,7 +569,9 @@ impl<'a> Parser<'a> {
             let candidate = self.comments.iter().position(|comment| {
                 comment.start > block.end && !self.source[block.end..comment.start].contains('\n')
             });
-            if let Some(index) = candidate.filter(|index| !used[*index]) {
+            if let Some(index) =
+                candidate.filter(|index| !used[*index] && !is_heading(&self.comments[*index].text))
+            {
                 used[index] = true;
                 trailing[block_index] = Some(index);
             }
@@ -574,7 +585,7 @@ impl<'a> Parser<'a> {
                 if used[index] || comment.end > boundary {
                     continue;
                 }
-                if !touches(&self.source[comment.end..boundary]) {
+                if !touches(&self.source[comment.end..boundary]) || is_heading(&comment.text) {
                     break;
                 }
                 leading.push(index);
