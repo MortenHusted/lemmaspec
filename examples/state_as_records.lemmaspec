@@ -25,6 +25,11 @@ spec state_as_records {
     roles: [model, column, companion]
     reads: "{model}.{column} is accompanied by {companion}"
   }
+  relation transition {
+    args: [symbol, symbol]
+    roles: [model, column]
+    reads: "code flips {model}.{column} as a state change"
+  }
   relation state_record {
     args: [symbol, symbol]
     roles: [model, record]
@@ -64,6 +69,15 @@ spec state_as_records {
   // users.admin is a setting, not a transition: no companion, no finding.
   fact users_admin { relation: boolean_column args: [user, admin] }
 
+  // users.active has no companion column, but a method flips it: the
+  // transition is visible in behaviour rather than in the schema.
+  fact users_active { relation: boolean_column args: [user, active] }
+  fact users_deactivate { relation: transition args: [user, active] provenance: ["app/models/user.rb:deactivate!"] }
+
+  // articles.published is flipped by publish!, but it is a datetime, not a
+  // boolean: a transition on its own is not a flattened flag.
+  fact articles_publish { relation: transition args: [article, published] }
+
   // cards.published_at stands alone: the timestamp is the state and there is
   // no boolean to flatten, so a companion by itself is not a flag.
   fact cards_published_at { relation: companion_column args: [card, published, published_at] }
@@ -90,6 +104,14 @@ spec state_as_records {
     }
   }
 
+  rule flag_with_transition_is_state {
+    derive: "state_flag(Model, Column)"
+    when: {
+      is_boolean: "boolean_column(Model, Column)"
+      is_flipped: "transition(Model, Column)"
+    }
+  }
+
   rule unreviewed_state_flag_is_a_violation {
     derive: "violation(Model, Column)"
     when: {
@@ -105,10 +127,12 @@ spec state_as_records {
 
   // =========================================================== expectations
 
-  expect two_flags_are_flattened_state { query: "state_flag(M, C)" count: 2 }
+  expect three_flags_are_flattened_state { query: "state_flag(M, C)" count: 3 }
   expect a_plain_setting_is_not_state { query: "state_flag(user, admin)" count: 0 }
-  expect cards_closed_is_the_violation { query: "violation(card, closed)" count: 1 }
-  expect exactly_one_violation { query: "violation(M, C)" count: 1 }
+  expect a_flipped_datetime_is_not_a_flag { query: "state_flag(article, published)" count: 0 }
+  expect cards_closed_is_a_violation { query: "violation(card, closed)" count: 1 }
+  expect users_active_is_a_violation { query: "violation(user, active)" count: 1 }
+  expect exactly_two_violations { query: "violation(M, C)" count: 2 }
   expect reviewed_flag_is_not_a_violation { query: "violation(board, archived)" count: 0 }
   expect comments_are_on_pattern { query: "on_pattern(comment)" count: 1 }
 
