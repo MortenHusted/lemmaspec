@@ -444,39 +444,66 @@ fn doc_markup(doc: Option<&str>) -> String {
         .unwrap_or_default()
 }
 
-fn graph_link(id: &str) -> String {
-    format!(
-        "<a class=\"graph-link\" href=\"#graph-section\" data-node=\"{}\">show in graph</a>",
-        html_escape(id)
-    )
-}
-
 fn plural(count: usize, one: &str, many: &str) -> String {
     format!("{count} {}", if count == 1 { one } else { many })
 }
 
-fn section(title: &str, intro: &str, body: String) -> String {
-    if body.is_empty() {
-        return String::new();
-    }
+/// One stop on the journey. Its cards double as the set of nodes the graph
+/// emphasises while the reader is on this step.
+fn step(key: &str, title: &str, intro: &str, empty: &str, body: String) -> String {
+    let content = if body.is_empty() {
+        format!("<p class=\"empty\">{}</p>", html_escape(empty))
+    } else {
+        body
+    };
     format!(
-        "<section class=\"guide\"><h2>{}</h2><p class=\"intro\">{}</p>{body}</section>",
+        "<section class=\"step\" data-step=\"{key}\" hidden><header class=\"step-head\"><h2>{}</h2><p class=\"intro\">{}</p></header><div class=\"step-body\">{content}</div></section>",
         html_escape(title),
         html_escape(intro)
     )
 }
 
-fn fact_card(index: &Index, node: &GraphNode, extra: &str) -> String {
+struct Card<'a> {
+    id: &'a str,
+    class: &'a str,
+    attrs: String,
+    tone: &'a str,
+    chip: &'a str,
+    summary: String,
+    hint: String,
+    detail: String,
+}
+
+/// A card is one line until selected; selecting it opens the detail and
+/// lights the same node in the graph.
+fn card(card: Card) -> String {
+    let hint = if card.hint.is_empty() {
+        String::new()
+    } else {
+        format!("<span class=\"hint\">{}</span>", card.hint)
+    };
+    format!(
+        "<article class=\"card {}\" id=\"{}\" data-node=\"{}\"{}><button type=\"button\" class=\"card-summary\"><span class=\"chip {}\">{}</span><span class=\"sentence\">{}</span>{hint}</button><div class=\"card-detail\" hidden>{}</div></article>",
+        card.class,
+        anchor(card.id),
+        html_escape(card.id),
+        card.attrs,
+        card.tone,
+        card.chip,
+        card.summary,
+        card.detail
+    )
+}
+
+fn fact_meta(index: &Index, node: &GraphNode) -> String {
     let GraphNodeData::Fact {
         relation,
         confidence,
-        doc,
         ..
     } = &node.data
     else {
         return String::new();
     };
-    let standing = index.standing(node);
     let sources = index.evidence(node);
     let mut meta = vec![format!("<code>{}</code>", html_escape(relation))];
     if !sources.is_empty() {
@@ -492,22 +519,37 @@ fn fact_card(index: &Index, node: &GraphNode, extra: &str) -> String {
     if *confidence < 1.0 {
         meta.push(format!("{:.0}% confidence", confidence * 100.0));
     }
-    format!(
-        "<article class=\"card\" id=\"{}\" data-standing=\"{}\"><div class=\"card-head\"><span class=\"chip {}\">{}</span><span class=\"sentence\">{}</span>{}</div><div class=\"meta\">{}</div>{}{extra}</article>",
-        anchor(&node.id),
-        standing.label(),
-        standing.tone(),
-        standing.label(),
-        index.sentence(node),
-        graph_link(&node.id),
-        meta.join(" · "),
-        doc_markup(doc.as_deref())
-    )
+    format!("<div class=\"meta\">{}</div>", meta.join(" · "))
 }
 
-/// Facts grouped under the concept they describe, collapsed when a group is
-/// too long to scan.
-fn grouped_facts(index: &Index, facts: &[&GraphNode]) -> String {
+fn fact_card(index: &Index, node: &GraphNode, hint: String, extra: &str) -> String {
+    let GraphNodeData::Fact { doc, .. } = &node.data else {
+        return String::new();
+    };
+    let standing = index.standing(node);
+    card(Card {
+        id: &node.id,
+        class: "fact",
+        attrs: format!(" data-standing=\"{}\"", standing.label()),
+        tone: standing.tone(),
+        chip: standing.label(),
+        summary: index.sentence(node),
+        hint,
+        detail: format!(
+            "{}{}{extra}",
+            fact_meta(index, node),
+            doc_markup(doc.as_deref())
+        ),
+    })
+}
+
+/// Facts under the concept they describe; long groups start folded.
+fn grouped_facts(
+    index: &Index,
+    facts: &[&GraphNode],
+    noun: (&str, &str),
+    detail: impl Fn(&GraphNode) -> String,
+) -> String {
     let mut groups: BTreeMap<&str, Vec<&GraphNode>> = BTreeMap::new();
     for node in facts {
         if let GraphNodeData::Fact { relation, .. } = &node.data {
@@ -525,13 +567,13 @@ fn grouped_facts(index: &Index, facts: &[&GraphNode]) -> String {
                 .unwrap_or_default();
             let cards: String = nodes
                 .iter()
-                .map(|node| fact_card(index, node, ""))
+                .map(|node| fact_card(index, node, String::new(), &detail(node)))
                 .collect();
             format!(
-                "<details class=\"group\"{}><summary><strong>{}</strong> <span class=\"count\">{}</span></summary>{doc}{cards}</details>",
-                if nodes.len() <= 12 { " open" } else { "" },
+                "<details class=\"group\"{}><summary><strong>{}</strong><span class=\"count\">{}</span></summary>{doc}{cards}</details>",
+                if nodes.len() <= 8 { " open" } else { "" },
                 html_escape(relation),
-                plural(nodes.len(), "fact", "facts")
+                plural(nodes.len(), noun.0, noun.1)
             )
         })
         .collect()
@@ -541,11 +583,11 @@ pub struct GuideSections {
     pub question: String,
     pub observations: String,
     pub assumptions: String,
-    pub relationships: String,
     pub reasoning: String,
     pub conclusions: String,
     pub claims: String,
     pub stress_tests: String,
+    pub reference: String,
 }
 
 pub fn render_guide(projection: &GraphProjection) -> GuideSections {
@@ -554,11 +596,11 @@ pub fn render_guide(projection: &GraphProjection) -> GuideSections {
         question: render_question(&index),
         observations: render_observations(&index),
         assumptions: render_assumptions(&index),
-        relationships: render_relationships(&index),
         reasoning: render_reasoning(&index),
         conclusions: render_conclusions(&index),
         claims: render_claims(&index),
         stress_tests: render_stress_tests(&index),
+        reference: render_reference(&index),
     }
 }
 
@@ -568,13 +610,14 @@ fn render_question(index: &Index) -> String {
         .nodes
         .iter()
         .find_map(|node| match &node.data {
-            GraphNodeData::Spec { doc: Some(doc), .. } => Some(format!(
-                "<section class=\"question\"><h2>The question</h2>{}</section>",
-                paragraphs(doc)
-            )),
+            GraphNodeData::Spec { doc: Some(doc), .. } => {
+                Some(format!("<div class=\"question\">{}</div>", paragraphs(doc)))
+            }
             _ => None,
         })
-        .unwrap_or_default()
+        .unwrap_or_else(|| {
+            "<p class=\"empty\">This artifact states no question. A comment above `spec` becomes one.</p>".to_string()
+        })
 }
 
 fn render_observations(index: &Index) -> String {
@@ -582,10 +625,12 @@ fn render_observations(index: &Index) -> String {
         .facts()
         .filter(|node| index.standing(node) == Standing::Observation)
         .collect();
-    section(
-        &format!("Observations ({})", facts.len()),
-        "Asserted facts with evidence attached. These are the ground the rest of the argument stands on.",
-        grouped_facts(index, &facts),
+    step(
+        "observations",
+        "Observations",
+        "Asserted facts with evidence attached: the ground the argument stands on.",
+        "No asserted fact cites evidence yet. Add provenance to the facts you have verified.",
+        grouped_facts(index, &facts, ("fact", "facts"), |_| String::new()),
     )
 }
 
@@ -606,26 +651,268 @@ fn render_assumptions(index: &Index) -> String {
     let cards: String = facts
         .iter()
         .map(|(node, (conclusions, claims))| {
-            let radius = if *conclusions == 0 && *claims == 0 {
-                "<div class=\"radius quiet\">Nothing derived rests on this yet.</div>".to_string()
+            let (hint, radius) = if *conclusions == 0 && *claims == 0 {
+                (
+                    String::new(),
+                    "<div class=\"radius quiet\">Nothing derived rests on this yet.</div>"
+                        .to_string(),
+                )
             } else {
-                format!(
-                    "<div class=\"radius\">If this is wrong, {} and {} fall with it.</div>",
-                    plural(*conclusions, "conclusion", "conclusions"),
-                    plural(*claims, "claim", "claims")
+                (
+                    format!("{conclusions} · {claims}"),
+                    format!(
+                        "<div class=\"radius\">If this is wrong, {} and {} fall with it.</div>",
+                        plural(*conclusions, "conclusion", "conclusions"),
+                        plural(*claims, "claim", "claims")
+                    ),
                 )
             };
-            fact_card(index, node, &radius)
+            fact_card(index, node, hint, &radius)
         })
         .collect();
-    section(
-        &format!("Assumptions ({})", facts.len()),
-        "Asserted without evidence, or below full confidence. Each one is a decision waiting to be made; they are ordered by how much depends on them.",
+    step(
+        "assumptions",
+        "Assumptions",
+        "Asserted without evidence, or below full confidence. Each is a decision waiting to be made, ordered by how much rests on it. Hover one to see what it holds up.",
+        "Every asserted fact carries evidence. Nothing here is taken on trust.",
         cards,
     )
 }
 
-fn render_relationships(index: &Index) -> String {
+fn render_reasoning(index: &Index) -> String {
+    let cards: String = index
+        .projection
+        .nodes
+        .iter()
+        .filter_map(|node| {
+            let GraphNodeData::Rule {
+                name,
+                derive,
+                when,
+                condition_ids,
+                doc,
+            } = &node.data
+            else {
+                return None;
+            };
+            let conditions: String = when
+                .iter()
+                .enumerate()
+                .map(|(position, condition)| {
+                    let id = condition_ids
+                        .get(position)
+                        .map(|id| format!("<span class=\"cond\">{}</span>", html_escape(id)))
+                        .unwrap_or_default();
+                    format!("<li>{id}{}</li>", index.condition_markup(condition))
+                })
+                .collect();
+            let yielded = index
+                .rule_yield
+                .get(node.id.as_str())
+                .map(|count| plural(*count, "conclusion", "conclusions"))
+                .unwrap_or_else(|| "nothing yet".to_string());
+            Some(card(Card {
+                id: &node.id,
+                class: "rule",
+                attrs: String::new(),
+                tone: "c-attention",
+                chip: "rule",
+                summary: html_escape(name),
+                hint: yielded,
+                detail: format!(
+                    "<p class=\"lead\">Concludes <span class=\"sentence\">{}</span> when</p><ol class=\"conditions\">{conditions}</ol>{}",
+                    index.condition_markup(derive),
+                    doc_markup(doc.as_deref())
+                ),
+            }))
+        })
+        .collect();
+    step(
+        "reasoning",
+        "Reasoning",
+        "The rules that turn observations and assumptions into conclusions. Read each as: this follows whenever all of these hold.",
+        "No rules. Everything here is asserted directly.",
+        cards,
+    )
+}
+
+fn render_conclusions(index: &Index) -> String {
+    let facts: Vec<&GraphNode> = index
+        .facts()
+        .filter(|node| index.standing(node) == Standing::Conclusion)
+        .collect();
+    let body = grouped_facts(index, &facts, ("conclusion", "conclusions"), |node| {
+        let because = index.because(&node.id, 0, &mut Vec::new());
+        if because.is_empty() {
+            String::new()
+        } else {
+            format!("<div class=\"why\"><span class=\"why-label\">because</span>{because}</div>")
+        }
+    });
+    step(
+        "conclusions",
+        "Conclusions",
+        "What follows. Select one to see the rule and the facts that produced it, back to the observations.",
+        "Nothing is derived. The rules found no matching facts.",
+        body,
+    )
+}
+
+fn render_claims(index: &Index) -> String {
+    let mut expectations: Vec<&GraphNode> = index
+        .projection
+        .nodes
+        .iter()
+        .filter(|node| matches!(node.data, GraphNodeData::Expectation { .. }))
+        .collect();
+    expectations.sort_by_key(|node| match &node.data {
+        GraphNodeData::Expectation { satisfied, .. } => *satisfied,
+        _ => true,
+    });
+    let cards: String = expectations
+        .iter()
+        .filter_map(|node| {
+            let GraphNodeData::Expectation {
+                name,
+                query,
+                expected_count,
+                actual_count,
+                satisfied,
+                doc,
+            } = &node.data
+            else {
+                return None;
+            };
+            let verdict = if *satisfied {
+                format!("Found {actual_count}. Confirmed.")
+            } else {
+                format!(
+                    "Found {actual_count}. This claim is open until the facts or the claim change."
+                )
+            };
+            let proof = index
+                .proven_by
+                .get(node.id.as_str())
+                .map(|facts| {
+                    let shown: Vec<String> = facts
+                        .iter()
+                        .take(8)
+                        .map(|fact| format!("<li>{}</li>", index.link(fact)))
+                        .collect();
+                    let more = if facts.len() > 8 {
+                        format!("<li class=\"more\">and {} more</li>", facts.len() - 8)
+                    } else {
+                        String::new()
+                    };
+                    format!(
+                        "<div class=\"why\"><span class=\"why-label\">supported by</span><ul class=\"because\">{}{more}</ul></div>",
+                        shown.join("")
+                    )
+                })
+                .unwrap_or_default();
+            Some(card(Card {
+                id: &node.id,
+                class: "claim",
+                attrs: format!(
+                    " data-status=\"{}\"",
+                    if *satisfied { "passed" } else { "failed" }
+                ),
+                tone: if *satisfied { "c-stable" } else { "c-critical" },
+                chip: if *satisfied { "confirmed" } else { "open" },
+                summary: html_escape(name),
+                hint: format!("{actual_count} of {expected_count}"),
+                detail: format!(
+                    "<p class=\"lead\">There must be exactly {} where <span class=\"sentence\">{}</span>.</p><p class=\"verdict\">{verdict}</p>{}{proof}",
+                    plural(*expected_count, "result", "results"),
+                    index.condition_markup(query),
+                    doc_markup(doc.as_deref())
+                ),
+            }))
+        })
+        .collect();
+    step(
+        "claims",
+        "Claims",
+        "The acceptance criteria this spec commits to, checked against the walk. Open claims come first.",
+        "No claims declared. The artifact evaluates but commits to nothing.",
+        cards,
+    )
+}
+
+fn render_stress_tests(index: &Index) -> String {
+    let cards: String = index
+        .projection
+        .nodes
+        .iter()
+        .filter_map(|node| {
+            let GraphNodeData::Mutation {
+                name,
+                operator,
+                relation,
+                except,
+                must_fail,
+                doc,
+            } = &node.data
+            else {
+                return None;
+            };
+            let target = match operator {
+                MutationOperator::DropRule => "Dropping any rule".to_string(),
+                MutationOperator::DropCondition => "Dropping any single rule condition".to_string(),
+                MutationOperator::DropFact => format!(
+                    "Dropping any <code>{}</code> fact",
+                    html_escape(relation.as_deref().unwrap_or("?"))
+                ),
+            };
+            let exceptions = if except.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    " except {}",
+                    except
+                        .iter()
+                        .map(|item| format!("<code>{}</code>", html_escape(item)))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            };
+            let oracle = match must_fail {
+                Some(expectation) => format!(
+                    "must break the claim {}",
+                    index
+                        .expectations_by_name
+                        .get(expectation.as_str())
+                        .map(|id| index.link(id))
+                        .unwrap_or_else(|| html_escape(expectation))
+                ),
+                None => "must break at least one claim".to_string(),
+            };
+            Some(card(Card {
+                id: &node.id,
+                class: "policy",
+                attrs: String::new(),
+                tone: "c-attention",
+                chip: "stress test",
+                summary: html_escape(name),
+                hint: html_escape(operator.as_str()),
+                detail: format!(
+                    "<p class=\"lead\">{target}{exceptions} {oracle}.</p>{}",
+                    doc_markup(doc.as_deref())
+                ),
+            }))
+        })
+        .collect();
+    step(
+        "stress-tests",
+        "Stress tests",
+        "Mutation policies: which parts of the reasoning must be load-bearing. Run lemmaspec mutate to see which mutants survive.",
+        "No mutation policies. Nothing checks that the reasoning is load-bearing.",
+        cards,
+    )
+}
+
+/// Concepts, then the vocabulary they share, grouped by role.
+fn render_reference(index: &Index) -> String {
     let mut asserted: BTreeMap<&str, usize> = BTreeMap::new();
     let mut derived: BTreeMap<&str, usize> = BTreeMap::new();
     for node in index.facts() {
@@ -701,33 +988,28 @@ fn render_relationships(index: &Index) -> String {
                 )
             })
             .unwrap_or_default();
-        concepts.push_str(&format!(
-            "<article class=\"card concept\" id=\"{}\"><div class=\"card-head\"><strong>{}</strong><span class=\"signature\">{signature}</span>{}</div><div class=\"meta\">{}{}</div>{reads}{}</article>",
-            anchor(&node.id),
-            html_escape(name),
-            graph_link(&node.id),
-            producers,
-            if facts.is_empty() {
-                String::new()
-            } else {
-                format!(" · {}", facts.join(", "))
-            },
-            doc_markup(doc.as_deref())
-        ));
+        concepts.push_str(&card(Card {
+            id: &node.id,
+            class: "concept",
+            attrs: String::new(),
+            tone: "c-neutral",
+            chip: "concept",
+            summary: html_escape(name),
+            hint: facts.join(", "),
+            detail: format!(
+                "<div class=\"meta\">{signature} · {producers}</div>{reads}{}",
+                doc_markup(doc.as_deref())
+            ),
+        }));
     }
 
-    let vocabulary = render_vocabulary(index);
-    section(
-        "Relationships",
-        "The concepts this spec talks about, who concludes them, and the vocabulary they share.",
-        format!("{concepts}{vocabulary}"),
-    )
+    format!("<h3>Concepts</h3>{concepts}{}", render_vocabulary(index))
 }
 
 /// Symbols grouped by the role they play. A role name shared by several
 /// relations unifies the vocabulary across them.
 fn render_vocabulary(index: &Index) -> String {
-    let mut by_role: BTreeMap<String, BTreeMap<&str, usize>> = BTreeMap::new();
+    let mut by_role: BTreeMap<String, BTreeMap<&str, (usize, &str)>> = BTreeMap::new();
     for edge in &index.projection.edges {
         if edge.rel != "references_symbol" || edge.basis.as_deref() != Some("fact_argument") {
             continue;
@@ -750,11 +1032,12 @@ fn render_vocabulary(index: &Index) -> String {
             .and_then(|info| info.roles.get(position))
             .cloned()
             .unwrap_or_else(|| format!("{relation} · argument {}", position + 1));
-        *by_role
+        let entry = by_role
             .entry(role)
             .or_default()
             .entry(value.as_str())
-            .or_default() += 1;
+            .or_insert((0, symbol.id.as_str()));
+        entry.0 += 1;
     }
     if by_role.is_empty() {
         return String::new();
@@ -764,244 +1047,22 @@ fn render_vocabulary(index: &Index) -> String {
         .map(|(role, symbols)| {
             let items: String = symbols
                 .iter()
-                .map(|(symbol, uses)| {
+                .map(|(symbol, (uses, id))| {
                     format!(
-                        "<li><code>{}</code><span class=\"count\">{}</span></li>",
+                        "<li><a class=\"ref\" href=\"#\" data-node=\"{}\"><code>{}</code></a><span class=\"count\">{}</span></li>",
+                        html_escape(id),
                         html_escape(symbol),
                         plural(*uses, "use", "uses")
                     )
                 })
                 .collect();
             format!(
-                "<details class=\"vocab\"{}><summary><i>{}</i> <span class=\"count\">{}</span></summary><ul>{items}</ul></details>",
+                "<details class=\"vocab\"{}><summary><i>{}</i><span class=\"count\">{}</span></summary><ul>{items}</ul></details>",
                 if symbols.len() <= 8 { " open" } else { "" },
                 html_escape(&role),
                 plural(symbols.len(), "value", "values")
             )
         })
         .collect();
-    format!("<h3>Vocabulary</h3><div class=\"vocab-grid\">{groups}</div>")
-}
-
-fn render_reasoning(index: &Index) -> String {
-    let cards: String = index
-        .projection
-        .nodes
-        .iter()
-        .filter_map(|node| {
-            let GraphNodeData::Rule {
-                name,
-                derive,
-                when,
-                condition_ids,
-                doc,
-            } = &node.data
-            else {
-                return None;
-            };
-            let conditions: String = when
-                .iter()
-                .enumerate()
-                .map(|(position, condition)| {
-                    let id = condition_ids
-                        .get(position)
-                        .map(|id| format!("<span class=\"cond\">{}</span>", html_escape(id)))
-                        .unwrap_or_default();
-                    format!("<li>{id}{}</li>", index.condition_markup(condition))
-                })
-                .collect();
-            let yielded = index
-                .rule_yield
-                .get(node.id.as_str())
-                .map(|count| plural(*count, "conclusion", "conclusions"))
-                .unwrap_or_else(|| "no conclusions so far".to_string());
-            Some(format!(
-                "<article class=\"card rule\" id=\"{}\"><div class=\"card-head\"><span class=\"chip c-attention\">rule</span><strong>{}</strong><span class=\"count\">{yielded}</span>{}</div><p class=\"lead\">Concludes <span class=\"sentence\">{}</span> when</p><ol class=\"conditions\">{conditions}</ol>{}</article>",
-                anchor(&node.id),
-                html_escape(name),
-                graph_link(&node.id),
-                index.condition_markup(derive),
-                doc_markup(doc.as_deref())
-            ))
-        })
-        .collect();
-    section(
-        "Reasoning",
-        "The rules that turn observations and assumptions into conclusions. Read each one as: this follows, whenever all of these hold.",
-        cards,
-    )
-}
-
-fn render_conclusions(index: &Index) -> String {
-    let facts: Vec<&GraphNode> = index
-        .facts()
-        .filter(|node| index.standing(node) == Standing::Conclusion)
-        .collect();
-    let mut groups: BTreeMap<&str, Vec<&GraphNode>> = BTreeMap::new();
-    for node in &facts {
-        if let GraphNodeData::Fact { relation, .. } = &node.data {
-            groups.entry(relation.as_str()).or_default().push(node);
-        }
-    }
-    let body: String = groups
-        .into_iter()
-        .map(|(relation, nodes)| {
-            let cards: String = nodes
-                .iter()
-                .map(|node| {
-                    let because = index.because(&node.id, 0, &mut Vec::new());
-                    let because = if because.is_empty() {
-                        String::new()
-                    } else {
-                        format!("<div class=\"why\"><span class=\"why-label\">because</span>{because}</div>")
-                    };
-                    fact_card(index, node, &because)
-                })
-                .collect();
-            format!(
-                "<details class=\"group\"{}><summary><strong>{}</strong> <span class=\"count\">{}</span></summary>{cards}</details>",
-                if nodes.len() <= 12 { " open" } else { "" },
-                html_escape(relation),
-                plural(nodes.len(), "conclusion", "conclusions")
-            )
-        })
-        .collect();
-    section(
-        &format!("Conclusions ({})", facts.len()),
-        "What follows from the above. Every conclusion unfolds into the rule and the facts that produced it, down to the observations.",
-        body,
-    )
-}
-
-fn render_claims(index: &Index) -> String {
-    let mut expectations: Vec<&GraphNode> = index
-        .projection
-        .nodes
-        .iter()
-        .filter(|node| matches!(node.data, GraphNodeData::Expectation { .. }))
-        .collect();
-    expectations.sort_by_key(|node| match &node.data {
-        GraphNodeData::Expectation { satisfied, .. } => *satisfied,
-        _ => true,
-    });
-    let cards: String = expectations
-        .iter()
-        .filter_map(|node| {
-            let GraphNodeData::Expectation {
-                name,
-                query,
-                expected_count,
-                actual_count,
-                satisfied,
-                doc,
-            } = &node.data
-            else {
-                return None;
-            };
-            let (tone, verdict) = if *satisfied {
-                ("c-stable", format!("Found {actual_count}. Confirmed."))
-            } else {
-                (
-                    "c-critical",
-                    format!("Found {actual_count}. This claim is open until the facts or the claim change."),
-                )
-            };
-            let proof = index
-                .proven_by
-                .get(node.id.as_str())
-                .map(|facts| {
-                    let shown: Vec<String> = facts.iter().take(8).map(|fact| format!("<li>{}</li>", index.link(fact))).collect();
-                    let more = if facts.len() > 8 {
-                        format!("<li class=\"more\">and {} more</li>", facts.len() - 8)
-                    } else {
-                        String::new()
-                    };
-                    format!(
-                        "<div class=\"why\"><span class=\"why-label\">supported by</span><ul class=\"because\">{}{more}</ul></div>",
-                        shown.join("")
-                    )
-                })
-                .unwrap_or_default();
-            Some(format!(
-                "<article class=\"card claim\" id=\"{}\" data-status=\"{}\"><div class=\"card-head\"><span class=\"chip {tone}\">{}</span><strong>{}</strong>{}</div><p class=\"lead\">There must be exactly {} where <span class=\"sentence\">{}</span>.</p><p class=\"verdict\">{verdict}</p>{}{proof}</article>",
-                anchor(&node.id),
-                if *satisfied { "passed" } else { "failed" },
-                if *satisfied { "confirmed" } else { "open" },
-                html_escape(name),
-                graph_link(&node.id),
-                plural(*expected_count, "result", "results"),
-                index.condition_markup(query),
-                doc_markup(doc.as_deref())
-            ))
-        })
-        .collect();
-    section(
-        "Claims",
-        "The acceptance criteria this spec commits to, checked against the walk. Open claims come first.",
-        cards,
-    )
-}
-
-fn render_stress_tests(index: &Index) -> String {
-    let cards: String = index
-        .projection
-        .nodes
-        .iter()
-        .filter_map(|node| {
-            let GraphNodeData::Mutation {
-                name,
-                operator,
-                relation,
-                except,
-                must_fail,
-                doc,
-            } = &node.data
-            else {
-                return None;
-            };
-            let target = match operator {
-                MutationOperator::DropRule => "Dropping any rule".to_string(),
-                MutationOperator::DropCondition => "Dropping any single rule condition".to_string(),
-                MutationOperator::DropFact => format!(
-                    "Dropping any <code>{}</code> fact",
-                    html_escape(relation.as_deref().unwrap_or("?"))
-                ),
-            };
-            let exceptions = if except.is_empty() {
-                String::new()
-            } else {
-                format!(
-                    " except {}",
-                    except
-                        .iter()
-                        .map(|item| format!("<code>{}</code>", html_escape(item)))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            };
-            let oracle = match must_fail {
-                Some(expectation) => format!(
-                    "must break the claim {}",
-                    index
-                        .expectations_by_name
-                        .get(expectation.as_str())
-                        .map(|id| index.link(id))
-                        .unwrap_or_else(|| html_escape(expectation))
-                ),
-                None => "must break at least one claim".to_string(),
-            };
-            Some(format!(
-                "<article class=\"card policy\" id=\"{}\"><div class=\"card-head\"><span class=\"chip c-attention\">stress test</span><strong>{}</strong>{}</div><p class=\"lead\">{target}{exceptions} {oracle}.</p>{}</article>",
-                anchor(&node.id),
-                html_escape(name),
-                graph_link(&node.id),
-                doc_markup(doc.as_deref())
-            ))
-        })
-        .collect();
-    section(
-        "Stress tests",
-        "Mutation policies: which parts of the reasoning must be load-bearing. Run lemmaspec mutate to see which mutants survive.",
-        cards,
-    )
+    format!("<h3>Vocabulary</h3>{groups}")
 }

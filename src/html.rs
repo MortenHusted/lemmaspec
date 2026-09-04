@@ -26,11 +26,11 @@ pub fn render_projection_html(source: &str, projection: &GraphProjection) -> Str
         question,
         observations,
         assumptions,
-        relationships,
         reasoning,
         conclusions,
         claims,
         stress_tests,
+        reference,
     } = render_guide(projection);
     let relations = render_relations(projection);
     let facts = render_facts(projection);
@@ -49,8 +49,8 @@ pub fn render_projection_html(source: &str, projection: &GraphProjection) -> Str
         ("OBSERVATIONS", observations),
         ("QUESTION", question),
         ("REASONING", reasoning),
+        ("REFERENCE", reference),
         ("RELATIONS", relations),
-        ("RELATIONSHIPS", relationships),
         ("STRESS_TESTS", stress_tests),
         ("SOURCE", source),
         ("SPEC_NAME", html_escape(&projection.spec)),

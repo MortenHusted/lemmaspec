@@ -17,10 +17,7 @@ fn renders_a_dependency_free_document_with_the_canonical_graph_embedded() {
     assert!(html.contains("All 1 expectation is satisfied"), "{html}");
     assert!(html.contains("id=\"lemmaspec-graph\""), "{html}");
     assert!(html.contains("id=\"artifact-source\""), "{html}");
-    assert!(
-        html.contains("including proof witnesses and evidence"),
-        "{html}"
-    );
+    assert!(html.contains("class=\"stepper\""), "{html}");
     assert!(html.contains("\"witness\":\"blocked_by_incomplete_dependency\""));
     assert!(!html.contains("<script src="), "{html}");
     assert!(!html.contains("https://"), "{html}");
@@ -69,7 +66,7 @@ fn renders_mutation_policies_as_stress_tests() {
     let projection = project_artifact(MUTATION_ANALYSIS).expect("project mutation analysis");
     let html = render_projection_html(MUTATION_ANALYSIS, &projection);
 
-    assert!(html.contains("class=\"card policy\""), "{html}");
+    assert!(html.contains("class=\"card policy\" id="), "{html}");
     assert!(html.contains("semantic_rules_are_load_bearing"), "{html}");
     assert!(
         html.contains("Dropping any rule must break at least one claim."),
@@ -115,15 +112,15 @@ spec guide {
     let html = render_projection_html(source, &projection);
 
     assert!(
-        html.contains("<h2>The question</h2><p>Can the release ship today?</p>"),
+        html.contains("<div class=\"question\"><p>Can the release ship today?</p></div>"),
         "{html}"
     );
 
     // Evidence decides standing: provenance makes an observation, its absence an assumption.
-    assert!(html.contains("<h2>Observations (1)</h2>"), "{html}");
+    assert!(html.contains("data-step=\"observations\""), "{html}");
     assert!(html.contains("<span class=\"chip c-stable\">observation</span><span class=\"sentence\">tests is incomplete</span>"), "{html}");
     assert!(html.contains("evidence: plan:test-gate"), "{html}");
-    assert!(html.contains("<h2>Assumptions (1)</h2>"), "{html}");
+    assert!(html.contains("data-step=\"assumptions\""), "{html}");
     assert!(html.contains("<span class=\"chip c-attention\">assumption</span><span class=\"sentence\">release depends on tests</span>"), "{html}");
     assert!(
         html.contains("If this is wrong, 1 conclusion and 1 claim fall with it."),
@@ -145,7 +142,7 @@ spec guide {
     );
 
     // Conclusions unfold into the rule and the facts behind them.
-    assert!(html.contains("<h2>Conclusions (1)</h2>"), "{html}");
+    assert!(html.contains("data-step=\"conclusions\""), "{html}");
     assert!(html.contains("via rule <a class=\"ref\" href=\"#n-lemmaspec-guide-rule-blocked_by_incomplete_dependency\">blocked_by_incomplete_dependency</a>"), "{html}");
     assert!(
         html.contains("<span class=\"chip c-attention\">assumption</span> <a class=\"ref\""),

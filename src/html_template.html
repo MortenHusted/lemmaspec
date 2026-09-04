@@ -16,63 +16,68 @@
     --accent:#74b6dc;
     --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
     --sans:"Inter","Noto Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    --journey:420px;
   }
   * { box-sizing:border-box }
-  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 var(--sans); -webkit-font-smoothing:antialiased }
-  .wrap { max-width:1440px; margin:0 auto; padding:36px 28px 80px }
+  html, body { height:100% }
+  body { margin:0; overflow:hidden; background:var(--bg); color:var(--ink); font:14px/1.5 var(--sans); -webkit-font-smoothing:antialiased }
   code, pre { font-family:var(--mono) }
-  header { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; padding-bottom:22px; border-bottom:1px solid var(--line) }
-  h1 { margin:0 0 6px; font-size:30px; letter-spacing:-.5px }
-  h1 span { color:var(--accent); font:14px var(--mono) }
-  .sub, .empty { margin:0; color:var(--dim) }
-  h2 { margin:42px 0 16px; padding-top:22px; border-top:1px solid var(--line); color:var(--faint); font-size:12px; font-weight:650; letter-spacing:1.5px; text-transform:uppercase }
-  .status { border:1px solid; border-radius:999px; padding:5px 11px; font:12px var(--mono) }
+  a { color:var(--accent) }
+
+  /* ------------------------------------------------------------ top bar */
+  .top { display:flex; align-items:center; gap:18px; height:52px; padding:0 18px; border-bottom:1px solid var(--line); background:var(--panel) }
+  .top h1 { margin:0; font-size:16px; font-weight:650; letter-spacing:-.2px; white-space:nowrap }
+  .top h1 span { margin-left:8px; color:var(--faint); font:11px var(--mono) }
+  .verdict { display:flex; align-items:center; gap:8px; color:var(--dim); font-size:12px; white-space:nowrap }
+  .verdict .status { border:1px solid; border-radius:999px; padding:2px 9px; font:11px var(--mono) }
   html[data-status="clean"] .status { color:var(--stable); background:var(--stable-bg); border-color:var(--stable-br) }
   html[data-status="incomplete"] .status { color:var(--critical); background:var(--critical-bg); border-color:var(--critical-br) }
-  .def { margin-top:26px; padding:18px 21px; border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:10px; background:linear-gradient(180deg,var(--panel2),var(--panel)); font-size:18px }
-  html[data-status="incomplete"] .def { border-left-color:var(--critical) }
-  .def small { display:block; margin-top:7px; color:var(--dim); font-size:13px }
-  .stats { display:grid; grid-template-columns:repeat(8,minmax(90px,1fr)); gap:10px; margin-top:18px }
-  .stat { padding:12px 14px; border:1px solid var(--line); border-radius:9px; background:var(--panel) }
-  .stat strong { display:block; font:21px var(--mono) }
-  .stat span { color:var(--faint); font-size:11px; text-transform:uppercase; letter-spacing:.7px }
-  .legend { display:flex; flex-wrap:wrap; gap:10px 18px }
-  .lg { display:flex; align-items:center; gap:8px; color:var(--dim); font-size:13px }
-  .dot { width:10px; height:10px; border-radius:3px }
-  .graph-layout { display:grid; grid-template-columns:minmax(0,1fr) 320px; min-height:640px; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--panel) }
-  .graph-main { display:flex; flex-direction:column; min-width:0 }
-  .toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; padding:10px 14px; border-bottom:1px solid var(--line); background:var(--panel2); font-size:12px; color:var(--dim) }
-  .toolbar .group { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px }
-  .toolbar .group > span { color:var(--faint); font-size:10px; letter-spacing:.8px; text-transform:uppercase }
-  .toolbar label { display:inline-flex; align-items:center; gap:4px; cursor:pointer; white-space:nowrap }
-  .toolbar label input { margin:0 }
-  .toolbar input[type=search] { min-width:150px; padding:4px 8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--ink); font:12px var(--mono) }
-  .toolbar button { padding:4px 9px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--dim); font:12px var(--sans); cursor:pointer }
-  .toolbar button:hover:not(:disabled) { color:var(--ink); border-color:var(--faint) }
-  .toolbar button:disabled { opacity:.45; cursor:default }
-  .toolbar button[aria-pressed="true"] { color:var(--accent); border-color:var(--accent) }
-  .toolbar .swatch { display:inline-block; width:14px; height:0; border-top:2px solid var(--faint) }
-  .toolbar .swatch[data-rel="depends_on"] { border-color:var(--additive) }
-  .toolbar .swatch[data-rel="derives"] { border-color:var(--attention) }
-  .toolbar .swatch[data-rel="proves"] { border-color:var(--stable) }
-  .toolbar .swatch[data-rel="expects"] { border-color:var(--accent) }
-  .toolbar .swatch[data-rel="targets"] { border-color:var(--critical) }
-  .toolbar .swatch[data-rel="asserts"] { border-top-style:dotted }
-  .toolbar .spacer { flex:1 }
-  .graph-viewport { position:relative; flex:1; min-height:580px; overflow:hidden; background-image:radial-gradient(var(--line) 1px,transparent 1px); background-size:20px 20px; cursor:grab; touch-action:none }
+  .stepper { display:flex; align-items:center; gap:2px; margin-left:auto; overflow:auto }
+  .stepper button { display:flex; align-items:center; gap:7px; padding:6px 10px; border:0; border-radius:8px; background:none; color:var(--faint); font:12px var(--sans); cursor:pointer; white-space:nowrap }
+  .stepper button::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--line); transition:background .15s }
+  .stepper button:hover { color:var(--dim) }
+  .stepper button[aria-current="step"] { color:var(--ink); background:var(--panel2) }
+  .stepper button[aria-current="step"]::before { background:var(--accent) }
+  .stepper button[data-tone="critical"]::before { background:var(--critical) }
+  .stepper button[data-tone="attention"]::before { background:var(--attention) }
+  .stepper button .n { color:var(--faint); font:10px var(--mono) }
+
+  /* ------------------------------------------------------------ stage */
+  .stage { display:grid; grid-template-columns:minmax(0,1fr) var(--journey); height:calc(100% - 52px) }
+  .graph-viewport { position:relative; overflow:hidden; background-image:radial-gradient(var(--line) 1px,transparent 1px); background-size:22px 22px; cursor:grab; touch-action:none }
   .graph-viewport.panning { cursor:grabbing }
-  #graph { display:block; width:100%; height:100%; min-height:580px }
-  .hint { position:absolute; right:12px; bottom:10px; color:var(--faint); font-size:11px; pointer-events:none }
-  .inspector { padding:18px; border-left:1px solid var(--line); background:var(--panel2); min-width:0 }
-  .inspector h3 { margin:0 0 8px; font-size:15px }
-  .inspector p { color:var(--dim); font-size:13px }
-  .inspector .facts { display:grid; grid-template-columns:auto 1fr; gap:3px 10px; margin:0 0 10px; font-size:12px }
-  .inspector .facts dt { color:var(--faint) }
-  .inspector .facts dd { margin:0; color:var(--ink); font-family:var(--mono); overflow-wrap:anywhere }
-  .inspector pre { overflow:auto; max-height:400px; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--dim); font-size:11px; white-space:pre-wrap }
+  #graph { display:block; width:100%; height:100% }
+  .overlay { position:absolute; top:12px; left:12px; display:flex; align-items:center; gap:6px; z-index:2 }
+  .overlay input[type=search] { width:190px; padding:6px 10px; border:1px solid var(--line); border-radius:8px; background:rgba(19,31,37,.92); color:var(--ink); font:12px var(--mono) }
+  .overlay input[type=search]:focus { outline:none; border-color:var(--accent) }
+  .overlay button { padding:6px 10px; border:1px solid var(--line); border-radius:8px; background:rgba(19,31,37,.92); color:var(--dim); font:12px var(--sans); cursor:pointer }
+  .overlay button:hover:not(:disabled) { color:var(--ink); border-color:var(--faint) }
+  .overlay button:disabled { opacity:.4; cursor:default }
+  .overlay button[aria-pressed="true"] { color:var(--accent); border-color:var(--accent) }
+  .filters { position:absolute; top:48px; left:12px; z-index:3; width:300px; padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:rgba(19,31,37,.97); box-shadow:0 12px 30px rgba(0,0,0,.35) }
+  .filters h4 { margin:0 0 6px; color:var(--faint); font-size:10px; letter-spacing:.9px; text-transform:uppercase }
+  .filters .group { display:flex; flex-wrap:wrap; gap:5px 12px; margin-bottom:12px }
+  .filters label { display:inline-flex; align-items:center; gap:5px; color:var(--dim); font-size:12px; cursor:pointer; white-space:nowrap }
+  .filters label input { margin:0 }
+  .swatch { display:inline-block; width:14px; height:0; border-top:2px solid var(--faint) }
+  .swatch[data-rel="depends_on"] { border-color:var(--additive) }
+  .swatch[data-rel="derives"] { border-color:var(--attention) }
+  .swatch[data-rel="proves"] { border-color:var(--stable) }
+  .swatch[data-rel="expects"] { border-color:var(--accent) }
+  .swatch[data-rel="targets"] { border-color:var(--critical) }
+  .swatch[data-rel="asserts"] { border-top-style:dotted }
+  .legend { display:grid; grid-template-columns:1fr 1fr; gap:4px 12px; color:var(--dim); font-size:11px }
+  .legend span::before { content:""; display:inline-block; width:8px; height:8px; margin-right:6px; border-radius:50%; background:var(--neutral) }
+  .legend .l-stable::before { background:var(--stable) } .legend .l-additive::before { background:var(--additive) }
+  .legend .l-attention::before { background:var(--attention) } .legend .l-critical::before { background:var(--critical) }
+  .weights { margin-top:10px; color:var(--faint); font-size:11px; line-height:1.6 }
+  .help { position:absolute; right:14px; bottom:10px; color:var(--faint); font-size:11px; pointer-events:none }
+  .stage-note { position:absolute; left:14px; bottom:10px; max-width:45%; color:var(--faint); font-size:11px; pointer-events:none }
+
+  /* ------------------------------------------------------------ graph */
   .hull { fill-opacity:.06; stroke-opacity:.14; stroke-width:26; stroke-linejoin:round; stroke-linecap:round; pointer-events:none }
   .hull-label { fill:var(--faint); font:10px var(--sans); letter-spacing:1px; text-transform:uppercase; pointer-events:none }
-  .edge { fill:none; stroke:var(--faint); opacity:.5; cursor:pointer; marker-end:url(#arrow) }
+  .edge { fill:none; stroke:var(--faint); opacity:.5; cursor:pointer; marker-end:url(#arrow); transition:opacity .15s }
   .edge[data-rel="references_symbol"] { opacity:.28; marker-end:none }
   .edge[data-rel="asserts"] { opacity:.22; stroke-dasharray:2 4; marker-end:none }
   .edge[data-rel="depends_on"] { stroke:var(--additive) }
@@ -83,8 +88,8 @@
   .edge[data-negated="true"] { stroke-dasharray:5 4 }
   .edge:hover, .edge.selected, .edge.lit { opacity:1 }
   .edge.selected { stroke:var(--ink) }
-  .node { cursor:pointer; outline:none }
-  .node circle { fill:var(--neutral-bg); stroke:var(--neutral-br); stroke-width:1.6 }
+  .node { cursor:pointer; outline:none; transition:opacity .15s }
+  .node circle { fill:var(--neutral-bg); stroke:var(--neutral-br); stroke-width:1.6; transition:r .2s }
   .node[data-tone="stable"] circle { fill:var(--stable-bg); stroke:var(--stable) }
   .node[data-tone="additive"] circle { fill:var(--additive-bg); stroke:var(--additive) }
   .node[data-tone="attention"] circle { fill:var(--attention-bg); stroke:var(--attention) }
@@ -98,17 +103,34 @@
   .node[data-type="symbol"] text { fill:var(--dim); font-size:10px }
   .node[data-type="symbol"]:not(.lit):not(.selected):not(:hover) text { display:none }
   .scene.zoomed-out .node[data-type="fact"]:not(.lit):not(.selected) text { display:none }
-  .scene.dimmed .node:not(.lit) { opacity:.18 }
-  .scene.dimmed .edge:not(.lit) { opacity:.06 }
-  .scene.dimmed .hull { opacity:.35 }
-  .weights { display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:8px; color:var(--faint); font-size:11px }
-  .intro { margin:-6px 0 16px; color:var(--dim); font-size:14px; max-width:78ch }
-  .question { margin-top:26px }
-  .question h2 { margin-top:0; border-top:0; padding-top:0 }
-  .question p { max-width:78ch; font-size:16px; color:var(--ink) }
-  .legend-title { margin:18px 0 8px; color:var(--faint); font-size:11px; font-weight:650; letter-spacing:1.2px; text-transform:uppercase }
-  .guide h3 { margin:26px 0 10px; font-size:13px; color:var(--dim); letter-spacing:.6px; text-transform:uppercase }
-  .card { position:relative; margin:0 0 10px; padding:13px 16px; border:1px solid var(--line); border-left:3px solid var(--neutral-br); border-radius:10px; background:var(--panel) }
+  .scene.dimmed .node:not(.lit) { opacity:.16 }
+  .scene.dimmed .edge:not(.lit) { opacity:.05 }
+  .scene.dimmed .hull { opacity:.3 }
+
+  /* ------------------------------------------------------------ journey */
+  .journey { display:flex; flex-direction:column; min-height:0; border-left:1px solid var(--line); background:var(--panel2) }
+  .journey-body { flex:1; min-height:0; overflow:auto; padding:18px 20px 24px }
+  .journey-nav { display:flex; align-items:center; gap:10px; padding:10px 20px; border-top:1px solid var(--line); background:var(--panel) }
+  .journey-nav button { padding:6px 12px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--dim); font:12px var(--sans); cursor:pointer }
+  .journey-nav button:hover:not(:disabled) { color:var(--ink); border-color:var(--faint) }
+  .journey-nav button:disabled { opacity:.35; cursor:default }
+  .journey-nav .where { margin:0 auto; color:var(--faint); font:11px var(--mono) }
+  .step-head h2 { margin:0 0 6px; font-size:17px; letter-spacing:-.2px }
+  .step-head .intro { margin:0 0 16px; color:var(--dim); font-size:13px }
+  .step h3 { margin:22px 0 8px; color:var(--faint); font-size:10px; letter-spacing:1px; text-transform:uppercase }
+  .empty { margin:12px 0; padding:12px 14px; border:1px dashed var(--line); border-radius:8px; color:var(--faint); font-size:13px }
+  .question p { margin:0 0 10px; font-size:15px; color:var(--ink) }
+  .thesis { margin:0 0 14px; padding:12px 14px; border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:8px; background:var(--panel); font-size:14px }
+  html[data-status="incomplete"] .thesis { border-left-color:var(--critical) }
+  .thesis small { display:block; margin-top:4px; color:var(--dim); font-size:12px }
+  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:14px 0 6px }
+  .stat { padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--panel) }
+  .stat strong { display:block; font:16px var(--mono) }
+  .stat span { color:var(--faint); font-size:10px; text-transform:uppercase; letter-spacing:.6px }
+  .howto { margin:18px 0 0; padding:0 0 0 18px; color:var(--dim); font-size:12px }
+  .howto li { margin:3px 0 }
+
+  .card { margin:0 0 6px; border:1px solid var(--line); border-left:3px solid var(--neutral-br); border-radius:8px; background:var(--panel); transition:border-color .15s }
   .card[data-standing="observation"] { border-left-color:var(--stable) }
   .card[data-standing="assumption"] { border-left-color:var(--attention) }
   .card[data-standing="conclusion"] { border-left-color:var(--additive) }
@@ -116,133 +138,155 @@
   .card.claim[data-status="passed"] { border-left-color:var(--stable) }
   .card.claim[data-status="failed"] { border-left-color:var(--critical) }
   .card.concept { border-left-color:var(--dim) }
-  .card:target { outline:2px solid var(--accent); outline-offset:2px }
-  .card-head { display:flex; flex-wrap:wrap; align-items:baseline; gap:8px 10px }
-  .card-head strong { font-size:15px }
-  .card-head .count, .card-head .signature { color:var(--faint); font-size:12px }
-  .sentence { font-size:15px }
-  .sentence code, .lead code { font-size:13px }
-  .sentence i, .lead i, .signature i, .vocab i { color:var(--faint); font-style:normal; font-size:11px; letter-spacing:.5px; text-transform:uppercase; margin-right:2px }
-  .meta { margin-top:6px; color:var(--faint); font-size:12px }
-  .meta code { font-size:11px }
-  .doc { margin-top:8px; color:var(--dim); font-size:13px; max-width:78ch }
-  .doc p { margin:0 0 6px }
-  .reads { margin-top:6px; color:var(--dim); font-size:12px; font-style:italic }
-  .lead { margin:8px 0 0; color:var(--ink); font-size:14px }
-  .verdict { margin:6px 0 0; color:var(--dim); font-size:13px }
-  .card.claim[data-status="failed"] .verdict { color:var(--critical) }
-  .conditions { margin:6px 0 0; padding-left:24px; color:var(--dim); font-size:14px }
-  .conditions li { margin:3px 0 }
-  .cond { display:inline-block; margin-right:8px; color:var(--faint); font:11px var(--mono) }
-  .not { color:var(--critical); font:600 11px var(--sans); letter-spacing:.6px; text-transform:uppercase; margin-right:4px }
-  .radius { margin-top:8px; color:var(--attention); font-size:13px }
-  .radius.quiet { color:var(--faint) }
-  .why { margin-top:8px; font-size:13px }
-  .why-label { color:var(--faint); font-size:11px; letter-spacing:.6px; text-transform:uppercase }
-  .because { margin:4px 0 0; padding-left:18px; color:var(--dim) }
-  .because li { margin:3px 0 }
-  .because .via { color:var(--faint); font-size:12px }
-  .because details { display:inline-block; margin-left:8px }
-  .because summary { cursor:pointer; color:var(--accent); font-size:11px }
-  .because .more { color:var(--faint); list-style:none }
-  .ref { color:var(--ink); text-decoration:none; border-bottom:1px dotted var(--faint) }
-  .ref:hover { color:var(--accent); border-bottom-color:var(--accent) }
-  .graph-link { margin-left:auto; color:var(--faint); font-size:11px; text-decoration:none; white-space:nowrap }
-  .graph-link:hover { color:var(--accent) }
-  .group { margin:0 0 12px; border:0; background:none }
-  .group > summary { padding:6px 0; color:var(--ink) }
-  .group > summary .count, .vocab summary .count { color:var(--faint); font-size:12px; margin-left:6px }
-  .group-doc { margin:0 0 10px; color:var(--dim); font-size:13px }
-  .vocab-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:10px }
-  .vocab { margin:0; padding:0 }
-  .vocab summary { padding:10px 14px }
-  .vocab ul { margin:0; padding:0 14px 12px 14px; list-style:none; font-size:13px }
-  .vocab li { display:flex; justify-content:space-between; gap:10px; padding:2px 0 }
-  .vocab li .count { color:var(--faint); font-size:11px; white-space:nowrap }
-  .chip { display:inline-flex; width:fit-content; padding:2px 7px; border:1px solid; border-radius:6px; font:10px var(--mono) }
+  .card.open, .card.lit { border-color:var(--faint) }
+  .card.open { background:var(--hover) }
+  .card-summary { display:flex; align-items:baseline; gap:8px; width:100%; padding:9px 12px; border:0; background:none; color:var(--ink); font:13px var(--sans); text-align:left; cursor:pointer }
+  .card-summary:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; border-radius:8px }
+  .card-summary .sentence { flex:1; min-width:0 }
+  .card-summary .hint { color:var(--faint); font:11px var(--mono); white-space:nowrap }
+  .card-detail { padding:0 12px 12px 12px; font-size:13px }
+  .sentence code, .lead code { font-size:12px }
+  .sentence i, .lead i, .meta i, .vocab i { color:var(--faint); font-style:normal; font-size:10px; letter-spacing:.5px; text-transform:uppercase; margin-right:2px }
+  .chip { display:inline-flex; flex:none; padding:1px 6px; border:1px solid; border-radius:5px; font:10px var(--mono) }
   .c-stable { color:var(--stable); border-color:var(--stable-br); background:var(--stable-bg) }
   .c-additive { color:var(--additive); border-color:var(--additive-br); background:var(--additive-bg) }
   .c-attention { color:var(--attention); border-color:var(--attention-br); background:var(--attention-bg) }
   .c-critical { color:var(--critical); border-color:var(--critical-br); background:var(--critical-bg) }
-  table { width:100%; border-collapse:collapse; font-size:13px }
-  th { padding:8px 11px; border-bottom:1px solid var(--line); color:var(--faint); font-size:10px; letter-spacing:.7px; text-align:left; text-transform:uppercase }
-  td { padding:10px 11px; border-bottom:1px solid var(--line); vertical-align:top }
-  tr:hover td { background:var(--hover) }
+  .c-neutral { color:var(--dim); border-color:var(--neutral-br); background:var(--neutral-bg) }
+  .meta { color:var(--faint); font-size:12px }
+  .meta code { font-size:11px }
+  .doc { margin-top:8px; color:var(--dim); font-size:13px }
+  .doc p { margin:0 0 6px }
+  .reads { margin-top:6px; color:var(--dim); font-size:12px; font-style:italic }
+  .lead { margin:4px 0 0; color:var(--ink) }
+  .verdict-line { margin:6px 0 0; color:var(--dim); font-size:12px }
+  .card.claim[data-status="failed"] .verdict-line, .card.claim[data-status="failed"] .verdict { color:var(--critical) }
+  .verdict { margin:6px 0 0; color:var(--dim); font-size:12px }
+  .conditions { margin:6px 0 0; padding-left:20px; color:var(--dim) }
+  .conditions li { margin:3px 0 }
+  .cond { display:inline-block; margin-right:8px; color:var(--faint); font:10px var(--mono) }
+  .not { color:var(--critical); font:600 10px var(--sans); letter-spacing:.6px; text-transform:uppercase; margin-right:4px }
+  .radius { margin-top:8px; color:var(--attention); font-size:12px }
+  .radius.quiet { color:var(--faint) }
+  .why { margin-top:8px; font-size:12px }
+  .why-label { color:var(--faint); font-size:10px; letter-spacing:.6px; text-transform:uppercase }
+  .because { margin:4px 0 0; padding-left:16px; color:var(--dim) }
+  .because li { margin:3px 0 }
+  .because .via { color:var(--faint); font-size:11px }
+  .because details { display:inline-block; margin-left:6px }
+  .because summary { cursor:pointer; color:var(--accent); font-size:11px }
+  .because .more { color:var(--faint); list-style:none }
+  .ref { color:var(--ink); text-decoration:none; border-bottom:1px dotted var(--faint) }
+  .ref:hover { color:var(--accent); border-bottom-color:var(--accent) }
+  .group { margin:0 0 10px; border:0; background:none }
+  .group > summary { padding:6px 0; color:var(--ink); font-size:13px; cursor:pointer }
+  .group > summary .count, .vocab summary .count { margin-left:8px; color:var(--faint); font:11px var(--mono) }
+  .group-doc { margin:0 0 8px; color:var(--dim); font-size:12px }
+  .vocab { margin:0 0 6px; border:1px solid var(--line); border-radius:8px; background:var(--panel) }
+  .vocab summary { padding:8px 12px; cursor:pointer }
+  .vocab ul { margin:0; padding:0 12px 10px 12px; list-style:none; font-size:12px }
+  .vocab li { display:flex; justify-content:space-between; gap:10px; padding:2px 0 }
+  .vocab li .count { color:var(--faint); font-size:11px; white-space:nowrap }
+  .selection { margin:0 0 14px; padding:10px 12px; border:1px solid var(--accent); border-radius:8px; background:var(--panel); font-size:13px }
+  .selection .kind { color:var(--faint); font:10px var(--mono); letter-spacing:.6px; text-transform:uppercase }
+  .selection pre { overflow:auto; max-height:220px; margin:8px 0 0; padding:8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--dim); font-size:10px; white-space:pre-wrap }
+  .raw { margin-top:8px }
+  .raw summary { color:var(--faint); font-size:11px; cursor:pointer }
+  .raw pre { overflow:auto; max-height:240px; margin:6px 0 0; padding:8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--dim); font-size:10px; white-space:pre-wrap }
+  table { width:100%; border-collapse:collapse; font-size:12px }
+  th { padding:6px 8px; border-bottom:1px solid var(--line); color:var(--faint); font-size:10px; letter-spacing:.6px; text-align:left; text-transform:uppercase }
+  td { padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top }
   .table-scroll { overflow:auto }
-  details { margin-top:16px; border:1px solid var(--line); border-radius:10px; background:var(--panel) }
-  summary { cursor:pointer; padding:13px 16px; color:var(--dim) }
-  details pre { overflow:auto; max-height:520px; margin:0; padding:18px; border-top:1px solid var(--line); color:var(--dim); font-size:12px; white-space:pre }
-  footer { margin-top:48px; padding-top:17px; border-top:1px solid var(--line); color:var(--faint); font-size:12px }
-  @media(max-width:1000px) { .stats { grid-template-columns:repeat(4,1fr) } .graph-layout { grid-template-columns:1fr } .inspector { border-left:0; border-top:1px solid var(--line) } }
-  @media(max-width:720px) { .wrap { padding:24px 16px 60px } .stats { grid-template-columns:repeat(2,1fr) } header { flex-direction:column } }
+  .source { margin-top:14px; border:1px solid var(--line); border-radius:8px; background:var(--panel) }
+  .source summary { cursor:pointer; padding:9px 12px; color:var(--dim); font-size:12px }
+  .source pre { overflow:auto; max-height:480px; margin:0; padding:12px; border-top:1px solid var(--line); color:var(--dim); font-size:11px; white-space:pre }
+  footer { margin-top:18px; color:var(--faint); font-size:11px }
+
+  @media(max-width:1500px) { .top h1 span { display:none } .stepper button { padding:6px 8px } }
+  @media(max-width:1000px) {
+    body { overflow:auto }
+    .top { height:auto; flex-wrap:wrap; padding:10px 14px }
+    .stepper { margin-left:0; width:100% }
+    .stage { grid-template-columns:1fr; grid-template-rows:60vh auto; height:auto }
+    .journey { border-left:0; border-top:1px solid var(--line) }
+    .journey-body { overflow:visible }
+  }
 </style>
 </head>
 <body>
-<main class="wrap">
-  <header>
-    <div><h1>@@TITLE@@ <span>// @@SPEC_NAME@@</span></h1><p class="sub">Deterministic facts, derivations, and executable constraints from one self-contained artifact.</p></div>
-    <span class="status">@@STATUS_LABEL@@</span>
-  </header>
+<header class="top">
+  <h1>@@TITLE@@<span>@@SPEC_NAME@@</span></h1>
+  <div class="verdict"><span class="status">@@STATUS_LABEL@@</span></div>
+  <nav class="stepper" id="stepper" aria-label="Journey"></nav>
+</header>
 
-  <section class="def">@@THESIS@@<small>@@THESIS_DETAIL@@</small></section>
-  <div class="stats">@@SUMMARY@@</div>
-
-  @@QUESTION@@
-  @@OBSERVATIONS@@
-  @@ASSUMPTIONS@@
-  @@RELATIONSHIPS@@
-  @@REASONING@@
-  @@CONCLUSIONS@@
-  @@CLAIMS@@
-  @@STRESS_TESTS@@
-
-  <h2 id="graph-heading">Graph</h2>
-  <p class="intro">The same argument as a picture: every card above is a node here. Nodes cluster around the relation they describe.</p>
-  <h3 class="legend-title">Legend</h3>
-  <div class="legend">
-    <span class="lg"><span class="dot" style="background:var(--stable)"></span>asserted fact / passing expectation</span>
-    <span class="lg"><span class="dot" style="background:var(--additive)"></span>derived fact</span>
-    <span class="lg"><span class="dot" style="background:var(--attention)"></span>derivation rule / mutation policy</span>
-    <span class="lg"><span class="dot" style="background:var(--critical)"></span>failed expectation</span>
-    <span class="lg"><span class="dot" style="background:var(--neutral)"></span>relation / symbol</span>
-  </div>
-
-  <div class="graph-layout" id="graph-section">
-    <div class="graph-main">
-      <div class="toolbar" id="toolbar">
-        <div class="group" id="type-filters"><span>Show</span></div>
-        <div class="group" id="rel-filters"><span>Edges</span></div>
-        <span class="spacer"></span>
-        <input type="search" id="graph-search" placeholder="find node…" aria-label="Find node">
-        <button type="button" id="cycles" aria-pressed="false" title="Highlight facts that depend on each other through recursive rules">cycles</button>
-        <button type="button" id="clear-focus" hidden>clear focus</button>
-        <button type="button" id="fit">fit</button>
-      </div>
-      <div class="graph-viewport" id="graph-viewport">
-        <svg id="graph" role="img" aria-label="LemmaSpec dependency graph"></svg>
-        <div class="hint">drag to pan · wheel to zoom · double-click a node to focus on its neighbourhood</div>
-      </div>
+<main class="stage">
+  <div class="graph-viewport" id="graph-viewport">
+    <svg id="graph" role="img" aria-label="LemmaSpec dependency graph"></svg>
+    <div class="overlay">
+      <input type="search" id="graph-search" placeholder="find…" aria-label="Find node">
+      <button type="button" id="filters-toggle" aria-pressed="false" aria-controls="filters">filters</button>
+      <button type="button" id="cycles" aria-pressed="false" title="Highlight facts that depend on each other through recursive rules">cycles</button>
+      <button type="button" id="clear-focus" hidden>clear focus</button>
+      <button type="button" id="fit">fit</button>
     </div>
-    <aside class="inspector"><h3>Inspect the projection</h3><p>Select any node or edge to see its exact projected fields, including proof witnesses and evidence.</p><dl class="facts" id="node-facts" hidden></dl><pre id="node-detail">Nothing selected.</pre></aside>
+    <div class="filters" id="filters" hidden>
+      <h4>Show</h4><div class="group" id="type-filters"></div>
+      <h4>Edges</h4><div class="group" id="rel-filters"></div>
+      <h4>Legend</h4>
+      <div class="legend"><span class="l-stable">observation · confirmed claim</span><span class="l-additive">conclusion</span><span class="l-attention">rule · stress test · assumption</span><span class="l-critical">open claim</span><span>relation · symbol</span></div>
+      <div class="weights">Node size follows connections. Fill opacity follows confidence. Edge width follows evidence; dashed edges are negated; dotted rings sit in a cycle.</div>
+    </div>
+    <div class="stage-note" id="stage-note"></div>
+    <div class="help">drag · wheel to zoom · double-click to focus · ← → journey</div>
   </div>
-  <div class="weights">
-    <span>node size = number of connections</span>
-    <span>hollow ring = relation (cluster anchor)</span>
-    <span>fill opacity = fact confidence</span>
-    <span>edge width = evidence count</span>
-    <span>dashed edge = negated condition</span>
-    <span>dotted ring = part of a dependency cycle</span>
-  </div>
 
-  <h2>Reference: relations</h2>
-  @@RELATIONS@@
+  <aside class="journey">
+    <div class="journey-body" id="journey">
+      <div class="selection" id="selection" hidden></div>
 
-  <h2>Reference: materialized facts</h2>
-  @@FACTS@@
+      <section class="step" data-step="question" hidden>
+        <header class="step-head"><h2>The question</h2></header>
+        <div class="step-body">
+          @@QUESTION@@
+          <div class="thesis">@@THESIS@@<small>@@THESIS_DETAIL@@</small></div>
+          <div class="stats">@@SUMMARY@@</div>
+          <ol class="howto">
+            <li>Move along the journey with the steps above, the arrows, or the buttons below.</li>
+            <li>Each step lights the part of the graph it is about.</li>
+            <li>Select a card or a node to follow one thread through the argument.</li>
+          </ol>
+        </div>
+      </section>
 
-  <details><summary>Original .lemmaspec source</summary><pre id="artifact-source">@@SOURCE@@</pre></details>
-  <footer>Self-contained — open in any browser, no network or build step. · Generated deterministically from <code>@@SPEC_NAME@@</code>.</footer>
+      @@OBSERVATIONS@@
+      @@ASSUMPTIONS@@
+      @@REASONING@@
+      @@CONCLUSIONS@@
+      @@CLAIMS@@
+      @@STRESS_TESTS@@
+
+      <section class="step" data-step="reference" hidden>
+        <header class="step-head"><h2>Reference</h2><p class="intro">The vocabulary, the raw tables, and the source this page was generated from.</p></header>
+        <div class="step-body">
+          @@REFERENCE@@
+          <h3>Relations</h3>
+          @@RELATIONS@@
+          <h3>Materialized facts</h3>
+          @@FACTS@@
+          <details class="source"><summary>Original .lemmaspec source</summary><pre id="artifact-source">@@SOURCE@@</pre></details>
+          <footer>Self-contained: no network, no build step. Generated deterministically from <code>@@SPEC_NAME@@</code>.</footer>
+        </div>
+      </section>
+    </div>
+    <div class="journey-nav">
+      <button type="button" id="prev">← back</button>
+      <span class="where" id="where"></span>
+      <button type="button" id="next">next →</button>
+    </div>
+  </aside>
 </main>
+
 <script type="application/json" id="lemmaspec-graph">@@GRAPH_JSON@@</script>
 <script>
 (function () {
@@ -250,8 +294,9 @@
   const data = JSON.parse(document.getElementById("lemmaspec-graph").textContent);
   const svg = document.getElementById("graph");
   const viewport = document.getElementById("graph-viewport");
-  const detail = document.getElementById("node-detail");
-  const factsPanel = document.getElementById("node-facts");
+  const journey = document.getElementById("journey");
+  const selectionBox = document.getElementById("selection");
+  const stageNote = document.getElementById("stage-note");
   const ns = "http://www.w3.org/2000/svg";
 
   // ------------------------------------------------------------ indexes
@@ -259,12 +304,16 @@
   const edgeById = new Map(data.edges.map(edge => [edge.id, edge]));
   const neighbours = new Map(data.nodes.map(node => [node.id, new Set()]));
   const incident = new Map(data.nodes.map(node => [node.id, []]));
+  const out = new Map(data.nodes.map(node => [node.id, []]));
+  const into = new Map(data.nodes.map(node => [node.id, []]));
   data.edges.forEach(edge => {
     if (!nodeById.has(edge.from) || !nodeById.has(edge.to)) return;
     neighbours.get(edge.from).add(edge.to);
     neighbours.get(edge.to).add(edge.from);
     incident.get(edge.from).push(edge);
     incident.get(edge.to).push(edge);
+    out.get(edge.from).push(edge);
+    into.get(edge.to).push(edge);
   });
   const degree = id => incident.get(id).length;
 
@@ -276,41 +325,71 @@
     if (node.type === "fact") clusterOf.set(node.id, `lemmaspec:${data.spec}:relation:${node.relation}`);
   });
   data.edges.forEach(edge => {
-    const from = nodeById.get(edge.from);
-    if (!from) return;
-    if ((edge.rel === "derives" || edge.rel === "expects") && nodeById.get(edge.to).type === "relation") {
-      clusterOf.set(edge.from, edge.to);
-    }
+    const target = nodeById.get(edge.to);
+    if ((edge.rel === "derives" || edge.rel === "expects") && target && target.type === "relation") clusterOf.set(edge.from, edge.to);
   });
   data.edges.forEach(edge => {
     if (edge.rel === "targets" && clusterOf.has(edge.to)) clusterOf.set(edge.from, clusterOf.get(edge.to));
   });
 
   function label(node) {
-    if (node.type === "fact") return `${node.relation}(${node.args.join(", ")})`;
+    if (node.type === "fact") return node.reading || `${node.relation}(${node.args.join(", ")})`;
     if (node.type === "symbol") return node.value;
     return node.name || node.type;
   }
-
   function tone(node) {
     if (node.type === "expectation") return node.satisfied ? "stable" : "critical";
     if (node.type === "fact") return node.origin === "asserted" ? "stable" : "additive";
     if (node.type === "rule" || node.type === "mutation") return "attention";
     return "neutral";
   }
-
+  const boost = new Map();
   function radius(node) {
     const base = node.type === "relation" ? 9 : node.type === "symbol" ? 4 : 6;
-    return Math.min(22, base + 1.8 * Math.sqrt(degree(node.id)));
+    return Math.min(26, base + 1.8 * Math.sqrt(degree(node.id)) + (boost.get(node.id) || 0));
+  }
+
+  // The thread one node pulls on: what it rests on, or what rests on it.
+  function walk(start, step) {
+    const seen = new Set([start]);
+    const queue = [start];
+    while (queue.length) {
+      const current = queue.shift();
+      step(current).forEach(next => { if (!seen.has(next)) { seen.add(next); queue.push(next); } });
+    }
+    return seen;
+  }
+  const upstream = id => walk(id, current => out.get(current).filter(e => e.rel === "depends_on" && e.basis === "proof_witness").map(e => e.to));
+  const downstream = id => walk(id, current => into.get(current).filter(e => e.rel === "depends_on" && e.basis === "proof_witness").map(e => e.from));
+  function story(id) {
+    const node = nodeById.get(id);
+    const lit = new Set([id]);
+    if (!node) return lit;
+    if (node.type === "fact" && node.origin === "derived") {
+      upstream(id).forEach(fact => {
+        lit.add(fact);
+        into.get(fact).filter(e => e.rel === "derives" && e.basis === "proof_witness").forEach(e => lit.add(e.from));
+      });
+    } else if (node.type === "fact") {
+      downstream(id).forEach(fact => {
+        lit.add(fact);
+        out.get(fact).filter(e => e.rel === "proves").forEach(e => lit.add(e.to));
+      });
+    } else if (node.type === "expectation") {
+      into.get(id).filter(e => e.rel === "proves").forEach(e => lit.add(e.from));
+      out.get(id).filter(e => e.rel === "expects").forEach(e => lit.add(e.to));
+    } else if (node.type === "relation") {
+      data.nodes.forEach(other => { if (clusterOf.get(other.id) === id) lit.add(other.id); });
+      into.get(id).forEach(e => lit.add(e.from));
+    } else {
+      neighbours.get(id).forEach(other => lit.add(other));
+    }
+    return lit;
   }
 
   // ------------------------------------------------------------ cycles
-  // Tarjan over the directed projection. Only fact→fact dependencies can
-  // close a loop (recursive rules); every other edge points at a sink.
   const cyclic = new Set();
   (function findCycles() {
-    const out = new Map(data.nodes.map(node => [node.id, []]));
-    data.edges.forEach(edge => { if (out.has(edge.from)) out.get(edge.from).push(edge.to); });
     let index = 0;
     const disc = new Map(), low = new Map(), onStack = new Set(), stack = [];
     data.nodes.forEach(root => {
@@ -319,7 +398,7 @@
       while (call.length) {
         const [v, start] = call.pop();
         if (start === 0) { disc.set(v, ++index); low.set(v, index); stack.push(v); onStack.add(v); }
-        const targets = out.get(v);
+        const targets = out.get(v).map(e => e.to);
         let descended = false;
         for (let i = start; i < targets.length; i++) {
           const w = targets[i];
@@ -331,8 +410,7 @@
           const component = [];
           let w;
           do { w = stack.pop(); onStack.delete(w); component.push(w); } while (w !== v);
-          const selfLoop = component.length === 1 && targets.includes(v);
-          if (component.length > 1 || selfLoop) component.forEach(id => cyclic.add(id));
+          if (component.length > 1 || targets.includes(v)) component.forEach(id => cyclic.add(id));
         }
         if (call.length) {
           const parent = call[call.length - 1][0];
@@ -343,7 +421,6 @@
   })();
 
   // ------------------------------------------------------------ layout
-  // Deterministic: seeded PRNG, fixed iteration budget, stable node order.
   function seededRandom(seed) {
     let state = seed >>> 0;
     return function () {
@@ -357,7 +434,6 @@
   let seed = 2166136261;
   for (const character of data.spec) seed = Math.imul(seed ^ character.charCodeAt(0), 16777619);
   const random = seededRandom(seed);
-
   const position = new Map();
   const pinned = new Set();
 
@@ -381,7 +457,6 @@
     const springs = edges.map(edge => [index.get(edge.from), index.get(edge.to)]);
     const clusterIndex = ids.map(id => clusterOf.get(id));
     const force = points.map(() => ({ x: 0, y: 0 }));
-
     for (let step = 0; step < iterations; step++) {
       const heat = 1 - step / iterations;
       const maxMove = 2 + 26 * heat;
@@ -433,14 +508,14 @@
   // ------------------------------------------------------------ state
   const typesPresent = [...new Set(data.nodes.map(node => node.type))];
   const relsPresent = [...new Set(data.edges.map(edge => edge.rel))];
-  // Symbols and the spec node are hubs touching almost everything; they are
-  // available on demand but would flatten the clusters if shown by default.
   const shownTypes = new Set(typesPresent.filter(type => type !== "symbol" && type !== "spec"));
   const shownRels = new Set(relsPresent.filter(rel => rel !== "asserts"));
   let focus = null;
   let selected = null;
+  let hovered = null;
   let query = "";
   let showCycles = false;
+  let stepSet = null;
   const view = { x: 0, y: 0, k: 1 };
 
   function visibleNodes() {
@@ -457,7 +532,8 @@
     return data.edges.filter(edge => shownRels.has(edge.rel) && ids.has(edge.from) && ids.has(edge.to));
   }
 
-  // ------------------------------------------------------------ toolbar
+  // ------------------------------------------------------------ filters
+  const typeInputs = new Map();
   function checkbox(container, name, checked, onChange, swatchRel) {
     const item = document.createElement("label");
     const input = document.createElement("input");
@@ -473,15 +549,22 @@
     }
     item.appendChild(document.createTextNode(name));
     container.appendChild(item);
+    return input;
   }
-  typesPresent.forEach(type => checkbox(document.getElementById("type-filters"), type, shownTypes.has(type), on => {
+  typesPresent.forEach(type => typeInputs.set(type, checkbox(document.getElementById("type-filters"), type, shownTypes.has(type), on => {
     if (on) shownTypes.add(type); else shownTypes.delete(type);
     redraw(140);
-  }));
+  })));
   relsPresent.forEach(rel => checkbox(document.getElementById("rel-filters"), rel.replace(/_/g, " "), shownRels.has(rel), on => {
     if (on) shownRels.add(rel); else shownRels.delete(rel);
     redraw(140);
   }, rel));
+  const filters = document.getElementById("filters");
+  const filtersToggle = document.getElementById("filters-toggle");
+  filtersToggle.addEventListener("click", () => {
+    filters.hidden = !filters.hidden;
+    filtersToggle.setAttribute("aria-pressed", String(!filters.hidden));
+  });
   const search = document.getElementById("graph-search");
   search.addEventListener("input", () => { query = search.value.trim().toLowerCase(); applyEmphasis(); });
   const cyclesButton = document.getElementById("cycles");
@@ -495,7 +578,6 @@
   const clearFocus = document.getElementById("clear-focus");
   clearFocus.addEventListener("click", () => setFocus(null));
   document.getElementById("fit").addEventListener("click", fit);
-
   function setFocus(id) {
     focus = id;
     clearFocus.hidden = !focus;
@@ -518,7 +600,6 @@
   svg.appendChild(scene);
   const hullLayer = element("g"), edgeLayer = element("g"), nodeLayer = element("g");
   scene.append(hullLayer, edgeLayer, nodeLayer);
-
   const nodeElements = new Map();
   const edgeElements = new Map();
   let drawnNodes = [], drawnEdges = [];
@@ -532,7 +613,6 @@
     for (const p of points.slice().reverse()) { while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop(); upper.push(p); }
     return lower.slice(0, -1).concat(upper.slice(0, -1));
   }
-
   function edgePath(edge) {
     const a = position.get(edge.from), b = position.get(edge.to);
     const ra = radius(nodeById.get(edge.from)), rb = radius(nodeById.get(edge.to)) + 4;
@@ -607,7 +687,7 @@
       nodeElements.set(node.id, group);
     });
 
-    if (selected && !nodeElements.has(selected.id) && !edgeElements.has(selected.id)) select(null);
+    if (selected && !nodeElements.has(selected) && !edgeElements.has(selected)) selected = null;
     applyEmphasis();
   }
 
@@ -619,84 +699,226 @@
       if (line) line.setAttribute("d", edgePath(edge));
     });
   }
+  function resize() {
+    nodeElements.forEach((group, id) => group.querySelector("circle").setAttribute("r", radius(nodeById.get(id))));
+    edgeElements.forEach((line, id) => line.setAttribute("d", edgePath(edgeById.get(id))));
+  }
 
   // ------------------------------------------------------------ emphasis
-  let hovered = null;
+  // Hover previews a thread, selection holds one, otherwise the step decides.
   function applyEmphasis() {
-    const lit = new Set();
-    let active = false;
-    if (hovered && nodeElements.has(hovered)) {
-      active = true;
-      lit.add(hovered);
-      neighbours.get(hovered).forEach(id => lit.add(id));
-    }
+    let lit = null;
+    const thread = hovered || selected;
+    if (thread && nodeById.has(thread)) lit = story(thread);
+    else if (stepSet) lit = new Set(stepSet);
     if (query) {
-      active = true;
+      lit = lit || new Set();
       drawnNodes.forEach(node => { if (label(node).toLowerCase().includes(query)) lit.add(node.id); });
     }
     if (showCycles) {
-      active = true;
+      lit = lit || new Set();
       cyclic.forEach(id => lit.add(id));
     }
-    scene.classList.toggle("dimmed", active);
-    nodeElements.forEach((group, id) => group.classList.toggle("lit", lit.has(id)));
+    scene.classList.toggle("dimmed", lit !== null);
+    nodeElements.forEach((group, id) => group.classList.toggle("lit", lit !== null && lit.has(id)));
     edgeElements.forEach((line, id) => {
       const edge = edgeById.get(id);
-      const on = hovered ? (edge.from === hovered || edge.to === hovered) : (lit.has(edge.from) && lit.has(edge.to));
-      line.classList.toggle("lit", active && on);
+      line.classList.toggle("lit", lit !== null && lit.has(edge.from) && lit.has(edge.to));
     });
+    journey.querySelectorAll(".card.lit").forEach(card => card.classList.remove("lit"));
+    if (thread && lit) {
+      lit.forEach(id => { const card = cardFor(id); if (card && id !== thread) card.classList.add("lit"); });
+    }
   }
 
-  // ------------------------------------------------------------ selection
-  function select(item) {
-    if (selected) {
-      const previous = nodeElements.get(selected.id) || edgeElements.get(selected.id);
-      if (previous) previous.classList.remove("selected");
+  // ------------------------------------------------------------ journey
+  const steps = [...journey.querySelectorAll(".step")];
+  const stepper = document.getElementById("stepper");
+  const where = document.getElementById("where");
+  const prev = document.getElementById("prev");
+  const next = document.getElementById("next");
+  const stepButtons = new Map();
+  let current = 0;
+  const notes = {
+    question: "",
+    observations: "evidence-backed facts are lit",
+    assumptions: "assumptions are lit, sized by what rests on them",
+    reasoning: "rules are lit",
+    conclusions: "derived facts are lit",
+    claims: "claims are lit",
+    "stress-tests": "stress tests and the rules they target are lit",
+    reference: ""
+  };
+  steps.forEach((section, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    const cards = section.querySelectorAll(".card").length;
+    const title = section.querySelector("h2").textContent.replace(/^The /, "").replace(/^\w/, c => c.toUpperCase());
+    button.innerHTML = `${title}${cards ? ` <span class="n">${cards}</span>` : ""}`;
+    if (section.dataset.step === "claims" && section.querySelector('.card[data-status="failed"]')) button.dataset.tone = "critical";
+    if (section.dataset.step === "assumptions" && cards) button.dataset.tone = "attention";
+    button.addEventListener("click", () => setStep(index));
+    stepper.appendChild(button);
+    stepButtons.set(section, button);
+  });
+  prev.addEventListener("click", () => setStep(current - 1));
+  next.addEventListener("click", () => setStep(current + 1));
+
+  function cardFor(id) {
+    return journey.querySelector(`.card[data-node="${CSS.escape(id)}"]`);
+  }
+  function stepOf(card) {
+    return steps.indexOf(card.closest(".step"));
+  }
+
+  function setStep(index, options) {
+    index = Math.max(0, Math.min(steps.length - 1, index));
+    current = index;
+    steps.forEach((section, i) => {
+      section.hidden = i !== index;
+      stepButtons.get(section).toggleAttribute("aria-current", i === index);
+      if (i === index) stepButtons.get(section).setAttribute("aria-current", "step");
+    });
+    prev.disabled = index === 0;
+    next.disabled = index === steps.length - 1;
+    where.textContent = `${index + 1} / ${steps.length}`;
+    const section = steps[index];
+    const key = section.dataset.step;
+    stageNote.textContent = notes[key] || "";
+    const ids = [...section.querySelectorAll(".card[data-node]")].map(card => card.dataset.node).filter(id => nodeById.has(id));
+    stepSet = ids.length && key !== "reference" ? new Set(ids) : null;
+    if (key === "stress-tests") {
+      ids.forEach(id => out.get(id).filter(e => e.rel === "targets").forEach(e => stepSet.add(e.to)));
     }
-    selected = item;
-    if (!item) {
-      factsPanel.hidden = true;
-      detail.textContent = "Nothing selected.";
+    boost.clear();
+    if (key === "assumptions") {
+      ids.forEach(id => { const n = downstream(id).size - 1; if (n > 0) boost.set(id, 3 * Math.log2(n + 1)); });
+    }
+    let needsRedraw = false;
+    if (stepSet) stepSet.forEach(id => {
+      const type = nodeById.get(id).type;
+      if (!shownTypes.has(type)) { shownTypes.add(type); typeInputs.get(type).checked = true; needsRedraw = true; }
+    });
+    if (needsRedraw) redraw(140); else resize();
+    if (!(options && options.keepSelection)) {
+      if (selected) { const card = cardFor(selected); if (card && stepOf(card) !== index) clearSelection(); }
+    }
+    if (!(options && options.keepScroll)) journey.scrollTop = 0;
+    applyEmphasis();
+  }
+
+  function clearSelection() {
+    if (selected) {
+      const element = nodeElements.get(selected) || edgeElements.get(selected);
+      if (element) element.classList.remove("selected");
+      const card = cardFor(selected);
+      if (card) { card.classList.remove("open"); card.querySelector(".card-detail").hidden = true; }
+    }
+    selected = null;
+    selectionBox.hidden = true;
+    applyEmphasis();
+  }
+
+  function centreOn(id) {
+    const p = position.get(id);
+    if (!p) return;
+    const box = svg.getBoundingClientRect();
+    view.k = Math.max(view.k, 1.0);
+    view.x = box.width / 2 - p.x * view.k;
+    view.y = box.height / 2 - p.y * view.k;
+    applyView();
+  }
+
+  // One selection model: a card and its node are the same thing.
+  function select(id, options) {
+    if (!nodeById.has(id)) return;
+    if (selected === id && !(options && options.reopen)) return;
+    clearSelection();
+    selected = id;
+    const node = nodeById.get(id);
+    if (!shownTypes.has(node.type)) { shownTypes.add(node.type); typeInputs.get(node.type).checked = true; redraw(140); }
+    if (focus && !nodeElements.has(id)) setFocus(null);
+    const group = nodeElements.get(id);
+    if (group) group.classList.add("selected");
+    if (options && options.centre) centreOn(id);
+    const card = cardFor(id);
+    if (card) {
+      const index = stepOf(card);
+      if (index !== current) setStep(index, { keepSelection: true, keepScroll: true });
+      let ancestor = card.parentElement;
+      while (ancestor && ancestor !== journey) { if (ancestor.tagName === "DETAILS") ancestor.open = true; ancestor = ancestor.parentElement; }
+      card.classList.add("open");
+      card.querySelector(".card-detail").hidden = false;
+      selectionBox.hidden = true;
+      card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    } else {
+      showLoose(node);
+    }
+    applyEmphasis();
+  }
+
+  // Nodes without a card (symbols, the spec itself) get a small notice.
+  function showLoose(node) {
+    selectionBox.replaceChildren();
+    const kind = document.createElement("div"); kind.className = "kind"; kind.textContent = node.type;
+    const text = document.createElement("div"); text.textContent = label(node);
+    selectionBox.append(kind, text);
+    if (node.type === "symbol") {
+      const uses = into.get(node.id).length;
+      const note = document.createElement("div"); note.className = "meta"; note.textContent = `${uses} use${uses === 1 ? "" : "s"} in facts, rules, or claims`;
+      selectionBox.appendChild(note);
+    }
+    const raw = document.createElement("details"); raw.className = "raw";
+    const summary = document.createElement("summary"); summary.textContent = "projected fields";
+    const pre = document.createElement("pre"); pre.textContent = JSON.stringify(node, null, 2);
+    raw.append(summary, pre);
+    selectionBox.appendChild(raw);
+    selectionBox.hidden = false;
+    selectionBox.scrollIntoView({ block: "nearest" });
+  }
+
+  journey.addEventListener("click", event => {
+    const summary = event.target.closest(".card-summary");
+    if (summary) {
+      const card = summary.closest(".card");
+      if (selected === card.dataset.node) clearSelection(); else select(card.dataset.node, { centre: true });
       return;
     }
-    (nodeElements.get(item.id) || edgeElements.get(item.id)).classList.add("selected");
-    const rows = [];
-    if (item.kind === "node") {
-      rows.push(["type", item.type], ["label", label(item)], ["connections", String(degree(item.id))]);
-      const cluster = nodeById.get(clusterOf.get(item.id));
-      if (cluster && cluster.id !== item.id) rows.push(["relation", cluster.name]);
-      if (item.type === "fact") rows.push(["confidence", `${Math.round(item.confidence * 100)}%`]);
-      if (item.type === "expectation") rows.push(["count", `${item.actual_count} of ${item.expected_count} expected`]);
-      if (cyclic.has(item.id)) rows.push(["cycle", "depends on itself through recursion"]);
-    } else {
-      rows.push(["edge", item.rel.replace(/_/g, " ")], ["from", label(nodeById.get(item.from))], ["to", label(nodeById.get(item.to))]);
-      if (item.witness) rows.push(["witness", item.witness]);
-      if (item.negated) rows.push(["negated", "yes"]);
+    const link = event.target.closest("a[data-node], a.ref[href^='#n-']");
+    if (!link) return;
+    event.preventDefault();
+    let id = link.dataset.node;
+    if (!id) {
+      const target = document.getElementById(link.getAttribute("href").slice(1));
+      id = target && target.dataset.node;
     }
-    factsPanel.replaceChildren(...rows.flatMap(([key, value]) => {
-      const dt = document.createElement("dt"); dt.textContent = key;
-      const dd = document.createElement("dd"); dd.textContent = value;
-      return [dt, dd];
-    }));
-    const card = document.getElementById("n-" + item.id.replace(/[^A-Za-z0-9_-]/g, "-"));
-    if (card) {
-      const dt = document.createElement("dt"); dt.textContent = "read";
-      const dd = document.createElement("dd");
-      const link = document.createElement("a"); link.href = "#" + card.id; link.textContent = "in the guide above"; link.className = "ref";
-      dd.appendChild(link);
-      factsPanel.append(dt, dd);
-    }
-    factsPanel.hidden = false;
-    detail.textContent = JSON.stringify(item, null, 2);
-  }
+    if (id) select(id, { centre: true });
+  });
+  journey.addEventListener("pointerover", event => {
+    const card = event.target.closest(".card");
+    const id = card ? card.dataset.node : null;
+    if (id !== hovered) { hovered = id; applyEmphasis(); }
+  });
+  journey.addEventListener("pointerleave", () => { if (hovered) { hovered = null; applyEmphasis(); } });
 
-  function itemAt(target) {
-    const node = target.closest(".node");
-    if (node) return nodeById.get(node.dataset.id);
-    const edge = target.closest(".edge");
-    if (edge) return edgeById.get(edge.dataset.id);
-    return null;
-  }
+  // Node has the card-detail with raw JSON too, for the machine-minded.
+  journey.querySelectorAll(".card[data-node]").forEach(card => {
+    const node = nodeById.get(card.dataset.node);
+    if (!node) return;
+    const raw = document.createElement("details"); raw.className = "raw";
+    const summary = document.createElement("summary"); summary.textContent = "projected fields";
+    const pre = document.createElement("pre"); pre.textContent = JSON.stringify(node, null, 2);
+    raw.append(summary, pre);
+    card.querySelector(".card-detail").appendChild(raw);
+  });
+
+  document.addEventListener("keydown", event => {
+    const tag = (event.target.tagName || "").toLowerCase();
+    if (tag === "input" || tag === "textarea") return;
+    if (event.key === "ArrowRight") setStep(current + 1);
+    if (event.key === "ArrowLeft") setStep(current - 1);
+    if (event.key === "Escape") { if (focus) setFocus(null); else clearSelection(); }
+  });
 
   // ------------------------------------------------------------ pointer
   function applyView() {
@@ -746,11 +968,28 @@
     if (!drag) return;
     viewport.classList.remove("panning");
     if (!drag.moved) {
-      const item = itemAt(event.target);
-      select(item);
+      const node = event.target.closest(".node");
+      const edge = event.target.closest(".edge");
+      if (node) { if (selected === node.dataset.id) clearSelection(); else select(node.dataset.id); }
+      else if (edge) showEdge(edgeById.get(edge.dataset.id));
+      else clearSelection();
     }
     drag = null;
   });
+  function showEdge(edge) {
+    clearSelection();
+    selectionBox.replaceChildren();
+    const kind = document.createElement("div"); kind.className = "kind"; kind.textContent = `edge · ${edge.rel.replace(/_/g, " ")}${edge.negated ? " (negated)" : ""}`;
+    const text = document.createElement("div"); text.textContent = `${label(nodeById.get(edge.from))} → ${label(nodeById.get(edge.to))}`;
+    selectionBox.append(kind, text);
+    if (edge.witness) { const w = document.createElement("div"); w.className = "meta"; w.textContent = `via rule ${edge.witness}`; selectionBox.appendChild(w); }
+    const raw = document.createElement("details"); raw.className = "raw";
+    const summary = document.createElement("summary"); summary.textContent = "projected fields";
+    const pre = document.createElement("pre"); pre.textContent = JSON.stringify(edge, null, 2);
+    raw.append(summary, pre);
+    selectionBox.appendChild(raw);
+    selectionBox.hidden = false;
+  }
   svg.addEventListener("dblclick", event => {
     const node = event.target.closest(".node");
     if (node) setFocus(node.dataset.id);
@@ -768,54 +1007,21 @@
   }, { passive: false });
   svg.addEventListener("pointerover", event => {
     const node = event.target.closest(".node");
-    const next = node ? node.dataset.id : null;
-    if (next !== hovered) { hovered = next; applyEmphasis(); }
+    const id = node ? node.dataset.id : null;
+    if (id !== hovered) { hovered = id; applyEmphasis(); }
   });
   svg.addEventListener("pointerleave", () => { if (hovered) { hovered = null; applyEmphasis(); } });
   svg.addEventListener("keydown", event => {
     if (event.key === "Enter" || event.key === " ") {
-      const item = itemAt(event.target);
-      if (item) { event.preventDefault(); select(item); }
+      const node = event.target.closest(".node");
+      if (node) { event.preventDefault(); select(node.dataset.id); }
     }
-    if (event.key === "Escape" && focus) setFocus(null);
   });
-  svg.addEventListener("focusin", event => {
-    const node = event.target.closest(".node");
-    hovered = node ? node.dataset.id : null;
-    applyEmphasis();
-  });
-
-  function reveal(id) {
-    const node = nodeById.get(id);
-    if (!node) return;
-    if (!shownTypes.has(node.type)) {
-      shownTypes.add(node.type);
-      document.querySelectorAll("#type-filters input").forEach((input, i) => { if (typesPresent[i] === node.type) input.checked = true; });
-    }
-    if (focus && !nodeElements.has(id)) focus = null;
-    clearFocus.hidden = !focus;
-    redraw(140);
-    const p = position.get(id);
-    const box = svg.getBoundingClientRect();
-    view.k = Math.max(view.k, 1.1);
-    view.x = box.width / 2 - p.x * view.k;
-    view.y = box.height / 2 - p.y * view.k;
-    applyView();
-    select(node);
-    hovered = id;
-    applyEmphasis();
-  }
-
-  document.addEventListener("click", event => {
-    const link = event.target.closest("a[data-node]");
-    if (!link) return;
-    event.preventDefault();
-    document.getElementById("graph-section").scrollIntoView({ behavior: "smooth", block: "start" });
-    reveal(link.dataset.node);
-  });
+  window.addEventListener("resize", () => { if (!drag) fit(); });
 
   redraw(320);
   fit();
+  setStep(0);
 })();
 </script>
 </body>
