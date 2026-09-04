@@ -7,6 +7,13 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- HTML graph view: force-directed layout clustered by relation, with pan,
+  zoom, drag, neighbourhood highlighting, type and edge filters, search,
+  focus mode, and recursive-cycle detection. Node size, fill opacity, and
+  edge width encode connections, fact confidence, and evidence count.
+
 ## [0.1.0] - 2026-09-03
 
 ### Added

@@ -173,7 +173,10 @@ which can translate the stable projection into a datastore-specific contract.
 models that boundary as a deliberately incomplete executable specification.
 
 `render` embeds the exact projected graph, original source, rules,
-expectations, and evidence in one offline HTML file:
+expectations, and evidence in one offline HTML file. The graph view clusters
+nodes by relation, hides symbol hubs until toggled on, and supports pan, zoom,
+search, neighbourhood focus, and cycle highlighting without any external
+scripts:
 
 ```sh
 lemmaspec render examples/release_readiness.lemmaspec

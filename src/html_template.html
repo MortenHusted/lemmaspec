@@ -39,24 +39,69 @@
   .legend { display:flex; flex-wrap:wrap; gap:10px 18px }
   .lg { display:flex; align-items:center; gap:8px; color:var(--dim); font-size:13px }
   .dot { width:10px; height:10px; border-radius:3px }
-  .graph-layout { display:grid; grid-template-columns:minmax(0,1fr) 320px; min-height:580px; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--panel) }
-  .graph-viewport { overflow:auto; min-height:580px; background-image:radial-gradient(var(--line) 1px,transparent 1px); background-size:20px 20px }
-  #graph { display:block }
-  .inspector { padding:18px; border-left:1px solid var(--line); background:var(--panel2) }
+  .graph-layout { display:grid; grid-template-columns:minmax(0,1fr) 320px; min-height:640px; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--panel) }
+  .graph-main { display:flex; flex-direction:column; min-width:0 }
+  .toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; padding:10px 14px; border-bottom:1px solid var(--line); background:var(--panel2); font-size:12px; color:var(--dim) }
+  .toolbar .group { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px }
+  .toolbar .group > span { color:var(--faint); font-size:10px; letter-spacing:.8px; text-transform:uppercase }
+  .toolbar label { display:inline-flex; align-items:center; gap:4px; cursor:pointer; white-space:nowrap }
+  .toolbar label input { margin:0 }
+  .toolbar input[type=search] { min-width:150px; padding:4px 8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--ink); font:12px var(--mono) }
+  .toolbar button { padding:4px 9px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--dim); font:12px var(--sans); cursor:pointer }
+  .toolbar button:hover:not(:disabled) { color:var(--ink); border-color:var(--faint) }
+  .toolbar button:disabled { opacity:.45; cursor:default }
+  .toolbar button[aria-pressed="true"] { color:var(--accent); border-color:var(--accent) }
+  .toolbar .swatch { display:inline-block; width:14px; height:0; border-top:2px solid var(--faint) }
+  .toolbar .swatch[data-rel="depends_on"] { border-color:var(--additive) }
+  .toolbar .swatch[data-rel="derives"] { border-color:var(--attention) }
+  .toolbar .swatch[data-rel="proves"] { border-color:var(--stable) }
+  .toolbar .swatch[data-rel="expects"] { border-color:var(--accent) }
+  .toolbar .swatch[data-rel="targets"] { border-color:var(--critical) }
+  .toolbar .swatch[data-rel="asserts"] { border-top-style:dotted }
+  .toolbar .spacer { flex:1 }
+  .graph-viewport { position:relative; flex:1; min-height:580px; overflow:hidden; background-image:radial-gradient(var(--line) 1px,transparent 1px); background-size:20px 20px; cursor:grab; touch-action:none }
+  .graph-viewport.panning { cursor:grabbing }
+  #graph { display:block; width:100%; height:100%; min-height:580px }
+  .hint { position:absolute; right:12px; bottom:10px; color:var(--faint); font-size:11px; pointer-events:none }
+  .inspector { padding:18px; border-left:1px solid var(--line); background:var(--panel2); min-width:0 }
   .inspector h3 { margin:0 0 8px; font-size:15px }
   .inspector p { color:var(--dim); font-size:13px }
-  .inspector pre { overflow:auto; max-height:470px; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--dim); font-size:11px; white-space:pre-wrap }
-  .edge { fill:none; stroke:var(--faint); stroke-width:1.2; opacity:.58; marker-end:url(#arrow); cursor:pointer }
-  .edge:hover, .edge.selected { stroke:var(--ink); opacity:1; stroke-width:2 }
-  .node { cursor:pointer }
-  .node rect { fill:var(--neutral-bg); stroke:var(--neutral-br); stroke-width:1.4; rx:8 }
-  .node:hover rect, .node.selected rect { stroke:var(--ink); stroke-width:2.2 }
-  .node[data-tone="stable"] rect { fill:var(--stable-bg); stroke:var(--stable-br) }
-  .node[data-tone="additive"] rect { fill:var(--additive-bg); stroke:var(--additive-br) }
-  .node[data-tone="attention"] rect { fill:var(--attention-bg); stroke:var(--attention-br) }
-  .node[data-tone="critical"] rect { fill:var(--critical-bg); stroke:var(--critical-br) }
-  .node text { fill:var(--ink); pointer-events:none; font:12px var(--mono) }
-  .node .kind { fill:var(--faint); font:9px var(--sans); letter-spacing:1px; text-transform:uppercase }
+  .inspector .facts { display:grid; grid-template-columns:auto 1fr; gap:3px 10px; margin:0 0 10px; font-size:12px }
+  .inspector .facts dt { color:var(--faint) }
+  .inspector .facts dd { margin:0; color:var(--ink); font-family:var(--mono); overflow-wrap:anywhere }
+  .inspector pre { overflow:auto; max-height:400px; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--dim); font-size:11px; white-space:pre-wrap }
+  .hull { fill-opacity:.06; stroke-opacity:.14; stroke-width:26; stroke-linejoin:round; stroke-linecap:round; pointer-events:none }
+  .hull-label { fill:var(--faint); font:10px var(--sans); letter-spacing:1px; text-transform:uppercase; pointer-events:none }
+  .edge { fill:none; stroke:var(--faint); opacity:.5; cursor:pointer; marker-end:url(#arrow) }
+  .edge[data-rel="references_symbol"] { opacity:.28; marker-end:none }
+  .edge[data-rel="asserts"] { opacity:.22; stroke-dasharray:2 4; marker-end:none }
+  .edge[data-rel="depends_on"] { stroke:var(--additive) }
+  .edge[data-rel="derives"] { stroke:var(--attention) }
+  .edge[data-rel="proves"] { stroke:var(--stable) }
+  .edge[data-rel="expects"] { stroke:var(--accent) }
+  .edge[data-rel="targets"] { stroke:var(--critical) }
+  .edge[data-negated="true"] { stroke-dasharray:5 4 }
+  .edge:hover, .edge.selected, .edge.lit { opacity:1 }
+  .edge.selected { stroke:var(--ink) }
+  .node { cursor:pointer; outline:none }
+  .node circle { fill:var(--neutral-bg); stroke:var(--neutral-br); stroke-width:1.6 }
+  .node[data-tone="stable"] circle { fill:var(--stable-bg); stroke:var(--stable) }
+  .node[data-tone="additive"] circle { fill:var(--additive-bg); stroke:var(--additive) }
+  .node[data-tone="attention"] circle { fill:var(--attention-bg); stroke:var(--attention) }
+  .node[data-tone="critical"] circle { fill:var(--critical-bg); stroke:var(--critical); stroke-width:2.6 }
+  .node[data-type="relation"] circle { fill:var(--panel); stroke:var(--dim); stroke-width:2.4 }
+  .node[data-type="symbol"] circle { fill:var(--bg); stroke:var(--neutral-br); stroke-dasharray:2 2 }
+  .node.cyclic circle { stroke-dasharray:1 3; stroke-width:3 }
+  .node:hover circle, .node.selected circle, .node:focus-visible circle { stroke:var(--ink); stroke-width:2.8 }
+  .node text { fill:var(--ink); pointer-events:none; font:11px var(--mono); paint-order:stroke; stroke:var(--panel); stroke-width:3px; stroke-linejoin:round }
+  .node[data-type="relation"] text { font:600 12px var(--sans); fill:var(--ink) }
+  .node[data-type="symbol"] text { fill:var(--dim); font-size:10px }
+  .node[data-type="symbol"]:not(.lit):not(.selected):not(:hover) text { display:none }
+  .scene.zoomed-out .node[data-type="fact"]:not(.lit):not(.selected) text { display:none }
+  .scene.dimmed .node:not(.lit) { opacity:.18 }
+  .scene.dimmed .edge:not(.lit) { opacity:.06 }
+  .scene.dimmed .hull { opacity:.35 }
+  .weights { display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:8px; color:var(--faint); font-size:11px }
   .constraint-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px }
   .constraint { padding:15px 17px; border:1px solid var(--line); border-left:3px solid var(--attention); border-radius:10px; background:var(--panel) }
   .constraint[data-status="passed"] { border-left-color:var(--stable) }
@@ -104,8 +149,30 @@
 
   <h2>Graph</h2>
   <div class="graph-layout">
-    <div class="graph-viewport"><svg id="graph" role="img" aria-label="LemmaSpec dependency graph"></svg></div>
-    <aside class="inspector"><h3>Inspect the projection</h3><p>Select any node or edge to see its exact projected fields, including proof witnesses and evidence.</p><pre id="node-detail">Nothing selected.</pre></aside>
+    <div class="graph-main">
+      <div class="toolbar" id="toolbar">
+        <div class="group" id="type-filters"><span>Show</span></div>
+        <div class="group" id="rel-filters"><span>Edges</span></div>
+        <span class="spacer"></span>
+        <input type="search" id="graph-search" placeholder="find node…" aria-label="Find node">
+        <button type="button" id="cycles" aria-pressed="false" title="Highlight facts that depend on each other through recursive rules">cycles</button>
+        <button type="button" id="clear-focus" hidden>clear focus</button>
+        <button type="button" id="fit">fit</button>
+      </div>
+      <div class="graph-viewport" id="graph-viewport">
+        <svg id="graph" role="img" aria-label="LemmaSpec dependency graph"></svg>
+        <div class="hint">drag to pan · wheel to zoom · double-click a node to focus on its neighbourhood</div>
+      </div>
+    </div>
+    <aside class="inspector"><h3>Inspect the projection</h3><p>Select any node or edge to see its exact projected fields, including proof witnesses and evidence.</p><dl class="facts" id="node-facts" hidden></dl><pre id="node-detail">Nothing selected.</pre></aside>
+  </div>
+  <div class="weights">
+    <span>node size = number of connections</span>
+    <span>hollow ring = relation (cluster anchor)</span>
+    <span>fill opacity = fact confidence</span>
+    <span>edge width = evidence count</span>
+    <span>dashed edge = negated condition</span>
+    <span>dotted ring = part of a dependency cycle</span>
   </div>
 
   <h2>Rules, mutations, and expectations</h2>
@@ -126,83 +193,41 @@
   "use strict";
   const data = JSON.parse(document.getElementById("lemmaspec-graph").textContent);
   const svg = document.getElementById("graph");
+  const viewport = document.getElementById("graph-viewport");
   const detail = document.getElementById("node-detail");
-  let selected = null;
+  const factsPanel = document.getElementById("node-facts");
   const ns = "http://www.w3.org/2000/svg";
-  const width = 190, height = 58, gapX = 74, gapY = 34, pad = 38;
-  const order = ["spec", "relation", "rule", "mutation", "fact", "expectation", "symbol"];
-  const groups = new Map(order.map(type => [type, []]));
-  data.nodes.forEach(node => (groups.get(node.type) || groups.get("symbol")).push(node));
-  const present = order.filter(type => groups.get(type).length > 0);
-  const positions = new Map();
-  let maxRows = 1;
-  present.forEach((type, column) => {
-    const nodes = groups.get(type);
-    maxRows = Math.max(maxRows, nodes.length);
-    nodes.forEach((node, row) => positions.set(node.id, {
-      x: pad + column * (width + gapX),
-      y: pad + row * (height + gapY)
-    }));
-  });
-  const canvasWidth = Math.max(760, pad * 2 + present.length * width + Math.max(0, present.length - 1) * gapX);
-  const canvasHeight = Math.max(560, pad * 2 + maxRows * height + Math.max(0, maxRows - 1) * gapY);
-  svg.setAttribute("width", canvasWidth);
-  svg.setAttribute("height", canvasHeight);
-  svg.setAttribute("viewBox", `0 0 ${canvasWidth} ${canvasHeight}`);
 
-  function element(name, attrs) {
-    const value = document.createElementNS(ns, name);
-    Object.entries(attrs || {}).forEach(([key, item]) => value.setAttribute(key, item));
-    return value;
-  }
-
-  function installSelection(element, value) {
-    const select = function () {
-      if (selected) selected.classList.remove("selected");
-      selected = element;
-      selected.classList.add("selected");
-      detail.textContent = JSON.stringify(value, null, 2);
-    };
-    element.addEventListener("click", select);
-    element.addEventListener("keydown", event => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        select();
-      }
-    });
-  }
-
-  const defs = element("defs");
-  const marker = element("marker", { id:"arrow", markerWidth:"8", markerHeight:"8", refX:"7", refY:"3", orient:"auto", markerUnits:"strokeWidth" });
-  marker.appendChild(element("path", { d:"M0,0 L0,6 L7,3 z", fill:"var(--faint)" }));
-  defs.appendChild(marker);
-  svg.appendChild(defs);
-
+  // ------------------------------------------------------------ indexes
+  const nodeById = new Map(data.nodes.map(node => [node.id, node]));
+  const edgeById = new Map(data.edges.map(edge => [edge.id, edge]));
+  const neighbours = new Map(data.nodes.map(node => [node.id, new Set()]));
+  const incident = new Map(data.nodes.map(node => [node.id, []]));
   data.edges.forEach(edge => {
-    const from = positions.get(edge.from), to = positions.get(edge.to);
-    if (!from || !to) return;
-    let startX = from.x + width, startY = from.y + height / 2;
-    let endX = to.x, endY = to.y + height / 2;
-    let path;
-    if (from.x === to.x) {
-      startX = from.x + width;
-      endX = to.x + width;
-      const bend = startX + 54;
-      path = `M${startX},${startY} C${bend},${startY} ${bend},${endY} ${endX},${endY}`;
-    } else {
-      if (to.x < from.x) {
-        startX = from.x;
-        endX = to.x + width;
-      }
-      const mid = (startX + endX) / 2;
-      path = `M${startX},${startY} C${mid},${startY} ${mid},${endY} ${endX},${endY}`;
+    if (!nodeById.has(edge.from) || !nodeById.has(edge.to)) return;
+    neighbours.get(edge.from).add(edge.to);
+    neighbours.get(edge.to).add(edge.from);
+    incident.get(edge.from).push(edge);
+    incident.get(edge.to).push(edge);
+  });
+  const degree = id => incident.get(id).length;
+
+  // Every node belongs to the relation it describes, derives, or queries.
+  // Symbols belong to nobody: they are the shared vocabulary between clusters.
+  const clusterOf = new Map();
+  data.nodes.forEach(node => {
+    if (node.type === "relation") clusterOf.set(node.id, node.id);
+    if (node.type === "fact") clusterOf.set(node.id, `lemmaspec:${data.spec}:relation:${node.relation}`);
+  });
+  data.edges.forEach(edge => {
+    const from = nodeById.get(edge.from);
+    if (!from) return;
+    if ((edge.rel === "derives" || edge.rel === "expects") && nodeById.get(edge.to).type === "relation") {
+      clusterOf.set(edge.from, edge.to);
     }
-    const line = element("path", { d:path, class:"edge", "data-relation":edge.rel, tabindex:"0", role:"button" });
-    const title = element("title");
-    title.textContent = `${edge.rel}\n${edge.from}\n→ ${edge.to}`;
-    line.appendChild(title);
-    installSelection(line, edge);
-    svg.appendChild(line);
+  });
+  data.edges.forEach(edge => {
+    if (edge.rel === "targets" && clusterOf.has(edge.to)) clusterOf.set(edge.from, clusterOf.get(edge.to));
   });
 
   function label(node) {
@@ -218,23 +243,486 @@
     return "neutral";
   }
 
-  data.nodes.forEach(node => {
-    const point = positions.get(node.id);
-    const group = element("g", { class:"node", transform:`translate(${point.x} ${point.y})`, tabindex:"0", role:"button", "data-tone":tone(node) });
-    group.appendChild(element("rect", { width, height }));
-    const kind = element("text", { x:"12", y:"18", class:"kind" });
-    kind.textContent = node.type.toUpperCase();
-    group.appendChild(kind);
-    const name = element("text", { x:"12", y:"40" });
-    const full = label(node);
-    name.textContent = full.length > 24 ? full.slice(0, 23) + "…" : full;
-    group.appendChild(name);
-    const title = element("title");
-    title.textContent = full;
-    group.appendChild(title);
-    installSelection(group, node);
-    svg.appendChild(group);
+  function radius(node) {
+    const base = node.type === "relation" ? 9 : node.type === "symbol" ? 4 : 6;
+    return Math.min(22, base + 1.8 * Math.sqrt(degree(node.id)));
+  }
+
+  // ------------------------------------------------------------ cycles
+  // Tarjan over the directed projection. Only fact→fact dependencies can
+  // close a loop (recursive rules); every other edge points at a sink.
+  const cyclic = new Set();
+  (function findCycles() {
+    const out = new Map(data.nodes.map(node => [node.id, []]));
+    data.edges.forEach(edge => { if (out.has(edge.from)) out.get(edge.from).push(edge.to); });
+    let index = 0;
+    const disc = new Map(), low = new Map(), onStack = new Set(), stack = [];
+    data.nodes.forEach(root => {
+      if (disc.has(root.id)) return;
+      const call = [[root.id, 0]];
+      while (call.length) {
+        const [v, start] = call.pop();
+        if (start === 0) { disc.set(v, ++index); low.set(v, index); stack.push(v); onStack.add(v); }
+        const targets = out.get(v);
+        let descended = false;
+        for (let i = start; i < targets.length; i++) {
+          const w = targets[i];
+          if (!disc.has(w)) { call.push([v, i + 1]); call.push([w, 0]); descended = true; break; }
+          if (onStack.has(w)) low.set(v, Math.min(low.get(v), disc.get(w)));
+        }
+        if (descended) continue;
+        if (low.get(v) === disc.get(v)) {
+          const component = [];
+          let w;
+          do { w = stack.pop(); onStack.delete(w); component.push(w); } while (w !== v);
+          const selfLoop = component.length === 1 && targets.includes(v);
+          if (component.length > 1 || selfLoop) component.forEach(id => cyclic.add(id));
+        }
+        if (call.length) {
+          const parent = call[call.length - 1][0];
+          low.set(parent, Math.min(low.get(parent), low.get(v)));
+        }
+      }
+    });
+  })();
+
+  // ------------------------------------------------------------ layout
+  // Deterministic: seeded PRNG, fixed iteration budget, stable node order.
+  function seededRandom(seed) {
+    let state = seed >>> 0;
+    return function () {
+      state = (state + 0x6d2b79f5) >>> 0;
+      let t = state;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  let seed = 2166136261;
+  for (const character of data.spec) seed = Math.imul(seed ^ character.charCodeAt(0), 16777619);
+  const random = seededRandom(seed);
+
+  const position = new Map();
+  const pinned = new Set();
+
+  function layout(nodes, edges, iterations) {
+    const ids = nodes.map(node => node.id);
+    const clusters = [...new Set(ids.map(id => clusterOf.get(id)).filter(Boolean))];
+    const anchor = new Map();
+    const ring = 80 + 14 * clusters.length;
+    clusters.forEach((cluster, index) => {
+      const angle = (index / clusters.length) * Math.PI * 2;
+      anchor.set(cluster, { x: Math.cos(angle) * ring, y: Math.sin(angle) * ring });
+    });
+    ids.forEach(id => {
+      if (position.has(id)) return;
+      const home = anchor.get(clusterOf.get(id)) || { x: 0, y: 0 };
+      position.set(id, { x: home.x + (random() - 0.5) * 120, y: home.y + (random() - 0.5) * 120 });
+    });
+    const points = ids.map(id => position.get(id));
+    const rest = edges.map(edge => (edge.rel === "references_symbol" ? 80 : 55));
+    const index = new Map(ids.map((id, i) => [id, i]));
+    const springs = edges.map(edge => [index.get(edge.from), index.get(edge.to)]);
+    const clusterIndex = ids.map(id => clusterOf.get(id));
+    const force = points.map(() => ({ x: 0, y: 0 }));
+
+    for (let step = 0; step < iterations; step++) {
+      const heat = 1 - step / iterations;
+      const maxMove = 2 + 26 * heat;
+      force.forEach(f => { f.x = 0; f.y = 0; });
+      for (let i = 0; i < points.length; i++) {
+        for (let j = i + 1; j < points.length; j++) {
+          let dx = points[i].x - points[j].x, dy = points[i].y - points[j].y;
+          let d2 = dx * dx + dy * dy;
+          if (d2 < 1) { dx = random() - 0.5; dy = random() - 0.5; d2 = 1; }
+          const push = 4800 / (d2 * Math.sqrt(d2));
+          force[i].x += dx * push; force[i].y += dy * push;
+          force[j].x -= dx * push; force[j].y -= dy * push;
+        }
+      }
+      springs.forEach(([a, b], k) => {
+        const dx = points[b].x - points[a].x, dy = points[b].y - points[a].y;
+        const d = Math.max(1, Math.hypot(dx, dy));
+        const pull = (d - rest[k]) * 0.07 / d;
+        force[a].x += dx * pull; force[a].y += dy * pull;
+        force[b].x -= dx * pull; force[b].y -= dy * pull;
+      });
+      const centroid = new Map();
+      points.forEach((p, i) => {
+        const cluster = clusterIndex[i];
+        if (!cluster) return;
+        const c = centroid.get(cluster) || { x: 0, y: 0, n: 0 };
+        c.x += p.x; c.y += p.y; c.n += 1;
+        centroid.set(cluster, c);
+      });
+      points.forEach((p, i) => {
+        const c = centroid.get(clusterIndex[i]);
+        if (c && c.n > 1) {
+          force[i].x += (c.x / c.n - p.x) * 0.14;
+          force[i].y += (c.y / c.n - p.y) * 0.14;
+        }
+        force[i].x -= p.x * 0.006;
+        force[i].y -= p.y * 0.006;
+      });
+      points.forEach((p, i) => {
+        if (pinned.has(ids[i])) return;
+        const magnitude = Math.hypot(force[i].x, force[i].y);
+        const scale = magnitude > maxMove ? maxMove / magnitude : 1;
+        p.x += force[i].x * scale;
+        p.y += force[i].y * scale;
+      });
+    }
+  }
+
+  // ------------------------------------------------------------ state
+  const typesPresent = [...new Set(data.nodes.map(node => node.type))];
+  const relsPresent = [...new Set(data.edges.map(edge => edge.rel))];
+  // Symbols and the spec node are hubs touching almost everything; they are
+  // available on demand but would flatten the clusters if shown by default.
+  const shownTypes = new Set(typesPresent.filter(type => type !== "symbol" && type !== "spec"));
+  const shownRels = new Set(relsPresent.filter(rel => rel !== "asserts"));
+  let focus = null;
+  let selected = null;
+  let query = "";
+  let showCycles = false;
+  const view = { x: 0, y: 0, k: 1 };
+
+  function visibleNodes() {
+    let nodes = data.nodes.filter(node => shownTypes.has(node.type));
+    if (focus) {
+      const keep = new Set([focus]);
+      neighbours.get(focus).forEach(a => { keep.add(a); neighbours.get(a).forEach(b => keep.add(b)); });
+      nodes = nodes.filter(node => keep.has(node.id));
+    }
+    return nodes;
+  }
+  function visibleEdges(nodes) {
+    const ids = new Set(nodes.map(node => node.id));
+    return data.edges.filter(edge => shownRels.has(edge.rel) && ids.has(edge.from) && ids.has(edge.to));
+  }
+
+  // ------------------------------------------------------------ toolbar
+  function checkbox(container, name, checked, onChange, swatchRel) {
+    const item = document.createElement("label");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = checked;
+    input.addEventListener("change", () => onChange(input.checked));
+    item.appendChild(input);
+    if (swatchRel) {
+      const swatch = document.createElement("span");
+      swatch.className = "swatch";
+      swatch.dataset.rel = swatchRel;
+      item.appendChild(swatch);
+    }
+    item.appendChild(document.createTextNode(name));
+    container.appendChild(item);
+  }
+  typesPresent.forEach(type => checkbox(document.getElementById("type-filters"), type, shownTypes.has(type), on => {
+    if (on) shownTypes.add(type); else shownTypes.delete(type);
+    redraw(140);
+  }));
+  relsPresent.forEach(rel => checkbox(document.getElementById("rel-filters"), rel.replace(/_/g, " "), shownRels.has(rel), on => {
+    if (on) shownRels.add(rel); else shownRels.delete(rel);
+    redraw(140);
+  }, rel));
+  const search = document.getElementById("graph-search");
+  search.addEventListener("input", () => { query = search.value.trim().toLowerCase(); applyEmphasis(); });
+  const cyclesButton = document.getElementById("cycles");
+  cyclesButton.textContent = `cycles (${cyclic.size})`;
+  cyclesButton.disabled = cyclic.size === 0;
+  cyclesButton.addEventListener("click", () => {
+    showCycles = !showCycles;
+    cyclesButton.setAttribute("aria-pressed", String(showCycles));
+    applyEmphasis();
   });
+  const clearFocus = document.getElementById("clear-focus");
+  clearFocus.addEventListener("click", () => setFocus(null));
+  document.getElementById("fit").addEventListener("click", fit);
+
+  function setFocus(id) {
+    focus = id;
+    clearFocus.hidden = !focus;
+    redraw(140);
+    fit();
+  }
+
+  // ------------------------------------------------------------ drawing
+  function element(name, attrs) {
+    const value = document.createElementNS(ns, name);
+    Object.entries(attrs || {}).forEach(([key, item]) => value.setAttribute(key, item));
+    return value;
+  }
+  const defs = element("defs");
+  const marker = element("marker", { id: "arrow", markerWidth: "7", markerHeight: "7", refX: "6", refY: "3", orient: "auto", markerUnits: "userSpaceOnUse", viewBox: "0 0 7 7" });
+  marker.appendChild(element("path", { d: "M0,0.5 L0,5.5 L6,3 z", fill: "var(--dim)" }));
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+  const scene = element("g", { class: "scene" });
+  svg.appendChild(scene);
+  const hullLayer = element("g"), edgeLayer = element("g"), nodeLayer = element("g");
+  scene.append(hullLayer, edgeLayer, nodeLayer);
+
+  const nodeElements = new Map();
+  const edgeElements = new Map();
+  let drawnNodes = [], drawnEdges = [];
+
+  function hull(points) {
+    if (points.length < 3) return points;
+    points = points.slice().sort((a, b) => a.x - b.x || a.y - b.y);
+    const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    const lower = [], upper = [];
+    for (const p of points) { while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop(); lower.push(p); }
+    for (const p of points.slice().reverse()) { while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop(); upper.push(p); }
+    return lower.slice(0, -1).concat(upper.slice(0, -1));
+  }
+
+  function edgePath(edge) {
+    const a = position.get(edge.from), b = position.get(edge.to);
+    const ra = radius(nodeById.get(edge.from)), rb = radius(nodeById.get(edge.to)) + 4;
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const d = Math.max(1, Math.hypot(dx, dy));
+    const ux = dx / d, uy = dy / d;
+    const sx = a.x + ux * ra, sy = a.y + uy * ra, ex = b.x - ux * rb, ey = b.y - uy * rb;
+    const bend = Math.min(18, d * 0.12);
+    const mx = (sx + ex) / 2 - uy * bend, my = (sy + ey) / 2 + ux * bend;
+    return `M${sx.toFixed(1)},${sy.toFixed(1)} Q${mx.toFixed(1)},${my.toFixed(1)} ${ex.toFixed(1)},${ey.toFixed(1)}`;
+  }
+
+  function redraw(iterations) {
+    drawnNodes = visibleNodes();
+    drawnEdges = visibleEdges(drawnNodes);
+    layout(drawnNodes, drawnEdges, iterations);
+    hullLayer.replaceChildren();
+    edgeLayer.replaceChildren();
+    nodeLayer.replaceChildren();
+    nodeElements.clear();
+    edgeElements.clear();
+
+    const members = new Map();
+    drawnNodes.forEach(node => {
+      const cluster = clusterOf.get(node.id);
+      if (!cluster) return;
+      if (!members.has(cluster)) members.set(cluster, []);
+      members.get(cluster).push(node);
+    });
+    members.forEach((nodes, cluster) => {
+      if (nodes.length < 2) return;
+      const outline = hull(nodes.map(node => position.get(node.id)));
+      const path = outline.map((p, i) => `${i ? "L" : "M"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ") + " Z";
+      const relation = nodeById.get(cluster);
+      const failed = nodes.some(node => node.type === "expectation" && !node.satisfied);
+      const colour = failed ? "var(--critical)" : "var(--accent)";
+      hullLayer.appendChild(element("path", { d: path, class: "hull", fill: colour, stroke: colour }));
+      const top = outline.reduce((best, p) => (p.y < best.y ? p : best), outline[0]);
+      const text = element("text", { x: top.x, y: top.y - 26, class: "hull-label", "text-anchor": "middle" });
+      text.textContent = relation ? relation.name : cluster;
+      hullLayer.appendChild(text);
+    });
+
+    drawnEdges.forEach(edge => {
+      const width = 1 + 0.9 * (edge.evidence ? edge.evidence.length : 0);
+      const line = element("path", { d: edgePath(edge), class: "edge", "data-rel": edge.rel, "stroke-width": width, tabindex: "0", role: "button" });
+      if (edge.negated) line.setAttribute("data-negated", "true");
+      line.dataset.id = edge.id;
+      const title = element("title");
+      title.textContent = `${edge.rel}${edge.negated ? " (negated)" : ""}\n${label(nodeById.get(edge.from))}\n→ ${label(nodeById.get(edge.to))}`;
+      line.appendChild(title);
+      edgeLayer.appendChild(line);
+      edgeElements.set(edge.id, line);
+    });
+
+    drawnNodes.forEach(node => {
+      const p = position.get(node.id);
+      const r = radius(node);
+      const group = element("g", { class: "node" + (cyclic.has(node.id) ? " cyclic" : ""), transform: `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})`, tabindex: "0", role: "button", "data-tone": tone(node), "data-type": node.type });
+      group.dataset.id = node.id;
+      const circle = element("circle", { r });
+      if (node.type === "fact") circle.setAttribute("fill-opacity", (0.35 + 0.65 * node.confidence).toFixed(2));
+      group.appendChild(circle);
+      const full = label(node);
+      const text = element("text", { x: r + 5, y: 4 });
+      text.textContent = full.length > 34 ? full.slice(0, 33) + "…" : full;
+      group.appendChild(text);
+      const title = element("title");
+      title.textContent = `${node.type}: ${full}\n${degree(node.id)} connections`;
+      group.appendChild(title);
+      nodeLayer.appendChild(group);
+      nodeElements.set(node.id, group);
+    });
+
+    if (selected && !nodeElements.has(selected.id) && !edgeElements.has(selected.id)) select(null);
+    applyEmphasis();
+  }
+
+  function moveNode(id) {
+    const p = position.get(id);
+    nodeElements.get(id).setAttribute("transform", `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})`);
+    incident.get(id).forEach(edge => {
+      const line = edgeElements.get(edge.id);
+      if (line) line.setAttribute("d", edgePath(edge));
+    });
+  }
+
+  // ------------------------------------------------------------ emphasis
+  let hovered = null;
+  function applyEmphasis() {
+    const lit = new Set();
+    let active = false;
+    if (hovered && nodeElements.has(hovered)) {
+      active = true;
+      lit.add(hovered);
+      neighbours.get(hovered).forEach(id => lit.add(id));
+    }
+    if (query) {
+      active = true;
+      drawnNodes.forEach(node => { if (label(node).toLowerCase().includes(query)) lit.add(node.id); });
+    }
+    if (showCycles) {
+      active = true;
+      cyclic.forEach(id => lit.add(id));
+    }
+    scene.classList.toggle("dimmed", active);
+    nodeElements.forEach((group, id) => group.classList.toggle("lit", lit.has(id)));
+    edgeElements.forEach((line, id) => {
+      const edge = edgeById.get(id);
+      const on = hovered ? (edge.from === hovered || edge.to === hovered) : (lit.has(edge.from) && lit.has(edge.to));
+      line.classList.toggle("lit", active && on);
+    });
+  }
+
+  // ------------------------------------------------------------ selection
+  function select(item) {
+    if (selected) {
+      const previous = nodeElements.get(selected.id) || edgeElements.get(selected.id);
+      if (previous) previous.classList.remove("selected");
+    }
+    selected = item;
+    if (!item) {
+      factsPanel.hidden = true;
+      detail.textContent = "Nothing selected.";
+      return;
+    }
+    (nodeElements.get(item.id) || edgeElements.get(item.id)).classList.add("selected");
+    const rows = [];
+    if (item.kind === "node") {
+      rows.push(["type", item.type], ["label", label(item)], ["connections", String(degree(item.id))]);
+      const cluster = nodeById.get(clusterOf.get(item.id));
+      if (cluster && cluster.id !== item.id) rows.push(["relation", cluster.name]);
+      if (item.type === "fact") rows.push(["confidence", `${Math.round(item.confidence * 100)}%`]);
+      if (item.type === "expectation") rows.push(["count", `${item.actual_count} of ${item.expected_count} expected`]);
+      if (cyclic.has(item.id)) rows.push(["cycle", "depends on itself through recursion"]);
+    } else {
+      rows.push(["edge", item.rel.replace(/_/g, " ")], ["from", label(nodeById.get(item.from))], ["to", label(nodeById.get(item.to))]);
+      if (item.witness) rows.push(["witness", item.witness]);
+      if (item.negated) rows.push(["negated", "yes"]);
+    }
+    factsPanel.replaceChildren(...rows.flatMap(([key, value]) => {
+      const dt = document.createElement("dt"); dt.textContent = key;
+      const dd = document.createElement("dd"); dd.textContent = value;
+      return [dt, dd];
+    }));
+    factsPanel.hidden = false;
+    detail.textContent = JSON.stringify(item, null, 2);
+  }
+
+  function itemAt(target) {
+    const node = target.closest(".node");
+    if (node) return nodeById.get(node.dataset.id);
+    const edge = target.closest(".edge");
+    if (edge) return edgeById.get(edge.dataset.id);
+    return null;
+  }
+
+  // ------------------------------------------------------------ pointer
+  function applyView() {
+    scene.setAttribute("transform", `translate(${view.x} ${view.y}) scale(${view.k})`);
+    scene.classList.toggle("zoomed-out", view.k < 1.05);
+  }
+  function fit() {
+    if (!drawnNodes.length) return;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    drawnNodes.forEach(node => {
+      const p = position.get(node.id);
+      minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+    });
+    const box = svg.getBoundingClientRect();
+    const pad = 90;
+    view.k = Math.min(1.6, Math.max(0.15, Math.min(box.width / (maxX - minX + pad * 2), box.height / (maxY - minY + pad * 2))));
+    view.x = box.width / 2 - ((minX + maxX) / 2) * view.k;
+    view.y = box.height / 2 - ((minY + maxY) / 2) * view.k;
+    applyView();
+  }
+
+  let drag = null;
+  svg.addEventListener("pointerdown", event => {
+    if (event.button !== 0) return;
+    const node = event.target.closest(".node");
+    drag = { id: node ? node.dataset.id : null, x: event.clientX, y: event.clientY, moved: false };
+    if (!node) viewport.classList.add("panning");
+    svg.setPointerCapture(event.pointerId);
+  });
+  svg.addEventListener("pointermove", event => {
+    if (!drag) return;
+    const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
+    drag.x = event.clientX; drag.y = event.clientY;
+    if (Math.abs(dx) + Math.abs(dy) > 0) drag.moved = true;
+    if (drag.id) {
+      const p = position.get(drag.id);
+      p.x += dx / view.k; p.y += dy / view.k;
+      pinned.add(drag.id);
+      moveNode(drag.id);
+    } else {
+      view.x += dx; view.y += dy;
+      applyView();
+    }
+  });
+  svg.addEventListener("pointerup", event => {
+    if (!drag) return;
+    viewport.classList.remove("panning");
+    if (!drag.moved) {
+      const item = itemAt(event.target);
+      select(item);
+    }
+    drag = null;
+  });
+  svg.addEventListener("dblclick", event => {
+    const node = event.target.closest(".node");
+    if (node) setFocus(node.dataset.id);
+  });
+  svg.addEventListener("wheel", event => {
+    event.preventDefault();
+    const box = svg.getBoundingClientRect();
+    const px = event.clientX - box.left, py = event.clientY - box.top;
+    const factor = Math.exp(-event.deltaY * 0.0015);
+    const k = Math.min(4, Math.max(0.1, view.k * factor));
+    view.x = px - (px - view.x) * (k / view.k);
+    view.y = py - (py - view.y) * (k / view.k);
+    view.k = k;
+    applyView();
+  }, { passive: false });
+  svg.addEventListener("pointerover", event => {
+    const node = event.target.closest(".node");
+    const next = node ? node.dataset.id : null;
+    if (next !== hovered) { hovered = next; applyEmphasis(); }
+  });
+  svg.addEventListener("pointerleave", () => { if (hovered) { hovered = null; applyEmphasis(); } });
+  svg.addEventListener("keydown", event => {
+    if (event.key === "Enter" || event.key === " ") {
+      const item = itemAt(event.target);
+      if (item) { event.preventDefault(); select(item); }
+    }
+    if (event.key === "Escape" && focus) setFocus(null);
+  });
+  svg.addEventListener("focusin", event => {
+    const node = event.target.closest(".node");
+    hovered = node ? node.dataset.id : null;
+    applyEmphasis();
+  });
+
+  redraw(320);
+  fit();
 })();
 </script>
 </body>
