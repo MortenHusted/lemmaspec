@@ -446,7 +446,7 @@ fn doc_markup(doc: Option<&str>) -> String {
 
 fn graph_link(id: &str) -> String {
     format!(
-        "<a class=\"graph-link\" href=\"#graph\" data-node=\"{}\">show in graph</a>",
+        "<a class=\"graph-link\" href=\"#graph-section\" data-node=\"{}\">show in graph</a>",
         html_escape(id)
     )
 }

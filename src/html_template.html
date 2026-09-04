@@ -207,7 +207,7 @@
     <span class="lg"><span class="dot" style="background:var(--neutral)"></span>relation / symbol</span>
   </div>
 
-  <div class="graph-layout" id="graph">
+  <div class="graph-layout" id="graph-section">
     <div class="graph-main">
       <div class="toolbar" id="toolbar">
         <div class="group" id="type-filters"><span>Show</span></div>
@@ -810,7 +810,7 @@
     const link = event.target.closest("a[data-node]");
     if (!link) return;
     event.preventDefault();
-    document.getElementById("graph").scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById("graph-section").scrollIntoView({ behavior: "smooth", block: "start" });
     reveal(link.dataset.node);
   });
 
