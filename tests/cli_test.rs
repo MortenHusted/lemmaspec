@@ -222,7 +222,7 @@ fn help_describes_machine_output_and_exit_statuses() {
     let help = String::from_utf8_lossy(&output.stdout);
     assert!(help.contains("syntax"), "{help}");
     assert!(
-        help.contains("machine-readable JSON for walk, mutate, or project"),
+        help.contains("machine-readable JSON for walk, mutate, check, or project"),
         "{help}"
     );
     assert!(
@@ -501,6 +501,98 @@ fn incomplete_walk_exits_one_and_reports_failure() {
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).expect("JSON report");
     assert_eq!(report["status"], "incomplete");
     assert_eq!(report["expectations"][0]["satisfied"], false);
+}
+
+#[test]
+fn check_command_evaluates_evidence_with_the_checker_rules() {
+    let evidence = r#"
+        spec schema_under_review {
+          fact flag { relation: boolean_column args: [webhook, active] provenance: ["db/schema.rb"] }
+          fact companion { relation: companion_column args: [webhook, active, first_failure_at] }
+          expect nothing_is_flattened { query: "violation(M, C)" count: 0 }
+        }
+    "#;
+    let path = std::env::temp_dir().join(format!(
+        "lemmaspec-evidence-{}.lemmaspec",
+        std::process::id()
+    ));
+    std::fs::write(&path, evidence).expect("write temporary evidence");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_lemmaspec"))
+        .args([
+            "check",
+            "examples/state_as_records.lemmaspec",
+            path.to_str().unwrap(),
+            "--json",
+        ])
+        .output()
+        .expect("run lemmaspec");
+    std::fs::remove_file(&path).expect("remove temporary evidence");
+
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).expect("JSON report");
+    assert_eq!(report["spec"], "schema_under_review");
+    assert_eq!(report["status"], "incomplete");
+    assert_eq!(report["asserted"], 2);
+    assert_eq!(
+        report["expectations"]
+            .as_array()
+            .expect("expectations")
+            .len(),
+        1
+    );
+    let violation = report["facts"]
+        .as_array()
+        .expect("facts")
+        .iter()
+        .find(|fact| fact["relation"] == "violation")
+        .expect("the flattened flag is a violation");
+    assert!(violation["why"]
+        .as_str()
+        .expect("why")
+        .contains("db/schema.rb"));
+}
+
+#[test]
+fn check_command_rejects_evidence_that_redefines_the_checker() {
+    let path = std::env::temp_dir().join(format!(
+        "lemmaspec-evidence-rule-{}.lemmaspec",
+        std::process::id()
+    ));
+    std::fs::write(
+        &path,
+        r#"spec e { rule r { derive: "violation(M, C)" when: ["boolean_column(M, C)"] } }"#,
+    )
+    .expect("write temporary evidence");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_lemmaspec"))
+        .args([
+            "check",
+            "examples/state_as_records.lemmaspec",
+            path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("run lemmaspec");
+    std::fs::remove_file(&path).expect("remove temporary evidence");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("declares a rule"));
+}
+
+#[test]
+fn check_command_requires_two_artifact_paths() {
+    let output = Command::new(env!("CARGO_BIN_EXE_lemmaspec"))
+        .args(["check", "examples/state_as_records.lemmaspec"])
+        .output()
+        .expect("run lemmaspec");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("checker and an evidence"));
 }
 
 #[test]

@@ -7,6 +7,14 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- `lemmaspec check <checker> <evidence>` evaluates one artifact's relations
+  and rules over another file's facts and expectations, so a self-tested
+  checker can be applied to evidence about real code.
+- `examples/state_as_records.lemmaspec`, a Rails checker for the convention
+  that togglable state is a record rather than a boolean column.
+
 ## [0.2.0] - 2026-09-04
 
 ### Added

@@ -116,6 +116,7 @@ Repeated walks over the same artifact produce byte-stable JSON.
 ```text
 lemmaspec walk <path.lemmaspec> [--json]
 lemmaspec mutate <path.lemmaspec> [--json]
+lemmaspec check <checker.lemmaspec> <evidence.lemmaspec> [--json]
 lemmaspec project <path.lemmaspec> [--json]
 lemmaspec render <path.lemmaspec> [-o <path.html>]
 lemmaspec syntax
@@ -123,6 +124,7 @@ lemmaspec syntax
 
 - `walk` validates and evaluates the artifact.
 - `mutate` tests whether its expectations notice deliberate omissions.
+- `check` evaluates one artifact's rules over another file's facts.
 - `project` emits its deterministic, internally closed graph.
 - `render` writes a dependency-free HTML report beside the artifact.
 - `syntax` prints the supported artifact and rule language.
@@ -161,6 +163,29 @@ counting the same mutants twice.
 
 See [examples/mutation_analysis.lemmaspec](examples/mutation_analysis.lemmaspec)
 for a complete artifact.
+
+## Checking evidence
+
+A checker is an ordinary artifact whose facts are a fixture and whose
+expectations and mutation policies are its self-test. `check` keeps the
+checker's relations and rules, replaces its fixture with the facts of an
+evidence file, and evaluates the evidence file's expectations instead:
+
+```sh
+lemmaspec check examples/state_as_records.lemmaspec .lemmaspec/state_as_records.lemmaspec
+```
+
+The evidence file is a `spec` with facts and expectations only; a relation or
+rule in it is rejected, and its facts are validated against the checker's
+relations. The result is one closed artifact evaluated exactly like a walk,
+with a `why` witness for every derived fact, so a finding traces back to the
+evidence and its provenance. Evidence is written by whoever can establish it,
+an agent reading a schema today or an extractor later; LemmaSpec does not
+inspect source code.
+
+[examples/state_as_records.lemmaspec](examples/state_as_records.lemmaspec)
+judges a Rails schema fixture against the convention that togglable state is
+a record rather than a boolean column.
 
 ## Graph and HTML projections
 
