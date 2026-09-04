@@ -97,13 +97,17 @@
   .node[data-tone="attention"] circle { fill:var(--attention-bg); stroke:var(--attention) }
   .node[data-tone="critical"] circle { fill:var(--critical-bg); stroke:var(--critical); stroke-width:2.6 }
   .node[data-type="relation"] circle { fill:var(--panel); stroke:var(--dim); stroke-width:2.4 }
-  .node[data-type="symbol"] circle { fill:var(--bg); stroke:var(--neutral-br); stroke-dasharray:2 2 }
+  .node[data-type="symbol"] circle { fill:var(--bg); stroke:var(--faint); stroke-width:1.2 }
+  .node[data-type="symbol"].lit circle, .node[data-type="symbol"].selected circle { fill:var(--additive-bg); stroke:var(--accent); stroke-width:2.6 }
   .node.cyclic circle { stroke-dasharray:1 3; stroke-width:3 }
   .node:hover circle, .node.selected circle, .node:focus-visible circle { stroke:var(--ink); stroke-width:2.8 }
   .scene { --ls:1 }
   .node text { fill:var(--ink); pointer-events:none; font:11px var(--mono); font-size:calc(11px * var(--ls)); paint-order:stroke; stroke:var(--panel); stroke-width:calc(3px * var(--ls)); stroke-linejoin:round }
   .node[data-type="relation"] text { font:600 12px var(--sans); font-size:calc(12px * var(--ls)); fill:var(--ink) }
   .node[data-type="symbol"] text { fill:var(--dim); font-size:calc(10px * var(--ls)) }
+  .node[data-type="symbol"].lit text, .node[data-type="symbol"].selected text { fill:var(--accent); font:600 12px var(--sans); font-size:calc(12px * var(--ls)) }
+  .selection .mentions { margin:6px 0 0; padding-left:16px; color:var(--dim); font-size:12px }
+  .selection .mentions li { margin:2px 0 }
   .node.nolabel:not(.selected):not(:hover) text { display:none }
   .scene.dimmed .node:not(.lit) { opacity:.16 }
   .scene.dimmed .edge:not(.lit) { opacity:.05 }
@@ -237,7 +241,7 @@
       <h4>Show</h4><div class="group" id="type-filters"></div>
       <h4>Edges</h4><div class="group" id="rel-filters"></div>
       <h4>Legend</h4>
-      <div class="legend"><span class="l-stable">observation · confirmed claim</span><span class="l-additive">conclusion</span><span class="l-attention">rule · stress test · assumption</span><span class="l-critical">open claim</span><span>relation · symbol</span></div>
+      <div class="legend"><span class="l-stable">observation · confirmed claim</span><span class="l-additive">conclusion</span><span class="l-attention">rule · stress test · assumption</span><span class="l-critical">open claim</span><span>relation · vocabulary symbol</span></div>
       <div class="weights">Node size follows connections. Fill opacity follows confidence. Edge width follows evidence; dashed edges are negated; dotted rings sit in a cycle.</div>
     </div>
     <div class="stage-note" id="stage-note"></div>
@@ -347,8 +351,9 @@
     return "neutral";
   }
   const boost = new Map();
+  const revealed = new Set();
   function radius(node) {
-    const base = node.type === "relation" ? 9 : node.type === "symbol" ? 4 : 6;
+    const base = node.type === "relation" ? 9 : node.type === "symbol" ? (revealed.has(node.id) ? 7 : 4) : 6;
     return Math.min(26, base + 1.8 * Math.sqrt(degree(node.id)) + (boost.get(node.id) || 0));
   }
 
@@ -523,7 +528,7 @@
   const view = { x: 0, y: 0, k: 1 };
 
   function visibleNodes() {
-    let nodes = data.nodes.filter(node => shownTypes.has(node.type));
+    let nodes = data.nodes.filter(node => shownTypes.has(node.type) || revealed.has(node.id));
     if (focus) {
       const keep = new Set([focus]);
       neighbours.get(focus).forEach(a => { keep.add(a); neighbours.get(a).forEach(b => keep.add(b)); });
@@ -761,7 +766,9 @@
   function placeLabels() {
     const dimmed = scene.classList.contains("dimmed");
     const isLit = id => { const group = nodeElements.get(id); return !!group && group.classList.contains("lit"); };
-    const forced = id => id === selected || id === hovered;
+    // A small thread keeps every label; a large one is culled like the rest.
+    const litCount = drawnNodes.filter(node => isLit(node.id)).length;
+    const forced = id => id === selected || id === hovered || (isLit(id) && litCount <= 12);
     const rank = node => (isLit(node.id) ? 100000 : 0) + (node.type === "relation" ? 3 : node.type === "symbol" ? 0 : node.type === "fact" ? 1 : 2) * 1000 + degree(node.id);
     const ordered = drawnNodes.slice().sort((a, b) => rank(b) - rank(a));
     const placed = ordered.filter(node => forced(node.id)).map(labelBox);
@@ -878,6 +885,7 @@
     }
     selected = null;
     selectionBox.hidden = true;
+    if (revealed.size) { revealed.clear(); redraw(140); }
     applyEmphasis();
   }
 
@@ -898,7 +906,7 @@
     clearSelection();
     selected = id;
     const node = nodeById.get(id);
-    if (!shownTypes.has(node.type)) { shownTypes.add(node.type); typeInputs.get(node.type).checked = true; redraw(140); }
+    if (!shownTypes.has(node.type) && !revealed.has(node.id)) { revealed.add(node.id); redraw(140); }
     if (focus && !nodeElements.has(id)) setFocus(null);
     const group = nodeElements.get(id);
     if (group) group.classList.add("selected");
@@ -926,9 +934,33 @@
     const text = document.createElement("div"); text.textContent = label(node);
     selectionBox.append(kind, text);
     if (node.type === "symbol") {
-      const uses = into.get(node.id).length;
-      const note = document.createElement("div"); note.className = "meta"; note.textContent = `${uses} use${uses === 1 ? "" : "s"} in facts, rules, or claims`;
+      const roles = new Set();
+      const mentions = [];
+      into.get(node.id).forEach(edge => {
+        const source = nodeById.get(edge.from);
+        if (!source) return;
+        if (source.type === "fact" && edge.position !== undefined) {
+          const relation = nodeById.get(`lemmaspec:${data.spec}:relation:${source.relation}`);
+          const role = relation && relation.roles && relation.roles[edge.position];
+          roles.add(role ? role : `${source.relation} · argument ${edge.position + 1}`);
+        }
+        mentions.push(source);
+      });
+      if (roles.size) { kind.textContent = [...roles].join(" · "); }
+      const note = document.createElement("div"); note.className = "meta";
+      note.textContent = mentions.length ? `appears in ${mentions.length} place${mentions.length === 1 ? "" : "s"}` : "appears nowhere";
       selectionBox.appendChild(note);
+      if (mentions.length) {
+        const list = document.createElement("ul"); list.className = "mentions";
+        mentions.slice(0, 12).forEach(source => {
+          const item = document.createElement("li");
+          const link = document.createElement("a"); link.className = "ref"; link.href = "#"; link.dataset.node = source.id; link.textContent = label(source);
+          item.appendChild(link);
+          list.appendChild(item);
+        });
+        if (mentions.length > 12) { const more = document.createElement("li"); more.textContent = `and ${mentions.length - 12} more`; list.appendChild(more); }
+        selectionBox.appendChild(list);
+      }
     }
     const raw = document.createElement("details"); raw.className = "raw";
     const summary = document.createElement("summary"); summary.textContent = "projected fields";
@@ -939,6 +971,8 @@
   }
 
   journey.addEventListener("click", event => {
+    const noticeLink = event.target.closest("#selection a[data-node]");
+    if (noticeLink) { event.preventDefault(); select(noticeLink.dataset.node, { centre: true }); return; }
     const summary = event.target.closest(".card-summary");
     if (summary) {
       const card = summary.closest(".card");
