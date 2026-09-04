@@ -228,7 +228,7 @@ fn valid_edge_signature(relation: &str, from: &str, to: &str) -> bool {
         "asserts" => from == "spec" && to == "fact",
         "derives" => from == "rule" && matches!(to, "relation" | "fact"),
         "depends_on" => (from == "rule" && to == "relation") || (from == "fact" && to == "fact"),
-        "proves" => from == "fact" && to == "expectation",
+        "proves" | "matches" => from == "fact" && to == "expectation",
         "expects" => from == "expectation" && to == "relation",
         "targets" => from == "mutation" && matches!(to, "rule" | "relation"),
         "must_fail" => from == "mutation" && to == "expectation",
@@ -807,11 +807,18 @@ fn add_expectation_proof_edges(
     satisfied: bool,
     actual_count: usize,
 ) {
-    if !satisfied || actual_count == 0 {
+    if actual_count == 0 {
         return;
     }
     let Some(relation) = engine.relations.get(&atom.pred) else {
         return;
+    };
+    // Matching facts prove a satisfied claim. For an open claim they are the
+    // facts a reader has to confront: what was found instead of the count.
+    let (rel, basis) = if satisfied {
+        ("proves", "satisfied_query")
+    } else {
+        ("matches", "unsatisfied_query")
     };
     for row in &relation.rows {
         if !atom_matches(atom, &row.key, &engine.interner) {
@@ -823,9 +830,9 @@ fn add_expectation_proof_edges(
         builder.edge(
             fact_id,
             expectation_id,
-            "proves",
+            rel,
             EdgeMetadata {
-                basis: Some("satisfied_query"),
+                basis: Some(basis),
                 ..EdgeMetadata::default()
             },
         );

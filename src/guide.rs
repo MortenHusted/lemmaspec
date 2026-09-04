@@ -59,6 +59,7 @@ struct Index<'a> {
     dependents: BTreeMap<&'a str, Vec<&'a str>>,
     proves: BTreeMap<&'a str, Vec<&'a str>>,
     proven_by: BTreeMap<&'a str, Vec<&'a str>>,
+    matched_by: BTreeMap<&'a str, Vec<&'a str>>,
     rule_yield: BTreeMap<&'a str, usize>,
     derived_by: BTreeMap<&'a str, Vec<&'a str>>,
     declaration_ids: BTreeSet<&'a str>,
@@ -110,6 +111,7 @@ impl<'a> Index<'a> {
         let mut dependents: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
         let mut proves: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
         let mut proven_by: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+        let mut matched_by: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
         let mut rule_yield: BTreeMap<&str, usize> = BTreeMap::new();
         let mut derived_by: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
         for edge in &projection.edges {
@@ -134,6 +136,9 @@ impl<'a> Index<'a> {
                     proves.entry(from).or_default().push(to);
                     proven_by.entry(to).or_default().push(from);
                 }
+                ("matches", _) => {
+                    matched_by.entry(to).or_default().push(from);
+                }
                 ("derives", Some("proof_witness")) => {
                     *rule_yield.entry(from).or_default() += 1;
                 }
@@ -154,6 +159,7 @@ impl<'a> Index<'a> {
             dependents,
             proves,
             proven_by,
+            matched_by,
             rule_yield,
             derived_by,
             declaration_ids,
@@ -790,9 +796,12 @@ fn render_claims(index: &Index) -> String {
                     "Found {actual_count}. This claim is open until the facts or the claim change."
                 )
             };
-            let proof = index
-                .proven_by
-                .get(node.id.as_str())
+            let (evidence, label) = if *satisfied {
+                (index.proven_by.get(node.id.as_str()), "supported by")
+            } else {
+                (index.matched_by.get(node.id.as_str()), "found instead")
+            };
+            let proof = evidence
                 .map(|facts| {
                     let shown: Vec<String> = facts
                         .iter()
@@ -805,7 +814,7 @@ fn render_claims(index: &Index) -> String {
                         String::new()
                     };
                     format!(
-                        "<div class=\"why\"><span class=\"why-label\">supported by</span><ul class=\"because\">{}{more}</ul></div>",
+                        "<div class=\"why\"><span class=\"why-label\">{label}</span><ul class=\"because\">{}{more}</ul></div>",
                         shown.join("")
                     )
                 })

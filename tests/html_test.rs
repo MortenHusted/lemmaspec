@@ -160,6 +160,23 @@ spec guide {
     assert!(html.contains("Found 1. Confirmed."), "{html}");
     assert!(html.contains("Found 0. This claim is open"), "{html}");
 
+    let open = r#"
+spec open {
+  relation loose_end { args: [symbol] roles: [item] reads: "{item} is a loose end" }
+  fact one { relation: loose_end args: [popup] }
+  expect no_loose_ends { query: "loose_end(X)" count: 0 }
+}
+"#;
+    let open_html = render_projection_html(open, &project_artifact(open).expect("project open"));
+    assert!(
+        open_html.contains("<span class=\"why-label\">found instead</span>"),
+        "{open_html}"
+    );
+    assert!(
+        open_html.contains("popup is a loose end</a>"),
+        "{open_html}"
+    );
+
     // Vocabulary groups symbols by the role they play.
     assert!(html.contains("<summary><i>item</i>"), "{html}");
     assert!(html.contains("<summary><i>dependency</i>"), "{html}");

@@ -63,6 +63,7 @@
   .swatch[data-rel="depends_on"] { border-color:var(--additive) }
   .swatch[data-rel="derives"] { border-color:var(--attention) }
   .swatch[data-rel="proves"] { border-color:var(--stable) }
+  .swatch[data-rel="matches"] { border-color:var(--critical) }
   .swatch[data-rel="expects"] { border-color:var(--accent) }
   .swatch[data-rel="targets"] { border-color:var(--critical) }
   .swatch[data-rel="asserts"] { border-top-style:dotted }
@@ -83,6 +84,7 @@
   .edge[data-rel="depends_on"] { stroke:var(--additive) }
   .edge[data-rel="derives"] { stroke:var(--attention) }
   .edge[data-rel="proves"] { stroke:var(--stable) }
+  .edge[data-rel="matches"] { stroke:var(--critical) }
   .edge[data-rel="expects"] { stroke:var(--accent) }
   .edge[data-rel="targets"] { stroke:var(--critical) }
   .edge[data-negated="true"] { stroke-dasharray:5 4 }
@@ -435,7 +437,7 @@ spec persistence_adapter_readiness {
         out.get(fact).filter(e => e.rel === "proves").forEach(e => lit.add(e.to));
       });
     } else if (node.type === "expectation") {
-      into.get(id).filter(e => e.rel === "proves").forEach(e => lit.add(e.from));
+      into.get(id).filter(e => e.rel === "proves" || e.rel === "matches").forEach(e => lit.add(e.from));
       out.get(id).filter(e => e.rel === "expects").forEach(e => lit.add(e.to));
     } else if (node.type === "relation") {
       data.nodes.forEach(other => { if (clusterOf.get(other.id) === id) lit.add(other.id); });

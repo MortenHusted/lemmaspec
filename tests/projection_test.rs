@@ -337,6 +337,31 @@ spec aggregate_projection {
 }
 
 #[test]
+fn open_claims_link_to_the_facts_found_instead() {
+    let source = r#"
+spec open_claim {
+  relation loose_end { args: [symbol] }
+  fact one { relation: loose_end args: [popup] }
+  fact two { relation: loose_end args: [prompt] }
+  expect no_loose_ends { query: "loose_end(X)" count: 0 }
+}
+"#;
+    let projection = project_artifact(source).expect("project open claim");
+    projection.validate_closed().expect("closed");
+    let matches: Vec<_> = projection
+        .edges
+        .iter()
+        .filter(|edge| edge.rel == "matches")
+        .collect();
+    assert_eq!(matches.len(), 2);
+    assert!(matches
+        .iter()
+        .all(|edge| edge.basis.as_deref() == Some("unsatisfied_query")
+            && edge.to.ends_with(":expectation:no_loose_ends")));
+    assert!(projection.edges.iter().all(|edge| edge.rel != "proves"));
+}
+
+#[test]
 fn projects_authored_prose_roles_and_readings() {
     let source = r#"
 // Which mutants does each policy govern?

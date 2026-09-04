@@ -158,7 +158,9 @@ for a complete artifact.
 
 `project` emits nodes for the spec, relations, facts, rules, mutations,
 expectations, and symbols, plus typed edges such as `asserts`, `derives`,
-`depends_on`, `proves`, `expects`, `targets`, and `references_symbol`.
+`depends_on`, `proves`, `matches`, `expects`, `targets`, and `references_symbol`.
+A satisfied expectation is `proves`-linked from the facts that match its query;
+an open one is `matches`-linked from the facts found instead.
 
 The graph is internally closed: every ID is spec-namespaced and every edge
 endpoint is emitted in the same projection. Symbols that may later resolve to
