@@ -15,6 +15,7 @@ pub mod intern;
 pub mod magic;
 pub mod mutation;
 mod narrative;
+pub mod printer;
 mod projection;
 pub mod upgrade;
 
@@ -33,6 +34,7 @@ pub use mutation::{
     MutationSummary, MutationTarget,
 };
 pub use narrative::read_fact;
+pub use printer::print_artifact;
 pub use projection::{
     project_artifact, GraphEdge, GraphNode, GraphNodeData, GraphProjection, ProjectionError,
 };
