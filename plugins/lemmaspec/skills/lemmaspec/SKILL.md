@@ -13,9 +13,14 @@ The plugin and the CLI are installed separately. Verify the CLI first:
 
 ```sh
 lemmaspec --version
-lemmaspec --help
+lemmaspec intro
 lemmaspec syntax
 ```
+
+`intro` is the orientation for this workflow, kept in the binary so it always
+matches the installed version. `lemmaspec agent install` writes this skill into
+a project's `.claude/skills` and `.codex/skills` from the same binary, and
+`lemmaspec upgrade --check` says whether a newer release exists.
 
 If `lemmaspec` is unavailable, tell the user to install it from the public
 release instructions at `https://github.com/MortenHusted/lemmaspec#install`.

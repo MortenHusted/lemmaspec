@@ -9,6 +9,14 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 
+- `lemmaspec intro` orients an agent: what LemmaSpec is for, the loop,
+  evidence discipline, and how to write for the human who reads the render.
+- `lemmaspec agent install` writes the skill embedded in the binary into a
+  project's `.claude/skills` and `.codex/skills`, or runs the agents' plugin
+  marketplace commands with `--marketplace`.
+- `lemmaspec upgrade` recognises how the binary was installed, asks GitHub
+  for the newest release, and runs the matching upgrade; `--check` only
+  reports. It also notices when a project's installed skill is behind.
 - Comments are kept: everything before `spec` documents the artifact, and a
   comment touching a declaration documents that declaration.
 - Relations accept optional `roles` naming each argument and a `reads`

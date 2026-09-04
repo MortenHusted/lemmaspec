@@ -46,6 +46,14 @@ on macOS and Linux is on `PATH`, then verify the installation:
 lemmaspec --version
 ```
 
+To check for a newer release later, or to upgrade the way the binary was
+installed (Homebrew, the release installer, or cargo):
+
+```sh
+lemmaspec upgrade --check
+lemmaspec upgrade
+```
+
 To build the latest development version from source instead:
 
 ```sh
@@ -210,21 +218,32 @@ evidence, inspect derivations, and emit graph or HTML projections. Install the
 CLI first using one of the methods above; the plugin does not bundle the
 executable.
 
-For Claude Code:
+Start an agent with the orientation the binary carries:
+
+```sh
+lemmaspec intro
+```
+
+Install the skill next to the project the agent works in. The binary embeds
+the skill it was built with, so skill and CLI never drift:
+
+```sh
+lemmaspec agent install            # .claude/skills and .codex/skills in the current directory
+lemmaspec agent install --codex --dir ~/work/app
+```
+
+Or install through the agents' own plugin marketplaces, which is what
+`lemmaspec agent install --marketplace` runs for you:
 
 ```sh
 claude plugin marketplace add MortenHusted/lemmaspec
 claude plugin install lemmaspec@lemmaspec
-```
 
-For Codex:
-
-```sh
 codex plugin marketplace add MortenHusted/lemmaspec
 codex plugin add lemmaspec@lemmaspec
 ```
 
-Both plugins load the same canonical skill from
+Every path loads the same canonical skill from
 `plugins/lemmaspec/skills/lemmaspec`.
 
 ## Scope

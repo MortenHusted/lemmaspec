@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use lemmaspec::agent::{self, Agent};
+use lemmaspec::upgrade::{self, Install};
 use lemmaspec::{
     mutate_artifact, project_artifact, render_projection_html, walk_artifact, MutationTarget,
 };
@@ -11,8 +13,11 @@ const HELP: &str = "Usage:
   lemmaspec project <path.lemmaspec> [--json]
   lemmaspec render <path.lemmaspec> [-o <path.html>]
   lemmaspec syntax
+  lemmaspec intro
+  lemmaspec agent install [--claude] [--codex] [--dir <project>] [--marketplace]
+  lemmaspec upgrade [--check]
   lemmaspec --version
-  lemmaspec help [syntax]
+  lemmaspec help [syntax|intro]
 
 Commands:
   walk    Parse, validate, and evaluate one self-contained specification
@@ -20,11 +25,20 @@ Commands:
   project Emit its closed, deterministic graph projection
   render  Write a self-contained human HTML view beside the artifact
   syntax  Show the supported artifact and rule language
-  help    Show this help or the syntax reference
+  intro   Orient an agent: what LemmaSpec is for and how to work with it
+  agent   install: put this binary's skill into a project's .claude and .codex
+          skill directories, or into the agents' plugin marketplaces
+  upgrade Check GitHub for a newer release and upgrade the way this binary
+          was installed (Homebrew, the release installer, or cargo)
+  help    Show this help, the syntax reference, or the intro
 
 Options:
   --json  Emit machine-readable JSON for walk, mutate, or project
   -o, --output <path.html>  Choose the render output path
+  --claude, --codex  Limit agent install to one agent (default: both)
+  --dir <project>  Project to install into (default: current directory)
+  --marketplace  Run the agents' plugin marketplace commands instead
+  --check  Only report whether a newer release exists (exit 1 when it does)
   -V, --version  Show the installed version
   -h, --help
 
@@ -131,9 +145,113 @@ fn run(args: Vec<String>) -> Result<ExitCode, String> {
         "project" => run_project(&args[1..]),
         "render" => run_render(&args[1..]),
         "syntax" => print_syntax(&args[1..]),
+        "intro" => print_intro(&args[1..]),
+        "agent" => run_agent(&args[1..]),
+        "upgrade" => run_upgrade(&args[1..]),
         "help" => print_help(&args[1..]),
         command => Err(format!("unknown command `{command}`\n\n{HELP}")),
     }
+}
+
+fn print_intro(args: &[String]) -> Result<ExitCode, String> {
+    if let Some(unexpected) = args.first() {
+        return Err(format!("unexpected argument `{unexpected}` for intro"));
+    }
+    println!("{}", agent::INTRO);
+    Ok(ExitCode::SUCCESS)
+}
+
+fn run_agent(args: &[String]) -> Result<ExitCode, String> {
+    match args.first().map(String::as_str) {
+        Some("install") => {}
+        Some(other) => return Err(format!("unknown agent command `{other}`; expected install")),
+        None => return Err(format!("agent requires a command: install\n\n{HELP}")),
+    }
+    let mut agents = Vec::new();
+    let mut project = PathBuf::from(".");
+    let mut marketplace = false;
+    let mut index = 1;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--claude" => agents.push(Agent::Claude),
+            "--codex" => agents.push(Agent::Codex),
+            "--marketplace" => marketplace = true,
+            "--dir" => {
+                index += 1;
+                let Some(dir) = args.get(index) else {
+                    return Err("--dir requires a project path".to_string());
+                };
+                project = PathBuf::from(dir);
+            }
+            unexpected => {
+                return Err(format!(
+                    "unexpected argument `{unexpected}` for agent install"
+                ))
+            }
+        }
+        index += 1;
+    }
+    if agents.is_empty() {
+        agents.extend(Agent::ALL);
+    }
+    if marketplace {
+        for line in agent::install_marketplace(&agents)? {
+            println!("{line}");
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
+    if !project.is_dir() {
+        return Err(format!("`{}` is not a directory", project.display()));
+    }
+    for installed in agent::install_project_skill(&project, &agents)? {
+        for (file, change) in installed.files {
+            println!("{}: {change} {}", installed.agent, file.display());
+        }
+    }
+    println!(
+        "skill version matches lemmaspec {}",
+        env!("CARGO_PKG_VERSION")
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn run_upgrade(args: &[String]) -> Result<ExitCode, String> {
+    let check_only = match args {
+        [] => false,
+        [flag] if flag == "--check" => true,
+        [unexpected, ..] => return Err(format!("unexpected argument `{unexpected}` for upgrade")),
+    };
+    let current = env!("CARGO_PKG_VERSION");
+    let install = Install::detect();
+    println!("installed: lemmaspec {current} via {install}");
+    let latest = upgrade::latest_version()?;
+    println!("latest:    lemmaspec {latest}");
+    let behind = upgrade::compare_versions(current, &latest) == std::cmp::Ordering::Less;
+    if let Some(false) = agent::project_skill_is_current(Path::new(".")) {
+        println!("note: the skill in this project differs from this binary; run `lemmaspec agent install`");
+    }
+    if !behind {
+        println!("up to date");
+        return Ok(ExitCode::SUCCESS);
+    }
+    if check_only {
+        println!("newer release available");
+        return Ok(ExitCode::from(1));
+    }
+    let Some(command) = install.upgrade_command() else {
+        println!("{}", install.advice());
+        return Ok(ExitCode::from(1));
+    };
+    println!("running: {}", command.join(" "));
+    let status = std::process::Command::new(&command[0])
+        .args(&command[1..])
+        .status()
+        .map_err(|error| format!("run `{}`: {error}", command.join(" ")))?;
+    if !status.success() {
+        return Err(format!("`{}` failed", command.join(" ")));
+    }
+    println!("upgraded to lemmaspec {latest}; run `lemmaspec agent install` in each project to refresh its skill");
+    Ok(ExitCode::SUCCESS)
 }
 
 fn print_help(args: &[String]) -> Result<ExitCode, String> {
@@ -143,6 +261,7 @@ fn print_help(args: &[String]) -> Result<ExitCode, String> {
             Ok(ExitCode::SUCCESS)
         }
         [topic] if topic == "syntax" => print_syntax(&[]),
+        [topic] if topic == "intro" => print_intro(&[]),
         [topic] => Err(format!("unknown help topic `{topic}`\n\n{HELP}")),
         _ => Err(format!("help accepts at most one topic\n\n{HELP}")),
     }
