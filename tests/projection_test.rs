@@ -335,3 +335,63 @@ spec aggregate_projection {
     let serialized = serde_json::to_string(&projection).expect("serialize aggregate graph");
     assert!(!serialized.contains("__agg"), "{serialized}");
 }
+
+#[test]
+fn projects_authored_prose_roles_and_readings() {
+    let source = r#"
+// Which mutants does each policy govern?
+
+spec prose {
+  // Ties a mutant to the policy that judges it.
+  relation governed_by {
+    args: [symbol, symbol]
+    roles: [mutation, policy]
+    reads: "{mutation} is governed by {policy}"
+  }
+  // Recorded from the fixture manifest.
+  fact m { relation: governed_by args: [rule_deletion_caught, rule_coverage] }
+  expect one { query: "governed_by(M, P)" count: 1 }
+}
+"#;
+    let projection = project_artifact(source).expect("project prose");
+    let json = serde_json::to_value(&projection).expect("serialize");
+    let nodes = json["nodes"].as_array().expect("nodes");
+    let node = |kind: &str| {
+        nodes
+            .iter()
+            .find(|node| node["type"] == kind)
+            .unwrap_or_else(|| panic!("{kind} node"))
+    };
+
+    assert_eq!(
+        node("spec")["doc"],
+        "Which mutants does each policy govern?"
+    );
+    assert_eq!(
+        node("relation")["roles"],
+        serde_json::json!(["mutation", "policy"])
+    );
+    assert_eq!(
+        node("relation")["reads"],
+        "{mutation} is governed by {policy}"
+    );
+    assert_eq!(
+        node("relation")["doc"],
+        "Ties a mutant to the policy that judges it."
+    );
+    assert_eq!(
+        node("fact")["reading"],
+        "rule_deletion_caught is governed by rule_coverage"
+    );
+    assert_eq!(node("fact")["doc"], "Recorded from the fixture manifest.");
+    assert!(node("expectation").get("doc").is_none());
+
+    let bare = project_artifact(EXAMPLE).expect("project example");
+    let bare = serde_json::to_value(&bare).expect("serialize");
+    assert!(bare["nodes"]
+        .as_array()
+        .expect("nodes")
+        .iter()
+        .filter(|node| node["type"] == "relation")
+        .all(|node| node.get("roles").is_none() && node.get("reads").is_none()));
+}

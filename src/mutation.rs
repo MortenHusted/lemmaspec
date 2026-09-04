@@ -378,6 +378,7 @@ mod tests {
             relation: None,
             except: Vec::new(),
             must_fail: None,
+            doc: None,
         };
         let target = MutationTarget::Rule {
             rule: "derive".to_string(),

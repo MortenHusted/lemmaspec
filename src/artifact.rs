@@ -27,6 +27,14 @@ pub enum FactValue {
 pub struct RelationDecl {
     pub name: String,
     pub args: Vec<ValueType>,
+    /// Human names for each argument position, e.g. `[mutation, policy]`.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub roles: Vec<String>,
+    /// Sentence template over the roles, e.g. `"{mutation} is governed by {policy}"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reads: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -36,6 +44,8 @@ pub struct FactDecl {
     pub args: Vec<FactValue>,
     pub confidence: f64,
     pub provenance: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -45,6 +55,8 @@ pub struct RuleDecl {
     pub when: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub condition_ids: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc: Option<String>,
 }
 
 impl RuleDecl {
@@ -65,6 +77,8 @@ pub struct ExpectationDecl {
     pub id: String,
     pub query: String,
     pub count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -85,6 +99,8 @@ pub struct MutationDecl {
     pub except: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub must_fail: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc: Option<String>,
 }
 
 impl MutationDecl {
@@ -104,6 +120,10 @@ impl MutationDecl {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Artifact {
     pub name: String,
+    /// Every comment written before the `spec` keyword: the question the
+    /// artifact answers, in the author's words.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc: Option<String>,
     pub relations: Vec<RelationDecl>,
     pub facts: Vec<FactDecl>,
     pub rules: Vec<RuleDecl>,
@@ -200,10 +220,19 @@ struct Token {
     offset: usize,
 }
 
+/// One source comment, kept so declarations can carry their author's prose.
+#[derive(Debug, Clone)]
+struct Comment {
+    text: String,
+    start: usize,
+    end: usize,
+}
+
 struct Lexer<'a> {
     source: &'a str,
     bytes: &'a [u8],
     offset: usize,
+    comments: Vec<Comment>,
 }
 
 impl<'a> Lexer<'a> {
@@ -212,10 +241,11 @@ impl<'a> Lexer<'a> {
             source,
             bytes: source.as_bytes(),
             offset: 0,
+            comments: Vec::new(),
         }
     }
 
-    fn tokenize(mut self) -> Result<Vec<Token>, ArtifactError> {
+    fn tokenize(mut self) -> Result<(Vec<Token>, Vec<Comment>), ArtifactError> {
         let mut tokens = Vec::new();
         loop {
             self.skip_trivia()?;
@@ -224,7 +254,7 @@ impl<'a> Lexer<'a> {
                     kind: TokenKind::Eof,
                     offset: self.offset,
                 });
-                return Ok(tokens);
+                return Ok((tokens, self.comments));
             }
             let offset = self.offset;
             let kind = match self.bytes[self.offset] {
@@ -279,7 +309,9 @@ impl<'a> Lexer<'a> {
                 self.offset += 1;
             }
             if self.bytes.get(self.offset..self.offset + 2) == Some(b"//") {
+                let start = self.offset;
                 self.offset += 2;
+                let text_start = self.offset;
                 while self
                     .bytes
                     .get(self.offset)
@@ -287,9 +319,13 @@ impl<'a> Lexer<'a> {
                 {
                     self.offset += 1;
                 }
+                self.comment(start, text_start, self.offset, self.offset);
                 continue;
             }
             if self.bytes.get(self.offset) == Some(&b'#') {
+                let start = self.offset;
+                self.offset += 1;
+                let text_start = self.offset;
                 while self
                     .bytes
                     .get(self.offset)
@@ -297,22 +333,42 @@ impl<'a> Lexer<'a> {
                 {
                     self.offset += 1;
                 }
+                self.comment(start, text_start, self.offset, self.offset);
                 continue;
             }
             if self.bytes.get(self.offset..self.offset + 2) == Some(b"/*") {
                 let start = self.offset;
                 self.offset += 2;
+                let text_start = self.offset;
                 while self.bytes.get(self.offset..self.offset + 2) != Some(b"*/") {
                     if self.offset >= self.bytes.len() {
                         return Err(self.error(start, "unterminated block comment"));
                     }
                     self.offset += 1;
                 }
+                let text_end = self.offset;
                 self.offset += 2;
+                self.comment(start, text_start, text_end, self.offset);
                 continue;
             }
             return Ok(());
         }
+    }
+
+    fn comment(&mut self, start: usize, text_start: usize, text_end: usize, end: usize) {
+        let text = self.source[text_start..text_end]
+            .lines()
+            .map(|line| {
+                let line = line.trim();
+                line.strip_prefix('*').map_or(line, str::trim_start)
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        self.comments.push(Comment {
+            text: text.trim().to_string(),
+            start,
+            end,
+        });
     }
 
     fn identifier(&mut self) -> String {
@@ -408,6 +464,12 @@ fn is_identifier_continue(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_'
 }
 
+/// Whitespace spanning at most one line break: the gap between a comment
+/// and the declaration it documents.
+fn touches(gap: &str) -> bool {
+    gap.chars().all(char::is_whitespace) && gap.matches('\n').count() <= 1
+}
+
 fn line_column(source: &str, offset: usize) -> (usize, usize) {
     let prefix = &source[..offset.min(source.len())];
     let line = prefix.bytes().filter(|byte| *byte == b'\n').count() + 1;
@@ -433,24 +495,37 @@ struct RawBlock {
     kind: String,
     name: String,
     fields: BTreeMap<String, RawValue>,
+    doc: Option<String>,
+    start: usize,
+    end: usize,
+}
+
+struct ParsedSpec {
+    name: String,
+    doc: Option<String>,
+    blocks: Vec<RawBlock>,
 }
 
 struct Parser<'a> {
     source: &'a str,
     tokens: Vec<Token>,
+    comments: Vec<Comment>,
     cursor: usize,
 }
 
 impl<'a> Parser<'a> {
     fn new(source: &'a str) -> Result<Self, ArtifactError> {
+        let (tokens, comments) = Lexer::new(source).tokenize()?;
         Ok(Self {
             source,
-            tokens: Lexer::new(source).tokenize()?,
+            tokens,
+            comments,
             cursor: 0,
         })
     }
 
-    fn parse(mut self) -> Result<(String, Vec<RawBlock>), ArtifactError> {
+    fn parse(mut self) -> Result<ParsedSpec, ArtifactError> {
+        let spec_offset = self.current().offset;
         self.expect_keyword("spec")?;
         let name = self.expect_identifier("spec name")?;
         self.expect(TokenKind::LeftBrace, "`{`")?;
@@ -463,10 +538,78 @@ impl<'a> Parser<'a> {
         }
         self.advance();
         self.expect(TokenKind::Eof, "end of file")?;
-        Ok((name, blocks))
+        let doc = self.assign_docs(spec_offset, &mut blocks);
+        Ok(ParsedSpec { name, doc, blocks })
+    }
+
+    /// Attach comments to declarations. Everything before `spec` documents
+    /// the artifact. A comment block touching the line above a declaration
+    /// documents that declaration, as does a comment trailing its closing
+    /// brace. Comments separated by a blank line are section headings and
+    /// belong to nobody.
+    fn assign_docs(&self, spec_offset: usize, blocks: &mut [RawBlock]) -> Option<String> {
+        let mut used = vec![false; self.comments.len()];
+        let preamble: Vec<usize> = (0..self.comments.len())
+            .filter(|index| self.comments[*index].end <= spec_offset)
+            .collect();
+        preamble.iter().for_each(|index| used[*index] = true);
+        let spec_doc = self.join_comments(&preamble);
+
+        let mut trailing = vec![None; blocks.len()];
+        for (block_index, block) in blocks.iter().enumerate() {
+            let candidate = self.comments.iter().position(|comment| {
+                comment.start > block.end && !self.source[block.end..comment.start].contains('\n')
+            });
+            if let Some(index) = candidate.filter(|index| !used[*index]) {
+                used[index] = true;
+                trailing[block_index] = Some(index);
+            }
+        }
+
+        for (block_index, block) in blocks.iter_mut().enumerate() {
+            let mut leading = Vec::new();
+            let mut boundary = block.start;
+            for index in (0..self.comments.len()).rev() {
+                let comment = &self.comments[index];
+                if used[index] || comment.end > boundary {
+                    continue;
+                }
+                if !touches(&self.source[comment.end..boundary]) {
+                    break;
+                }
+                leading.push(index);
+                boundary = comment.start;
+            }
+            leading.reverse();
+            leading.iter().for_each(|index| used[*index] = true);
+            let mut parts = Vec::new();
+            parts.extend(self.join_comments(&leading));
+            parts.extend(trailing[block_index].map(|index| self.comments[index].text.clone()));
+            let doc = parts.join("\n");
+            block.doc = (!doc.trim().is_empty()).then(|| doc.trim().to_string());
+        }
+        spec_doc
+    }
+
+    fn join_comments(&self, indices: &[usize]) -> Option<String> {
+        let mut text = String::new();
+        for (position, index) in indices.iter().enumerate() {
+            if position > 0 {
+                let previous = &self.comments[indices[position - 1]];
+                let gap = &self.source[previous.end..self.comments[*index].start];
+                text.push('\n');
+                if gap.matches('\n').count() > 1 {
+                    text.push('\n');
+                }
+            }
+            text.push_str(&self.comments[*index].text);
+        }
+        let text = text.trim();
+        (!text.is_empty()).then(|| text.to_string())
     }
 
     fn block(&mut self) -> Result<RawBlock, ArtifactError> {
+        let start = self.current().offset;
         let kind = self.expect_identifier("block kind")?;
         let name = self.expect_identifier("block name")?;
         self.expect(TokenKind::LeftBrace, "`{`")?;
@@ -485,8 +628,16 @@ impl<'a> Parser<'a> {
                 self.advance();
             }
         }
+        let end = self.current().offset;
         self.advance();
-        Ok(RawBlock { kind, name, fields })
+        Ok(RawBlock {
+            kind,
+            name,
+            fields,
+            doc: None,
+            start,
+            end,
+        })
     }
 
     fn value(&mut self) -> Result<RawValue, ArtifactError> {
@@ -597,14 +748,16 @@ impl<'a> Parser<'a> {
 }
 
 pub fn parse_artifact(source: &str) -> Result<Artifact, ArtifactError> {
-    let (name, blocks) = Parser::new(source)?.parse()?;
-    Artifact::from_blocks(name, blocks)
+    let parsed = Parser::new(source)?.parse()?;
+    Artifact::from_blocks(parsed)
 }
 
 impl Artifact {
-    fn from_blocks(name: String, blocks: Vec<RawBlock>) -> Result<Self, ArtifactError> {
+    fn from_blocks(parsed: ParsedSpec) -> Result<Self, ArtifactError> {
+        let ParsedSpec { name, doc, blocks } = parsed;
         let mut artifact = Artifact {
             name,
+            doc,
             relations: Vec::new(),
             facts: Vec::new(),
             rules: Vec::new(),
@@ -640,10 +793,19 @@ impl Artifact {
                             },
                         )
                         .collect::<Result<Vec<_>, _>>()?;
+                    let roles = take_optional_text_list(&mut block, "roles")?;
+                    let reads = take_optional_text(&mut block, "reads")?;
+                    validate_roles(&block, &args, &roles)?;
+                    if let Some(template) = reads.as_deref() {
+                        validate_reads(&block, template, &roles, args.len())?;
+                    }
                     reject_unknown_fields(&block)?;
                     artifact.relations.push(RelationDecl {
                         name: block.name,
                         args,
+                        roles,
+                        reads,
+                        doc: block.doc,
                     });
                 }
                 "fact" => {
@@ -688,6 +850,7 @@ impl Artifact {
                         args,
                         confidence,
                         provenance,
+                        doc: block.doc,
                     });
                 }
                 "rule" => {
@@ -705,6 +868,7 @@ impl Artifact {
                         derive,
                         when,
                         condition_ids,
+                        doc: block.doc,
                     });
                 }
                 "expect" => {
@@ -730,6 +894,7 @@ impl Artifact {
                         id: block.name,
                         query,
                         count,
+                        doc: block.doc,
                     });
                 }
                 "mutation" => {
@@ -754,6 +919,7 @@ impl Artifact {
                         relation,
                         except,
                         must_fail,
+                        doc: block.doc,
                     });
                 }
                 other => {
@@ -984,6 +1150,79 @@ fn named_condition_exists(rules: &[RuleDecl], reference: &str) -> bool {
                 .iter()
                 .any(|candidate| candidate == condition_id)
     })
+}
+
+fn validate_roles(
+    block: &RawBlock,
+    args: &[ValueType],
+    roles: &[String],
+) -> Result<(), ArtifactError> {
+    if roles.is_empty() {
+        return Ok(());
+    }
+    if roles.len() != args.len() {
+        return Err(ArtifactError::new(format!(
+            "relation `{}` declares {} roles for {} arguments",
+            block.name,
+            roles.len(),
+            args.len()
+        )));
+    }
+    let mut seen = BTreeSet::new();
+    for role in roles {
+        if role.is_empty() || !role.bytes().all(is_identifier_continue) {
+            return Err(ArtifactError::new(format!(
+                "relation `{}` role `{role}` must be an identifier",
+                block.name
+            )));
+        }
+        if !seen.insert(role.as_str()) {
+            return Err(ArtifactError::new(format!(
+                "relation `{}` repeats role `{role}`",
+                block.name
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Every `{placeholder}` in a `reads` template must name a role or an
+/// argument position, so a fact can always be read back as a sentence.
+fn validate_reads(
+    block: &RawBlock,
+    template: &str,
+    roles: &[String],
+    arity: usize,
+) -> Result<(), ArtifactError> {
+    for placeholder in template_placeholders(template).map_err(|message| {
+        ArtifactError::new(format!("relation `{}` reads {message}", block.name))
+    })? {
+        let known = roles.iter().any(|role| role == placeholder)
+            || placeholder
+                .parse::<usize>()
+                .is_ok_and(|index| index < arity);
+        if !known {
+            return Err(ArtifactError::new(format!(
+                "relation `{}` reads placeholder `{{{placeholder}}}` names no role or argument position",
+                block.name
+            )));
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn template_placeholders(template: &str) -> Result<Vec<&str>, String> {
+    let mut placeholders = Vec::new();
+    let mut rest = template;
+    while let Some(open) = rest.find('{') {
+        let after = &rest[open + 1..];
+        let Some(close) = after.find('}') else {
+            return Err("template has an unclosed `{`".to_string());
+        };
+        placeholders.push(&after[..close]);
+        rest = &after[close + 1..];
+    }
+    Ok(placeholders)
 }
 
 fn take_list(block: &mut RawBlock, field: &str) -> Result<Vec<RawValue>, ArtifactError> {

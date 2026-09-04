@@ -11,7 +11,8 @@ pub mod html;
 pub mod intern;
 pub mod magic;
 pub mod mutation;
-pub mod projection;
+pub mod narrative;
+mod projection;
 
 pub use artifact::{
     parse_artifact, walk_artifact, Artifact, ArtifactError, ExpectationDecl, FactDecl, FactValue,
@@ -26,6 +27,7 @@ pub use mutation::{
     mutate_artifact, MutationPolicyReport, MutationReport, MutationResult, MutationStatus,
     MutationSummary, MutationTarget,
 };
+pub use narrative::read_fact;
 pub use projection::{
     project_artifact, GraphEdge, GraphNode, GraphNodeData, GraphProjection, ProjectionError,
 };

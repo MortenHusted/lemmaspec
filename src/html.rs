@@ -130,6 +130,7 @@ fn render_constraints(projection: &GraphProjection) -> String {
                 derive,
                 when,
                 condition_ids,
+                ..
             } => {
                 html.push_str(&format!(
                     r#"<article class="constraint" data-kind="rule"><div class="constraint-head"><span class="chip c-attention">rule</span><strong>{}</strong></div><code>{}</code><ol>"#,
@@ -151,6 +152,7 @@ fn render_constraints(projection: &GraphProjection) -> String {
                 expected_count,
                 actual_count,
                 satisfied,
+                ..
             } => {
                 let (status, class) = if *satisfied {
                     ("passed", "c-stable")
@@ -169,6 +171,7 @@ fn render_constraints(projection: &GraphProjection) -> String {
                 relation,
                 except,
                 must_fail,
+                ..
             } => {
                 let target = relation
                     .as_deref()
@@ -205,7 +208,7 @@ fn render_constraints(projection: &GraphProjection) -> String {
 fn render_relations(projection: &GraphProjection) -> String {
     let mut rows = String::new();
     for node in &projection.nodes {
-        if let GraphNodeData::Relation { name, args } = &node.data {
+        if let GraphNodeData::Relation { name, args, .. } = &node.data {
             let signature = args.iter().map(value_type).collect::<Vec<_>>().join(", ");
             rows.push_str(&format!(
                 "<tr><td><code>{}</code></td><td><code>({})</code></td></tr>",
@@ -233,6 +236,7 @@ fn render_facts(projection: &GraphProjection) -> String {
             confidence,
             provenance,
             declarations,
+            ..
         } = &node.data
         {
             let args = args.iter().map(fact_value).collect::<Vec<_>>().join(", ");
