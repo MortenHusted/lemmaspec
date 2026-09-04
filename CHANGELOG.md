@@ -7,6 +7,17 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- Comments are kept: everything before `spec` documents the artifact, and a
+  comment touching a declaration documents that declaration.
+- Relations accept optional `roles` naming each argument and a `reads`
+  sentence template; facts carry a `reading` in the projection.
+- The HTML render opens with a human guide: the question, observations,
+  assumptions with their blast radius, relationships and vocabulary,
+  reasoning, conclusions with proof trees, claims, and stress tests, each
+  card linked to its graph node.
+
 ### Changed
 
 - HTML graph view: force-directed layout clustered by relation, with pan,

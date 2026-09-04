@@ -172,11 +172,28 @@ which can translate the stable projection into a datastore-specific contract.
 [examples/persistence_adapter_readiness.lemmaspec](examples/persistence_adapter_readiness.lemmaspec)
 models that boundary as a deliberately incomplete executable specification.
 
-`render` embeds the exact projected graph, original source, rules,
-expectations, and evidence in one offline HTML file. The graph view clusters
-nodes by relation, hides symbol hubs until toggled on, and supports pan, zoom,
-search, neighbourhood focus, and cycle highlighting without any external
-scripts:
+`render` writes one offline HTML file that reads as a guide for a human:
+the question the artifact answers, its observations, assumptions, relationships,
+reasoning, conclusions with proof trees, claims, and stress tests, then the
+same argument as an interactive graph clustered by relation. Comments in the
+source become the prose. Relations can declare `roles` for their arguments and a
+`reads` sentence template so facts and rule conditions render as sentences:
+
+```text
+// Can the release ship today?
+spec release_readiness {
+  relation depends_on {
+    args: [symbol, symbol]
+    roles: [item, dependency]
+    reads: "{item} depends on {dependency}"
+  }
+  ...
+}
+```
+
+Facts with `provenance` are observations; facts without it, or below full
+confidence, are assumptions, listed with everything that would fall if they
+turned out to be wrong. Render with:
 
 ```sh
 lemmaspec render examples/release_readiness.lemmaspec

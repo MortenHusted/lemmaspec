@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 
 use crate::artifact::{FactValue, ValueType};
+use crate::guide::{render_guide, GuideSections};
 use crate::projection::{GraphNodeData, GraphProjection};
 
 const TEMPLATE: &str = include_str!("html_template.html");
@@ -21,7 +22,16 @@ pub fn render_projection_html(source: &str, projection: &GraphProjection) -> Str
         });
     let (thesis, thesis_detail) = expectation_summary(expectation_count, failed);
     let summary = render_summary(projection, failed);
-    let constraints = render_constraints(projection);
+    let GuideSections {
+        question,
+        observations,
+        assumptions,
+        relationships,
+        reasoning,
+        conclusions,
+        claims,
+        stress_tests,
+    } = render_guide(projection);
     let relations = render_relations(projection);
     let facts = render_facts(projection);
     let graph_json = escape_json_for_script(
@@ -31,10 +41,17 @@ pub fn render_projection_html(source: &str, projection: &GraphProjection) -> Str
     let status_label = if failed == 0 { "clean" } else { "incomplete" };
 
     render_template(&BTreeMap::from([
-        ("CONSTRAINTS", constraints),
+        ("ASSUMPTIONS", assumptions),
+        ("CLAIMS", claims),
+        ("CONCLUSIONS", conclusions),
         ("FACTS", facts),
         ("GRAPH_JSON", graph_json),
+        ("OBSERVATIONS", observations),
+        ("QUESTION", question),
+        ("REASONING", reasoning),
         ("RELATIONS", relations),
+        ("RELATIONSHIPS", relationships),
+        ("STRESS_TESTS", stress_tests),
         ("SOURCE", source),
         ("SPEC_NAME", html_escape(&projection.spec)),
         ("STATUS_LABEL", html_escape(status_label)),
@@ -119,90 +136,6 @@ fn render_summary(projection: &GraphProjection, failed: usize) -> String {
             format!(r#"<div class="stat"><strong>{value}</strong><span>{label}</span></div>"#)
         })
         .collect()
-}
-
-fn render_constraints(projection: &GraphProjection) -> String {
-    let mut html = String::new();
-    for node in &projection.nodes {
-        match &node.data {
-            GraphNodeData::Rule {
-                name,
-                derive,
-                when,
-                condition_ids,
-                ..
-            } => {
-                html.push_str(&format!(
-                    r#"<article class="constraint" data-kind="rule"><div class="constraint-head"><span class="chip c-attention">rule</span><strong>{}</strong></div><code>{}</code><ol>"#,
-                    html_escape(name),
-                    html_escape(derive)
-                ));
-                for (index, condition) in when.iter().enumerate() {
-                    let label = condition_ids
-                        .get(index)
-                        .map(|id| format!("{id}: {condition}"))
-                        .unwrap_or_else(|| condition.clone());
-                    html.push_str(&format!("<li><code>{}</code></li>", html_escape(&label)));
-                }
-                html.push_str("</ol></article>");
-            }
-            GraphNodeData::Expectation {
-                name,
-                query,
-                expected_count,
-                actual_count,
-                satisfied,
-                ..
-            } => {
-                let (status, class) = if *satisfied {
-                    ("passed", "c-stable")
-                } else {
-                    ("failed", "c-critical")
-                };
-                html.push_str(&format!(
-                    r#"<article class="constraint" data-kind="expectation" data-status="{status}"><div class="constraint-head"><span class="chip {class}">expect</span><strong>{}</strong><span class="result {class}">{status}</span></div><code>{}</code><p>Expected <b>{expected_count}</b> result(s); found <b>{actual_count}</b>.</p></article>"#,
-                    html_escape(name),
-                    html_escape(query)
-                ));
-            }
-            GraphNodeData::Mutation {
-                name,
-                operator,
-                relation,
-                except,
-                must_fail,
-                ..
-            } => {
-                let target = relation
-                    .as_deref()
-                    .map(|relation| format!("relation {relation}"))
-                    .unwrap_or_else(|| "all matching declarations".to_string());
-                let oracle = must_fail
-                    .as_deref()
-                    .map(|expectation| format!("must fail {expectation}"))
-                    .unwrap_or_else(|| "any expectation failure".to_string());
-                let exclusions = if except.is_empty() {
-                    "none".to_string()
-                } else {
-                    except.join(", ")
-                };
-                html.push_str(&format!(
-                    r#"<article class="constraint" data-kind="mutation"><div class="constraint-head"><span class="chip c-attention">mutation</span><strong>{}</strong></div><code>{}</code><p>Targets {}; oracle: {}; exclusions: {}.</p></article>"#,
-                    html_escape(name),
-                    html_escape(operator.as_str()),
-                    html_escape(&target),
-                    html_escape(&oracle),
-                    html_escape(&exclusions)
-                ));
-            }
-            _ => {}
-        }
-    }
-    if html.is_empty() {
-        "<p class=\"empty\">No rules or expectations declared.</p>".to_string()
-    } else {
-        html
-    }
 }
 
 fn render_relations(projection: &GraphProjection) -> String {
@@ -297,7 +230,7 @@ fn humanize(value: &str) -> String {
     result
 }
 
-fn html_escape(value: &str) -> String {
+pub(crate) fn html_escape(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for character in value.chars() {
         match character {

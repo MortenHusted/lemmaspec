@@ -12,34 +12,138 @@ spec mutation_analysis {
 
   // ================================================================ schema
 
-  relation policy                 { args: [symbol] }
-  relation oracle                 { args: [symbol, symbol] } // policy, any_failure | named_expectation
-  relation required_failure       { args: [symbol, symbol] } // policy, expectation
-  relation mutation               { args: [symbol] }
-  relation governed_by            { args: [symbol, symbol] } // mutation, policy
-  relation target_kind            { args: [symbol, symbol] } // mutation, rule | condition | fact
-  relation uses_operator          { args: [symbol, symbol] } // mutation, operator
-  relation exemption              { args: [symbol] }
-  relation validation             { args: [symbol, symbol] } // mutation, valid | invalid
-  relation failed_expectation     { args: [symbol, symbol] }
+  relation policy {
+    args: [symbol]
+    roles: [policy]
+    reads: "{policy} is a mutation policy"
+  }
+  relation oracle {
+    args: [symbol, symbol]
+    roles: [policy, mode]
+    reads: "{policy} counts a kill on {mode}"
+  }
+  relation required_failure {
+    args: [symbol, symbol]
+    roles: [policy, expectation]
+    reads: "{policy} requires {expectation} to fail"
+  }
+  relation mutation {
+    args: [symbol]
+    roles: [mutation]
+    reads: "{mutation} is a mutant"
+  }
+  relation governed_by {
+    args: [symbol, symbol]
+    roles: [mutation, policy]
+    reads: "{mutation} is governed by {policy}"
+  }
+  relation target_kind {
+    args: [symbol, symbol]
+    roles: [mutation, kind]
+    reads: "{mutation} targets a {kind}"
+  }
+  relation uses_operator {
+    args: [symbol, symbol]
+    roles: [mutation, operator]
+    reads: "{mutation} uses {operator}"
+  }
+  relation exemption {
+    args: [symbol]
+    roles: [mutation]
+    reads: "{mutation} is exempt by policy"
+  }
+  relation validation {
+    args: [symbol, symbol]
+    roles: [mutation, verdict]
+    reads: "{mutation} is {verdict} after validation"
+  }
+  relation failed_expectation {
+    args: [symbol, symbol]
+    roles: [mutation, expectation]
+    reads: "{mutation} makes {expectation} fail"
+  }
 
-  relation first_slice_operator   { args: [symbol] }
-  relation selection_mode         { args: [symbol, symbol] }
-  relation exclusion_scope        { args: [symbol, symbol] }
-  relation execution_property     { args: [symbol] }
-  relation report_field           { args: [symbol] }
-  relation deferred_operator      { args: [symbol] }
-  relation configuration_error    { args: [symbol] }
+  relation first_slice_operator {
+    args: [symbol]
+    roles: [operator]
+    reads: "{operator} is a first-slice operator"
+  }
+  relation selection_mode {
+    args: [symbol, symbol]
+    roles: [operator, mode]
+    reads: "{operator} selects {mode}"
+  }
+  relation exclusion_scope {
+    args: [symbol, symbol]
+    roles: [operator, scope]
+    reads: "{operator} can exclude a {scope}"
+  }
+  relation execution_property {
+    args: [symbol]
+    roles: [property]
+    reads: "execution guarantees {property}"
+  }
+  relation report_field {
+    args: [symbol]
+    roles: [field]
+    reads: "the report includes {field}"
+  }
+  relation deferred_operator {
+    args: [symbol]
+    roles: [operator]
+    reads: "{operator} is deferred to a later slice"
+  }
+  relation configuration_error {
+    args: [symbol]
+    roles: [error]
+    reads: "{error} is a configuration error"
+  }
 
-  relation selected               { args: [symbol] }
-  relation killed                 { args: [symbol] }
-  relation survived               { args: [symbol] }
-  relation rejected               { args: [symbol] }
-  relation excluded               { args: [symbol] }
-  relation valid_execution        { args: [symbol] }
-  relation policy_has_valid_mutant { args: [symbol] }
-  relation vacuous_policy         { args: [symbol] }
-  relation error_behavior         { args: [symbol] }
+  relation selected {
+    args: [symbol]
+    roles: [mutation]
+    reads: "{mutation} is selected"
+  }
+  relation killed {
+    args: [symbol]
+    roles: [mutation]
+    reads: "{mutation} is killed"
+  }
+  relation survived {
+    args: [symbol]
+    roles: [mutation]
+    reads: "{mutation} survives"
+  }
+  relation rejected {
+    args: [symbol]
+    roles: [mutation]
+    reads: "{mutation} is rejected"
+  }
+  relation excluded {
+    args: [symbol]
+    roles: [mutation]
+    reads: "{mutation} is excluded"
+  }
+  relation valid_execution {
+    args: [symbol]
+    roles: [mutation]
+    reads: "{mutation} is a valid execution"
+  }
+  relation policy_has_valid_mutant {
+    args: [symbol]
+    roles: [policy]
+    reads: "{policy} has at least one valid mutant"
+  }
+  relation vacuous_policy {
+    args: [symbol]
+    roles: [policy]
+    reads: "{policy} is vacuous"
+  }
+  relation error_behavior {
+    args: [symbol]
+    roles: [behavior]
+    reads: "errors behave as {behavior}"
+  }
 
   // ========================================================== native boundary
 

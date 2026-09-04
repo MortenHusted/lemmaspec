@@ -102,14 +102,63 @@
   .scene.dimmed .edge:not(.lit) { opacity:.06 }
   .scene.dimmed .hull { opacity:.35 }
   .weights { display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:8px; color:var(--faint); font-size:11px }
-  .constraint-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px }
-  .constraint { padding:15px 17px; border:1px solid var(--line); border-left:3px solid var(--attention); border-radius:10px; background:var(--panel) }
-  .constraint[data-status="passed"] { border-left-color:var(--stable) }
-  .constraint[data-status="failed"] { border-left-color:var(--critical) }
-  .constraint-head { display:flex; align-items:center; gap:9px; margin-bottom:10px }
-  .constraint-head .result { margin-left:auto; font:11px var(--mono) }
-  .constraint ol { margin:9px 0 0; padding-left:22px; color:var(--dim) }
-  .constraint p { margin:8px 0 0; color:var(--dim); font-size:13px }
+  .intro { margin:-6px 0 16px; color:var(--dim); font-size:14px; max-width:78ch }
+  .question { margin-top:26px }
+  .question h2 { margin-top:0; border-top:0; padding-top:0 }
+  .question p { max-width:78ch; font-size:16px; color:var(--ink) }
+  .legend-title { margin:18px 0 8px; color:var(--faint); font-size:11px; font-weight:650; letter-spacing:1.2px; text-transform:uppercase }
+  .guide h3 { margin:26px 0 10px; font-size:13px; color:var(--dim); letter-spacing:.6px; text-transform:uppercase }
+  .card { position:relative; margin:0 0 10px; padding:13px 16px; border:1px solid var(--line); border-left:3px solid var(--neutral-br); border-radius:10px; background:var(--panel) }
+  .card[data-standing="observation"] { border-left-color:var(--stable) }
+  .card[data-standing="assumption"] { border-left-color:var(--attention) }
+  .card[data-standing="conclusion"] { border-left-color:var(--additive) }
+  .card.rule, .card.policy { border-left-color:var(--attention) }
+  .card.claim[data-status="passed"] { border-left-color:var(--stable) }
+  .card.claim[data-status="failed"] { border-left-color:var(--critical) }
+  .card.concept { border-left-color:var(--dim) }
+  .card:target { outline:2px solid var(--accent); outline-offset:2px }
+  .card-head { display:flex; flex-wrap:wrap; align-items:baseline; gap:8px 10px }
+  .card-head strong { font-size:15px }
+  .card-head .count, .card-head .signature { color:var(--faint); font-size:12px }
+  .sentence { font-size:15px }
+  .sentence code, .lead code { font-size:13px }
+  .sentence i, .lead i, .signature i, .vocab i { color:var(--faint); font-style:normal; font-size:11px; letter-spacing:.5px; text-transform:uppercase; margin-right:2px }
+  .meta { margin-top:6px; color:var(--faint); font-size:12px }
+  .meta code { font-size:11px }
+  .doc { margin-top:8px; color:var(--dim); font-size:13px; max-width:78ch }
+  .doc p { margin:0 0 6px }
+  .reads { margin-top:6px; color:var(--dim); font-size:12px; font-style:italic }
+  .lead { margin:8px 0 0; color:var(--ink); font-size:14px }
+  .verdict { margin:6px 0 0; color:var(--dim); font-size:13px }
+  .card.claim[data-status="failed"] .verdict { color:var(--critical) }
+  .conditions { margin:6px 0 0; padding-left:24px; color:var(--dim); font-size:14px }
+  .conditions li { margin:3px 0 }
+  .cond { display:inline-block; margin-right:8px; color:var(--faint); font:11px var(--mono) }
+  .not { color:var(--critical); font:600 11px var(--sans); letter-spacing:.6px; text-transform:uppercase; margin-right:4px }
+  .radius { margin-top:8px; color:var(--attention); font-size:13px }
+  .radius.quiet { color:var(--faint) }
+  .why { margin-top:8px; font-size:13px }
+  .why-label { color:var(--faint); font-size:11px; letter-spacing:.6px; text-transform:uppercase }
+  .because { margin:4px 0 0; padding-left:18px; color:var(--dim) }
+  .because li { margin:3px 0 }
+  .because .via { color:var(--faint); font-size:12px }
+  .because details { display:inline-block; margin-left:8px }
+  .because summary { cursor:pointer; color:var(--accent); font-size:11px }
+  .because .more { color:var(--faint); list-style:none }
+  .ref { color:var(--ink); text-decoration:none; border-bottom:1px dotted var(--faint) }
+  .ref:hover { color:var(--accent); border-bottom-color:var(--accent) }
+  .graph-link { margin-left:auto; color:var(--faint); font-size:11px; text-decoration:none; white-space:nowrap }
+  .graph-link:hover { color:var(--accent) }
+  .group { margin:0 0 12px; border:0; background:none }
+  .group > summary { padding:6px 0; color:var(--ink) }
+  .group > summary .count, .vocab summary .count { color:var(--faint); font-size:12px; margin-left:6px }
+  .group-doc { margin:0 0 10px; color:var(--dim); font-size:13px }
+  .vocab-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:10px }
+  .vocab { margin:0; padding:0 }
+  .vocab summary { padding:10px 14px }
+  .vocab ul { margin:0; padding:0 14px 12px 14px; list-style:none; font-size:13px }
+  .vocab li { display:flex; justify-content:space-between; gap:10px; padding:2px 0 }
+  .vocab li .count { color:var(--faint); font-size:11px; white-space:nowrap }
   .chip { display:inline-flex; width:fit-content; padding:2px 7px; border:1px solid; border-radius:6px; font:10px var(--mono) }
   .c-stable { color:var(--stable); border-color:var(--stable-br); background:var(--stable-bg) }
   .c-additive { color:var(--additive); border-color:var(--additive-br); background:var(--additive-bg) }
@@ -125,7 +174,7 @@
   details pre { overflow:auto; max-height:520px; margin:0; padding:18px; border-top:1px solid var(--line); color:var(--dim); font-size:12px; white-space:pre }
   footer { margin-top:48px; padding-top:17px; border-top:1px solid var(--line); color:var(--faint); font-size:12px }
   @media(max-width:1000px) { .stats { grid-template-columns:repeat(4,1fr) } .graph-layout { grid-template-columns:1fr } .inspector { border-left:0; border-top:1px solid var(--line) } }
-  @media(max-width:720px) { .wrap { padding:24px 16px 60px } .stats { grid-template-columns:repeat(2,1fr) } .constraint-grid { grid-template-columns:1fr } header { flex-direction:column } }
+  @media(max-width:720px) { .wrap { padding:24px 16px 60px } .stats { grid-template-columns:repeat(2,1fr) } header { flex-direction:column } }
 </style>
 </head>
 <body>
@@ -138,7 +187,18 @@
   <section class="def">1 expectation needs attention<small>0 of 1 executable constraints matched; failed expectations remain visible as unresolved work.</small></section>
   <div class="stats"><div class="stat"><strong>3</strong><span>relations</span></div><div class="stat"><strong>4</strong><span>asserted</span></div><div class="stat"><strong>0</strong><span>derived</span></div><div class="stat"><strong>1</strong><span>rules</span></div><div class="stat"><strong>1</strong><span>expectations</span></div><div class="stat"><strong>1</strong><span>failed</span></div><div class="stat"><strong>20</strong><span>nodes</span></div><div class="stat"><strong>32</strong><span>edges</span></div></div>
 
-  <h2>Legend</h2>
+  <section class="question"><h2>The question</h2><p>Models the boundary between LemmaSpec&#39;s deterministic projection and a hypothetical durable-store adapter. The candidate is intentionally missing datastore-owned semantics, so its expectation remains unsatisfied.</p></section>
+  <section class="guide"><h2>Observations (3)</h2><p class="intro">Asserted facts with evidence attached. These are the ground the rest of the argument stands on.</p><details class="group" open><summary><strong>projection_capability</strong> <span class="count">3 facts</span></summary><article class="card" id="n-lemmaspec-persistence_adapter_readiness-fact-0e9b1e2c1841d3bdfe43ccc7ae1b8e5ff020d38e7a6a31cbb05dbf36c3281e49" data-standing="observation"><div class="card-head"><span class="chip c-stable">observation</span><span class="sentence"><code>projection_capability(lemmaspec_projection, stable_ids)</code></span><a class="graph-link" href="#graph" data-node="lemmaspec:persistence_adapter_readiness:fact:0e9b1e2c1841d3bdfe43ccc7ae1b8e5ff020d38e7a6a31cbb05dbf36c3281e49">show in graph</a></div><div class="meta"><code>projection_capability</code> · evidence: README.md, src/projection.rs</div></article><article class="card" id="n-lemmaspec-persistence_adapter_readiness-fact-ed671d260b0c4b96a3c4cb27066e745bf891f7bb9d505d0df2456bc85420e1d2" data-standing="observation"><div class="card-head"><span class="chip c-stable">observation</span><span class="sentence"><code>projection_capability(lemmaspec_projection, internally_closed)</code></span><a class="graph-link" href="#graph" data-node="lemmaspec:persistence_adapter_readiness:fact:ed671d260b0c4b96a3c4cb27066e745bf891f7bb9d505d0df2456bc85420e1d2">show in graph</a></div><div class="meta"><code>projection_capability</code> · evidence: README.md, src/projection.rs</div></article><article class="card" id="n-lemmaspec-persistence_adapter_readiness-fact-fa0c84f949fe8447bff07b27340b830a727b39ab5b63bcc63f3acc12e0bced05" data-standing="observation"><div class="card-head"><span class="chip c-stable">observation</span><span class="sentence"><code>projection_capability(lemmaspec_projection, deterministic)</code></span><a class="graph-link" href="#graph" data-node="lemmaspec:persistence_adapter_readiness:fact:fa0c84f949fe8447bff07b27340b830a727b39ab5b63bcc63f3acc12e0bced05">show in graph</a></div><div class="meta"><code>projection_capability</code> · evidence: README.md</div></article></details></section>
+  <section class="guide"><h2>Assumptions (1)</h2><p class="intro">Asserted without evidence, or below full confidence. Each one is a decision waiting to be made; they are ordered by how much depends on them.</p><article class="card" id="n-lemmaspec-persistence_adapter_readiness-fact-a4e5dd8cce57d882b05b4852d8fef2294f5e5136bb21f3738411ffa076e269d2" data-standing="assumption"><div class="card-head"><span class="chip c-attention">assumption</span><span class="sentence"><code>adapter_provides(store_adapter, projection_validation)</code></span><a class="graph-link" href="#graph" data-node="lemmaspec:persistence_adapter_readiness:fact:a4e5dd8cce57d882b05b4852d8fef2294f5e5136bb21f3738411ffa076e269d2">show in graph</a></div><div class="meta"><code>adapter_provides</code></div><div class="radius quiet">Nothing derived rests on this yet.</div></article></section>
+  <section class="guide"><h2>Relationships</h2><p class="intro">The concepts this spec talks about, who concludes them, and the vocabulary they share.</p><article class="card concept" id="n-lemmaspec-persistence_adapter_readiness-relation-adapter_provides"><div class="card-head"><strong>adapter_provides</strong><span class="signature">2 arguments</span><a class="graph-link" href="#graph" data-node="lemmaspec:persistence_adapter_readiness:relation:adapter_provides">show in graph</a></div><div class="meta">asserted directly · 1 asserted</div></article><article class="card concept" id="n-lemmaspec-persistence_adapter_readiness-relation-persistence_ready"><div class="card-head"><strong>persistence_ready</strong><span class="signature">2 arguments</span><a class="graph-link" href="#graph" data-node="lemmaspec:persistence_adapter_readiness:relation:persistence_ready">show in graph</a></div><div class="meta">concluded by <a class="ref" href="#n-lemmaspec-persistence_adapter_readiness-rule-ready_only_when_adapter_owns_persistence_semantics">ready_only_when_adapter_owns_persistence_semantics</a></div></article><article class="card concept" id="n-lemmaspec-persistence_adapter_readiness-relation-projection_capability"><div class="card-head"><strong>projection_capability</strong><span class="signature">2 arguments</span><a class="graph-link" href="#graph" data-node="lemmaspec:persistence_adapter_readiness:relation:projection_capability">show in graph</a></div><div class="meta">asserted directly · 3 asserted</div></article><h3>Vocabulary</h3><div class="vocab-grid"><details class="vocab" open><summary><i>adapter_provides · argument 1</i> <span class="count">1 value</span></summary><ul><li><code>store_adapter</code><span class="count">1 use</span></li></ul></details><details class="vocab" open><summary><i>adapter_provides · argument 2</i> <span class="count">1 value</span></summary><ul><li><code>projection_validation</code><span class="count">1 use</span></li></ul></details><details class="vocab" open><summary><i>projection_capability · argument 1</i> <span class="count">1 value</span></summary><ul><li><code>lemmaspec_projection</code><span class="count">3 uses</span></li></ul></details><details class="vocab" open><summary><i>projection_capability · argument 2</i> <span class="count">3 values</span></summary><ul><li><code>deterministic</code><span class="count">1 use</span></li><li><code>internally_closed</code><span class="count">1 use</span></li><li><code>stable_ids</code><span class="count">1 use</span></li></ul></details></div></section>
+  <section class="guide"><h2>Reasoning</h2><p class="intro">The rules that turn observations and assumptions into conclusions. Read each one as: this follows, whenever all of these hold.</p><article class="card rule" id="n-lemmaspec-persistence_adapter_readiness-rule-ready_only_when_adapter_owns_persistence_semantics"><div class="card-head"><span class="chip c-attention">rule</span><strong>ready_only_when_adapter_owns_persistence_semantics</strong><span class="count">no conclusions so far</span><a class="graph-link" href="#graph" data-node="lemmaspec:persistence_adapter_readiness:rule:ready_only_when_adapter_owns_persistence_semantics">show in graph</a></div><p class="lead">Concludes <span class="sentence"><code>persistence_ready(Projection, Adapter)</code></span> when</p><ol class="conditions"><li><span class="cond">projection_is_deterministic</span><code>projection_capability(Projection, deterministic)</code></li><li><span class="cond">projection_is_closed</span><code>projection_capability(Projection, internally_closed)</code></li><li><span class="cond">projection_ids_are_stable</span><code>projection_capability(Projection, stable_ids)</code></li><li><span class="cond">adapter_validates_projection</span><code>adapter_provides(Adapter, projection_validation)</code></li><li><span class="cond">adapter_adds_ingest_envelope</span><code>adapter_provides(Adapter, ingest_envelope)</code></li><li><span class="cond">adapter_defines_event_time</span><code>adapter_provides(Adapter, event_time_policy)</code></li><li><span class="cond">adapter_defines_revision_identity</span><code>adapter_provides(Adapter, revision_identity)</code></li><li><span class="cond">adapter_maps_entity_identity</span><code>adapter_provides(Adapter, entity_identity_mapping)</code></li></ol></article></section>
+  
+  <section class="guide"><h2>Claims</h2><p class="intro">The acceptance criteria this spec commits to, checked against the walk. Open claims come first.</p><article class="card claim" id="n-lemmaspec-persistence_adapter_readiness-expectation-candidate_is_ready_for_durable_persistence" data-status="failed"><div class="card-head"><span class="chip c-critical">open</span><strong>candidate_is_ready_for_durable_persistence</strong><a class="graph-link" href="#graph" data-node="lemmaspec:persistence_adapter_readiness:expectation:candidate_is_ready_for_durable_persistence">show in graph</a></div><p class="lead">There must be exactly 1 result where <span class="sentence"><code>persistence_ready(lemmaspec_projection, store_adapter)</code></span>.</p><p class="verdict">Found 0. This claim is open until the facts or the claim change.</p></article></section>
+  
+
+  <h2 id="graph-heading">Graph</h2>
+  <p class="intro">The same argument as a picture: every card above is a node here. Nodes cluster around the relation they describe.</p>
+  <h3 class="legend-title">Legend</h3>
   <div class="legend">
     <span class="lg"><span class="dot" style="background:var(--stable)"></span>asserted fact / passing expectation</span>
     <span class="lg"><span class="dot" style="background:var(--additive)"></span>derived fact</span>
@@ -147,8 +207,7 @@
     <span class="lg"><span class="dot" style="background:var(--neutral)"></span>relation / symbol</span>
   </div>
 
-  <h2>Graph</h2>
-  <div class="graph-layout">
+  <div class="graph-layout" id="graph">
     <div class="graph-main">
       <div class="toolbar" id="toolbar">
         <div class="group" id="type-filters"><span>Show</span></div>
@@ -175,13 +234,10 @@
     <span>dotted ring = part of a dependency cycle</span>
   </div>
 
-  <h2>Rules, mutations, and expectations</h2>
-  <div class="constraint-grid"><article class="constraint" data-kind="expectation" data-status="failed"><div class="constraint-head"><span class="chip c-critical">expect</span><strong>candidate_is_ready_for_durable_persistence</strong><span class="result c-critical">failed</span></div><code>persistence_ready(lemmaspec_projection, store_adapter)</code><p>Expected <b>1</b> result(s); found <b>0</b>.</p></article><article class="constraint" data-kind="rule"><div class="constraint-head"><span class="chip c-attention">rule</span><strong>ready_only_when_adapter_owns_persistence_semantics</strong></div><code>persistence_ready(Projection, Adapter)</code><ol><li><code>projection_is_deterministic: projection_capability(Projection, deterministic)</code></li><li><code>projection_is_closed: projection_capability(Projection, internally_closed)</code></li><li><code>projection_ids_are_stable: projection_capability(Projection, stable_ids)</code></li><li><code>adapter_validates_projection: adapter_provides(Adapter, projection_validation)</code></li><li><code>adapter_adds_ingest_envelope: adapter_provides(Adapter, ingest_envelope)</code></li><li><code>adapter_defines_event_time: adapter_provides(Adapter, event_time_policy)</code></li><li><code>adapter_defines_revision_identity: adapter_provides(Adapter, revision_identity)</code></li><li><code>adapter_maps_entity_identity: adapter_provides(Adapter, entity_identity_mapping)</code></li></ol></article></div>
-
-  <h2>Relations</h2>
+  <h2>Reference: relations</h2>
   <table><thead><tr><th>Relation</th><th>Argument types</th></tr></thead><tbody><tr><td><code>adapter_provides</code></td><td><code>(symbol, symbol)</code></td></tr><tr><td><code>persistence_ready</code></td><td><code>(symbol, symbol)</code></td></tr><tr><td><code>projection_capability</code></td><td><code>(symbol, symbol)</code></td></tr></tbody></table>
 
-  <h2>Materialized facts</h2>
+  <h2>Reference: materialized facts</h2>
   <div class="table-scroll"><table><thead><tr><th>Origin</th><th>Fact</th><th>Confidence</th><th>Provenance</th><th>Declarations</th></tr></thead><tbody><tr><td><span class="chip c-stable">asserted</span></td><td><code>projection_capability(lemmaspec_projection, stable_ids)</code></td><td>100%</td><td>README.md, projection_has_stable_ids, src/projection.rs</td><td>projection_has_stable_ids</td></tr><tr><td><span class="chip c-stable">asserted</span></td><td><code>adapter_provides(store_adapter, projection_validation)</code></td><td>100%</td><td>candidate_validates_projection</td><td>candidate_validates_projection</td></tr><tr><td><span class="chip c-stable">asserted</span></td><td><code>projection_capability(lemmaspec_projection, internally_closed)</code></td><td>100%</td><td>README.md, projection_is_closed, src/projection.rs</td><td>projection_is_closed</td></tr><tr><td><span class="chip c-stable">asserted</span></td><td><code>projection_capability(lemmaspec_projection, deterministic)</code></td><td>100%</td><td>README.md, projection_is_deterministic</td><td>projection_is_deterministic</td></tr></tbody></table></div>
 
   <details><summary>Original .lemmaspec source</summary><pre id="artifact-source">// Models the boundary between LemmaSpec&#39;s deterministic projection and a
@@ -681,6 +737,14 @@ spec persistence_adapter_readiness {
       const dd = document.createElement("dd"); dd.textContent = value;
       return [dt, dd];
     }));
+    const card = document.getElementById("n-" + item.id.replace(/[^A-Za-z0-9_-]/g, "-"));
+    if (card) {
+      const dt = document.createElement("dt"); dt.textContent = "read";
+      const dd = document.createElement("dd");
+      const link = document.createElement("a"); link.href = "#" + card.id; link.textContent = "in the guide above"; link.className = "ref";
+      dd.appendChild(link);
+      factsPanel.append(dt, dd);
+    }
     factsPanel.hidden = false;
     detail.textContent = JSON.stringify(item, null, 2);
   }
@@ -778,6 +842,35 @@ spec persistence_adapter_readiness {
     const node = event.target.closest(".node");
     hovered = node ? node.dataset.id : null;
     applyEmphasis();
+  });
+
+  function reveal(id) {
+    const node = nodeById.get(id);
+    if (!node) return;
+    if (!shownTypes.has(node.type)) {
+      shownTypes.add(node.type);
+      document.querySelectorAll("#type-filters input").forEach((input, i) => { if (typesPresent[i] === node.type) input.checked = true; });
+    }
+    if (focus && !nodeElements.has(id)) focus = null;
+    clearFocus.hidden = !focus;
+    redraw(140);
+    const p = position.get(id);
+    const box = svg.getBoundingClientRect();
+    view.k = Math.max(view.k, 1.1);
+    view.x = box.width / 2 - p.x * view.k;
+    view.y = box.height / 2 - p.y * view.k;
+    applyView();
+    select(node);
+    hovered = id;
+    applyEmphasis();
+  }
+
+  document.addEventListener("click", event => {
+    const link = event.target.closest("a[data-node]");
+    if (!link) return;
+    event.preventDefault();
+    document.getElementById("graph").scrollIntoView({ behavior: "smooth", block: "start" });
+    reveal(link.dataset.node);
   });
 
   redraw(320);

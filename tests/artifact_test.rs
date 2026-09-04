@@ -333,15 +333,21 @@ fn existing_examples_keep_their_authored_prose() {
     assert!(artifact.doc.as_deref().is_some_and(
         |doc| doc.starts_with("Executable model of LemmaSpec mutation-analysis semantics.")
     ));
+    let deferred = artifact
+        .facts
+        .iter()
+        .find(|fact| fact.id == "defer_comparison_flip")
+        .expect("deferred operator fact");
+    assert!(deferred
+        .doc
+        .as_deref()
+        .is_some_and(|doc| doc.starts_with("These need richer term mutation")));
     let oracle = artifact
         .relations
         .iter()
         .find(|relation| relation.name == "oracle")
         .expect("oracle relation");
-    assert_eq!(
-        oracle.doc.as_deref(),
-        Some("policy, any_failure | named_expectation")
-    );
+    assert_eq!(oracle.roles, ["policy", "mode"]);
 }
 
 #[test]

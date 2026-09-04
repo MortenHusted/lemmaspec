@@ -386,7 +386,10 @@ spec prose {
     assert_eq!(node("fact")["doc"], "Recorded from the fixture manifest.");
     assert!(node("expectation").get("doc").is_none());
 
-    let bare = project_artifact(EXAMPLE).expect("project example");
+    let bare = project_artifact(
+        "spec bare { relation input { args: [symbol] } fact one { relation: input args: [a] } expect one_input { query: \"input(X)\" count: 1 } }",
+    )
+    .expect("project bare artifact");
     let bare = serde_json::to_value(&bare).expect("serialize");
     assert!(bare["nodes"]
         .as_array()

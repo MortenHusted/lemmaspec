@@ -40,7 +40,8 @@ command is rejected, report the installed version before changing the artifact.
 3. Declare every predicate as a typed `relation`. Prefer relations that remain meaningful outside one sentence, such as `requires`, `changes`, `calls`, `blocked_by`, `implemented`, or `satisfies`.
 4. Express consequences and invariants as `rule` blocks. Use stable descriptive IDs for facts, rules, and expectations.
 5. Express acceptance criteria as `expect` blocks with exact counts. An expectation is a claim to test, not a desired value to force.
-6. Keep uncertain evidence explicit with `confidence` and `provenance`. Omit those fields when the fact is simply authoritative within the artifact.
+6. Keep uncertain evidence explicit with `confidence` and `provenance`. A fact with provenance renders as an observation; a fact without it, or below full confidence, renders as an assumption that a human still has to decide on. Omit both fields only when the fact is simply authoritative within the artifact.
+7. Write for the reader, not only the engine. Comments before `spec` state the question the artifact answers. A comment directly above a relation, fact, rule, expectation, or mutation explains it in the rendered guide. Give relations `roles` naming each argument and a `reads` sentence template such as `"{item} depends on {dependency}"` so facts and rule conditions render as prose.
 
 Run `lemmaspec syntax` rather than guessing the grammar. Important boundaries:
 
@@ -134,7 +135,7 @@ lemmaspec render path/to/spec.lemmaspec
 lemmaspec render path/to/spec.lemmaspec --output path/to/report.html
 ```
 
-The default output replaces `.lemmaspec` with `.html`. The document works offline and embeds the exact graph projection plus the original source, rules, expectations, facts, and inspectable node and edge evidence. Exit `1` still writes the document: preserve and report its visibly failed constraints rather than treating it as a rendering error.
+The default output replaces `.lemmaspec` with `.html`. The document works offline and reads as a guide: the question, observations, assumptions, relationships, reasoning, conclusions with their proof trees, claims, and stress tests, followed by an interactive graph clustered by relation. Every card links to its node in the graph. Comments, `roles`, and `reads` templates in the source are what make that guide read as prose; without them facts render as atoms. Exit `1` still writes the document: preserve and report its visibly open claims rather than treating it as a rendering error.
 
 ## Report the result
 

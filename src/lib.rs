@@ -7,11 +7,12 @@
 pub mod artifact;
 pub mod ast;
 pub mod eval;
+pub mod guide;
 pub mod html;
 pub mod intern;
 pub mod magic;
 pub mod mutation;
-pub mod narrative;
+mod narrative;
 mod projection;
 
 pub use artifact::{

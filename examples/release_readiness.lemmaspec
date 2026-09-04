@@ -1,16 +1,28 @@
+// Can the release ship today?
+//
+// It cannot while anything it depends on is still incomplete.
+
 spec release_readiness {
+  // A deliverable that cannot ship before another one is done.
   relation depends_on {
     args: [symbol, symbol]
+    roles: [item, dependency]
+    reads: "{item} depends on {dependency}"
   }
 
   relation incomplete {
     args: [symbol]
+    roles: [item]
+    reads: "{item} is incomplete"
   }
 
   relation blocked {
     args: [symbol]
+    roles: [item]
+    reads: "{item} is blocked"
   }
 
+  // Nobody has written down where this dependency comes from yet.
   fact release_needs_tests {
     relation: depends_on
     args: [release, tests]
@@ -22,6 +34,7 @@ spec release_readiness {
     provenance: ["plan:test-gate"]
   }
 
+  // Blocking follows the dependency edge: one incomplete dependency is enough.
   rule blocked_by_incomplete_dependency {
     derive: "blocked(Item)"
     when: [

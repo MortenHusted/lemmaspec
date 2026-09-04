@@ -40,8 +40,14 @@ Example:
   lemmaspec render examples/release_readiness.lemmaspec";
 
 const SYNTAX_HELP: &str = r#"Artifact:
+  // Comments before `spec` document the artifact: the question it answers.
   spec NAME {
-    relation NAME { args: [symbol, integer] }
+    // A comment touching a declaration documents that declaration.
+    relation NAME {
+      args: [symbol, integer]
+      roles: [item, score]
+      reads: "{item} scored {score}"
+    }
 
     fact ID {
       relation: NAME
@@ -69,6 +75,10 @@ const SYNTAX_HELP: &str = r#"Artifact:
 
 Artifact rules:
   - relation argument types are symbol or integer
+  - roles is an optional identifier per argument; reads is an optional sentence
+    template whose {placeholders} name a role or an argument position
+  - comments separated from a declaration by a blank line are section headings
+    and document nothing; a comment trailing a closing brace documents that block
   - confidence is an optional integer percentage from 0 through 100
   - provenance is an optional list of symbols or strings
   - every predicate used by facts, rules, or expectations needs a relation
