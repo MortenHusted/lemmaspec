@@ -189,7 +189,7 @@
   .vocab ul { margin:0; padding:0 12px 10px 12px; list-style:none; font-size:12px }
   .vocab li { display:flex; justify-content:space-between; gap:10px; padding:2px 0 }
   .vocab li .count { color:var(--faint); font-size:11px; white-space:nowrap }
-  .selection { margin:0 0 14px; padding:10px 12px; border:1px solid var(--accent); border-radius:8px; background:var(--panel); font-size:13px }
+  .selection { position:sticky; top:0; z-index:2; margin:0 0 14px; padding:10px 12px; border:1px solid var(--accent); border-radius:8px; background:var(--panel); box-shadow:0 8px 20px rgba(0,0,0,.35); font-size:13px }
   .selection .kind { color:var(--faint); font:10px var(--mono); letter-spacing:.6px; text-transform:uppercase }
   .selection pre { overflow:auto; max-height:220px; margin:8px 0 0; padding:8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--dim); font-size:10px; white-space:pre-wrap }
   .raw { margin-top:8px }
@@ -936,7 +936,6 @@
     raw.append(summary, pre);
     selectionBox.appendChild(raw);
     selectionBox.hidden = false;
-    selectionBox.scrollIntoView({ block: "nearest" });
   }
 
   journey.addEventListener("click", event => {
