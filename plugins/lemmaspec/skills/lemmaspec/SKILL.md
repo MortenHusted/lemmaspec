@@ -112,6 +112,24 @@ Rejected and excluded targets are not valid executions. Every policy must execut
 Policies with identical configuration are invalid because counting the same
 mutants twice would make the report misleading.
 
+## Check evidence against a checker
+
+A checker is an artifact whose facts are a fixture and whose expectations and mutation policies prove the rules bite. To apply it to real code, write an evidence file: a `spec` containing only facts over the checker's relations, each with provenance naming the file and declaration it was read from, plus the expectations that should hold for that codebase. Then run:
+
+```sh
+lemmaspec check path/to/checker.lemmaspec path/to/evidence.lemmaspec --json
+```
+
+The checker's fixture and expectations are replaced by the evidence file's; the report and exit status read as for `walk`. Assert only facts you established from the code; never invent a fact to satisfy an expectation. A failed expectation with its `why` witness is the finding: report the derived fact, the rule, and the provenance of the asserted facts beneath it. An exemption is an asserted fact with provenance naming the review that granted it, not a deleted piece of evidence.
+
+To keep, render, or project the result, bind it to a file:
+
+```sh
+lemmaspec bind path/to/checker.lemmaspec path/to/evidence.lemmaspec
+```
+
+This writes `path/to/evidence.bound.lemmaspec` (or the `-o` path), a self-contained artifact that `walk`, `mutate`, `project`, and `render` accept unchanged. It is the committable proof record for that checker over that codebase; render it when a human needs to read the finding.
+
 ## Project the graph
 
 After the walk represents the intended model, run:

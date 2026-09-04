@@ -4,12 +4,15 @@ use std::process::ExitCode;
 use lemmaspec::agent::{self, Agent};
 use lemmaspec::upgrade::{self, Install};
 use lemmaspec::{
-    mutate_artifact, project_artifact, render_projection_html, walk_artifact, MutationTarget,
+    bind_artifact, check_artifact, mutate_artifact, project_artifact, render_projection_html,
+    walk_artifact, MutationTarget,
 };
 
 const HELP: &str = "Usage:
   lemmaspec walk <path.lemmaspec> [--json]
   lemmaspec mutate <path.lemmaspec> [--json]
+  lemmaspec check <checker.lemmaspec> <evidence.lemmaspec> [--json]
+  lemmaspec bind <checker.lemmaspec> <evidence.lemmaspec> [-o <bound.lemmaspec>]
   lemmaspec project <path.lemmaspec> [--json]
   lemmaspec render <path.lemmaspec> [-o <path.html>]
   lemmaspec syntax
@@ -22,6 +25,8 @@ const HELP: &str = "Usage:
 Commands:
   walk    Parse, validate, and evaluate one self-contained specification
   mutate  Test whether declared mutations are caught by its expectations
+  check   Evaluate a checker's rules over another file's facts and expectations
+  bind    Write the checker bound to the evidence as one self-contained artifact
   project Emit its closed, deterministic graph projection
   render  Write a self-contained human HTML view beside the artifact
   syntax  Show the supported artifact and rule language
@@ -33,8 +38,8 @@ Commands:
   help    Show this help, the syntax reference, or the intro
 
 Options:
-  --json  Emit machine-readable JSON for walk, mutate, or project
-  -o, --output <path.html>  Choose the render output path
+  --json  Emit machine-readable JSON for walk, mutate, check, or project
+  -o, --output <path>  Choose the render (.html) or bind (.lemmaspec) output path
   --claude, --codex  Limit agent install to one agent (default: both)
   --dir <project>  Project to install into (default: current directory)
   --marketplace  Run the agents' plugin marketplace commands instead
@@ -50,6 +55,8 @@ Exit status:
 Example:
   lemmaspec walk examples/release_readiness.lemmaspec --json
   lemmaspec mutate examples/mutation_analysis.lemmaspec --json
+  lemmaspec check examples/state_as_records.lemmaspec .lemmaspec/state_as_records.lemmaspec
+  lemmaspec bind examples/state_as_records.lemmaspec .lemmaspec/state_as_records.lemmaspec
   lemmaspec project examples/release_readiness.lemmaspec --json
   lemmaspec render examples/release_readiness.lemmaspec";
 
@@ -142,6 +149,8 @@ fn run(args: Vec<String>) -> Result<ExitCode, String> {
     match args[0].as_str() {
         "walk" => run_walk(&args[1..]),
         "mutate" => run_mutate(&args[1..]),
+        "check" => run_check(&args[1..]),
+        "bind" => run_bind(&args[1..]),
         "project" => run_project(&args[1..]),
         "render" => run_render(&args[1..]),
         "syntax" => print_syntax(&args[1..]),
@@ -294,10 +303,111 @@ fn run_walk(args: &[String]) -> Result<ExitCode, String> {
     let source =
         std::fs::read_to_string(path).map_err(|error| format!("read `{path}`: {error}"))?;
     let report = walk_artifact(&source).map_err(|error| format!("walk `{path}`: {error}"))?;
-    if args.iter().any(|arg| arg == "--json") {
+    report_walk(&report, args.iter().any(|arg| arg == "--json"))
+}
+
+fn run_check(args: &[String]) -> Result<ExitCode, String> {
+    let (paths, flags): (Vec<&String>, Vec<&String>) =
+        args.iter().partition(|arg| !arg.starts_with("--"));
+    let [checker, evidence] = paths[..] else {
+        return Err(format!(
+            "check requires a checker and an evidence .lemmaspec path\n\n{HELP}"
+        ));
+    };
+    if let Some(unexpected) = flags.iter().find(|flag| flag.as_str() != "--json") {
+        return Err(format!("unexpected argument `{unexpected}`"));
+    }
+    for path in [checker, evidence] {
+        if Path::new(path).extension().and_then(|value| value.to_str()) != Some("lemmaspec") {
+            return Err(format!("check expects .lemmaspec files, got `{path}`"));
+        }
+    }
+
+    let read = |path: &String| {
+        std::fs::read_to_string(path).map_err(|error| format!("read `{path}`: {error}"))
+    };
+    let report = check_artifact(&read(checker)?, &read(evidence)?)
+        .map_err(|error| format!("check `{checker}` over `{evidence}`: {error}"))?;
+    report_walk(&report, !flags.is_empty())
+}
+
+fn run_bind(args: &[String]) -> Result<ExitCode, String> {
+    let [checker, evidence, options @ ..] = args else {
+        return Err(format!(
+            "bind requires a checker and an evidence .lemmaspec path\n\n{HELP}"
+        ));
+    };
+    for path in [checker, evidence] {
+        if Path::new(path).extension().and_then(|value| value.to_str()) != Some("lemmaspec") {
+            return Err(format!("bind expects .lemmaspec files, got `{path}`"));
+        }
+    }
+    let mut output = None;
+    let mut index = 0;
+    while index < options.len() {
+        match options[index].as_str() {
+            "-o" | "--output" => {
+                if output.is_some() {
+                    return Err("bind accepts only one output path".to_string());
+                }
+                let Some(value) = options.get(index + 1) else {
+                    return Err(format!("{} requires a path", options[index]));
+                };
+                output = Some(PathBuf::from(value));
+                index += 2;
+            }
+            unexpected => return Err(format!("unexpected argument `{unexpected}`")),
+        }
+    }
+    let output = output.unwrap_or_else(|| Path::new(evidence).with_extension("bound.lemmaspec"));
+    if output.extension().and_then(|value| value.to_str()) != Some("lemmaspec") {
+        return Err(format!(
+            "bind output must be a .lemmaspec file, got `{}`",
+            output.display()
+        ));
+    }
+    if [checker, evidence]
+        .iter()
+        .any(|path| same_file(Path::new(path), &output))
+    {
+        return Err(format!(
+            "bind refuses to overwrite its input `{}`",
+            output.display()
+        ));
+    }
+
+    let read = |path: &String| {
+        std::fs::read_to_string(path).map_err(|error| format!("read `{path}`: {error}"))
+    };
+    let bound = bind_artifact(&read(checker)?, &read(evidence)?)
+        .map_err(|error| format!("bind `{checker}` over `{evidence}`: {error}"))?;
+    if let Some(parent) = output
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("create output directory `{}`: {error}", parent.display()))?;
+    }
+    std::fs::write(&output, bound)
+        .map_err(|error| format!("write `{}`: {error}", output.display()))?;
+    println!("wrote {}", output.display());
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Whether two paths name the same file, by canonical path when both exist
+/// and by lexical comparison otherwise.
+fn same_file(left: &Path, right: &Path) -> bool {
+    match (left.canonicalize(), right.canonicalize()) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => left == right,
+    }
+}
+
+fn report_walk(report: &lemmaspec::WalkReport, json: bool) -> Result<ExitCode, String> {
+    if json {
         println!(
             "{}",
-            serde_json::to_string_pretty(&report)
+            serde_json::to_string_pretty(report)
                 .map_err(|error| format!("serialize walk report: {error}"))?
         );
     } else {
@@ -314,6 +424,11 @@ fn run_walk(args: &[String]) -> Result<ExitCode, String> {
                 expectation.expected_count,
                 expectation.actual_count
             );
+            if !expectation.satisfied {
+                for fact in &expectation.found {
+                    println!("         {fact}");
+                }
+            }
         }
     }
 

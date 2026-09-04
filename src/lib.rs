@@ -7,6 +7,7 @@
 pub mod agent;
 pub mod artifact;
 pub mod ast;
+pub mod check;
 pub mod eval;
 mod guide;
 pub mod html;
@@ -14,6 +15,7 @@ pub mod intern;
 pub mod magic;
 pub mod mutation;
 mod narrative;
+pub mod printer;
 mod projection;
 pub mod upgrade;
 
@@ -23,6 +25,7 @@ pub use artifact::{
     WalkReport,
 };
 pub use ast::{parse_program, ParseError};
+pub use check::{bind_artifact, check_artifact};
 pub use eval::{Ann, Change, Engine, StoredFact, StratError};
 pub use html::render_projection_html;
 pub use intern::{Interner, Term, Value};
@@ -31,6 +34,7 @@ pub use mutation::{
     MutationSummary, MutationTarget,
 };
 pub use narrative::read_fact;
+pub use printer::print_artifact;
 pub use projection::{
     project_artifact, GraphEdge, GraphNode, GraphNodeData, GraphProjection, ProjectionError,
 };

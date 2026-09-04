@@ -7,6 +7,20 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- `lemmaspec check <checker> <evidence>` evaluates one artifact's relations
+  and rules over another file's facts and expectations, so a self-tested
+  checker can be applied to evidence about real code.
+- `examples/state_as_records.lemmaspec`, a Rails checker for the convention
+  that togglable state is a record rather than a boolean column.
+- Walk reports carry the facts each expectation `found`, and the human
+  output lists them under a failed expectation so a finding names its rows.
+- `lemmaspec bind <checker> <evidence> [-o <path>]` writes the checker bound
+  to the evidence as one self-contained artifact, so walk, mutate, project,
+  and render work on the proof record unchanged. Behind it, a printer turns a
+  parsed artifact back into source that parses to an equal artifact.
+
 ## [0.2.0] - 2026-09-04
 
 ### Added
