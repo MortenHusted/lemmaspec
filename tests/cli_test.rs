@@ -563,6 +563,118 @@ fn check_command_evaluates_evidence_with_the_checker_rules() {
 }
 
 #[test]
+fn bind_command_writes_an_artifact_that_walks_like_the_check() {
+    let evidence = r#"
+        // Is the real schema clean?
+        spec schema_under_review {
+          fact flag { relation: boolean_column args: [webhook, active] provenance: ["db/schema.rb"] }
+          fact companion { relation: companion_column args: [webhook, active, first_failure_at] }
+          expect nothing_is_flattened { query: "violation(M, C)" count: 0 }
+        }
+    "#;
+    let directory = temporary_directory("bind");
+    let evidence_path = directory.join("evidence.lemmaspec");
+    std::fs::write(&evidence_path, evidence).expect("write temporary evidence");
+
+    let bind = Command::new(env!("CARGO_BIN_EXE_lemmaspec"))
+        .args([
+            "bind",
+            "examples/state_as_records.lemmaspec",
+            evidence_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("run lemmaspec");
+    assert!(
+        bind.status.success(),
+        "{}",
+        String::from_utf8_lossy(&bind.stderr)
+    );
+    let bound_path = directory.join("evidence.bound.lemmaspec");
+    assert_eq!(
+        String::from_utf8_lossy(&bind.stdout),
+        format!("wrote {}\n", bound_path.display())
+    );
+    let bound = std::fs::read_to_string(&bound_path).expect("read bound artifact");
+    assert!(
+        bound.starts_with(
+            "// Bound from state_as_records over schema_under_review.\n//\n// Is the real schema clean?\n"
+        ),
+        "{bound}"
+    );
+
+    let walk = Command::new(env!("CARGO_BIN_EXE_lemmaspec"))
+        .args(["walk", bound_path.to_str().unwrap(), "--json"])
+        .output()
+        .expect("run lemmaspec");
+    let check = Command::new(env!("CARGO_BIN_EXE_lemmaspec"))
+        .args([
+            "check",
+            "examples/state_as_records.lemmaspec",
+            evidence_path.to_str().unwrap(),
+            "--json",
+        ])
+        .output()
+        .expect("run lemmaspec");
+    std::fs::remove_dir_all(&directory).expect("clean up temporary directory");
+
+    assert_eq!(walk.status.code(), Some(1));
+    assert_eq!(check.status.code(), Some(1));
+    assert_eq!(
+        walk.stdout, check.stdout,
+        "walk of the bound artifact differs from check"
+    );
+}
+
+#[test]
+fn bind_command_rejects_evidence_that_redefines_the_checker() {
+    let directory = temporary_directory("bind-rule");
+    let evidence_path = directory.join("evidence.lemmaspec");
+    std::fs::write(
+        &evidence_path,
+        r#"spec e { rule r { derive: "violation(M, C)" when: ["boolean_column(M, C)"] } }"#,
+    )
+    .expect("write temporary evidence");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_lemmaspec"))
+        .args([
+            "bind",
+            "examples/state_as_records.lemmaspec",
+            evidence_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("run lemmaspec");
+    let bound_exists = directory.join("evidence.bound.lemmaspec").exists();
+    std::fs::remove_dir_all(&directory).expect("clean up temporary directory");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("declares a rule"));
+    assert!(!bound_exists, "no bound artifact is written on failure");
+}
+
+#[test]
+fn bind_command_requires_two_artifact_paths_and_protects_its_inputs() {
+    let output = Command::new(env!("CARGO_BIN_EXE_lemmaspec"))
+        .args(["bind", "examples/state_as_records.lemmaspec"])
+        .output()
+        .expect("run lemmaspec");
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("checker and an evidence"));
+
+    let output = Command::new(env!("CARGO_BIN_EXE_lemmaspec"))
+        .args([
+            "bind",
+            "examples/state_as_records.lemmaspec",
+            "examples/release_readiness.lemmaspec",
+            "-o",
+            "examples/release_readiness.lemmaspec",
+        ])
+        .output()
+        .expect("run lemmaspec");
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("refuses to overwrite"));
+}
+
+#[test]
 fn check_command_rejects_evidence_that_redefines_the_checker() {
     let path = std::env::temp_dir().join(format!(
         "lemmaspec-evidence-rule-{}.lemmaspec",

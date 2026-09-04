@@ -9,6 +9,7 @@
 use crate::artifact::{
     evaluate_parsed_artifact, parse_artifact, Artifact, ArtifactError, WalkReport,
 };
+use crate::printer::print_artifact;
 
 /// Evaluate `checker`'s vocabulary and rules over `evidence`'s facts and
 /// expectations. The evidence file may declare only facts and expectations.
@@ -16,6 +17,22 @@ pub fn check_artifact(checker: &str, evidence: &str) -> Result<WalkReport, Artif
     let checker = parse_artifact(checker)?;
     let evidence = parse_artifact(evidence)?;
     Ok(evaluate_parsed_artifact(bind(checker, evidence)?)?.report)
+}
+
+/// Bind `checker` to `evidence` and print the result as a self-contained
+/// artifact: the proof record for this checker over this evidence, which
+/// walk, mutate, project, and render accept unchanged. Its doc names both
+/// sources before the evidence's own doc.
+pub fn bind_artifact(checker: &str, evidence: &str) -> Result<String, ArtifactError> {
+    let checker = parse_artifact(checker)?;
+    let evidence = parse_artifact(evidence)?;
+    let header = format!("Bound from {} over {}.", checker.name, evidence.name);
+    let mut bound = bind(checker, evidence)?;
+    bound.doc = Some(match bound.doc {
+        Some(doc) => format!("{header}\n\n{doc}"),
+        None => header,
+    });
+    Ok(print_artifact(&bound))
 }
 
 fn bind(checker: Artifact, evidence: Artifact) -> Result<Artifact, ArtifactError> {
@@ -77,6 +94,33 @@ mod tests {
         assert_eq!(report.asserted, 1);
         assert_eq!(report.derived, 1);
         assert_eq!(report.expectations.len(), 2);
+    }
+
+    #[test]
+    fn a_bound_artifact_is_self_contained_and_names_its_sources() {
+        let evidence = r#"
+            // Is the real input flagged?
+            spec evidence {
+              fact real { relation: input args: [real] }
+              expect real_is_flagged { query: "flagged(real)" count: 1 }
+            }
+        "#;
+
+        let bound = bind_artifact(CHECKER, evidence).expect("bind succeeds");
+        let artifact = parse_artifact(&bound).expect("bound artifact parses");
+
+        assert_eq!(artifact.name, "evidence");
+        assert_eq!(
+            artifact.doc.as_deref(),
+            Some("Bound from checker over evidence.\n\nIs the real input flagged?")
+        );
+        assert_eq!(artifact.relations.len(), 2);
+        assert_eq!(artifact.rules.len(), 1);
+        assert_eq!(artifact.facts.len(), 1);
+        assert_eq!(artifact.expectations.len(), 1);
+        assert!(artifact.mutations.is_empty());
+        let report = crate::walk_artifact(&bound).expect("bound artifact walks");
+        assert_eq!(report.status, "clean");
     }
 
     #[test]

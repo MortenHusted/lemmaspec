@@ -122,6 +122,14 @@ lemmaspec check path/to/checker.lemmaspec path/to/evidence.lemmaspec --json
 
 The checker's fixture and expectations are replaced by the evidence file's; the report and exit status read as for `walk`. Assert only facts you established from the code; never invent a fact to satisfy an expectation. A failed expectation with its `why` witness is the finding: report the derived fact, the rule, and the provenance of the asserted facts beneath it. An exemption is an asserted fact with provenance naming the review that granted it, not a deleted piece of evidence.
 
+To keep, render, or project the result, bind it to a file:
+
+```sh
+lemmaspec bind path/to/checker.lemmaspec path/to/evidence.lemmaspec
+```
+
+This writes `path/to/evidence.bound.lemmaspec` (or the `-o` path), a self-contained artifact that `walk`, `mutate`, `project`, and `render` accept unchanged. It is the committable proof record for that checker over that codebase; render it when a human needs to read the finding.
+
 ## Project the graph
 
 After the walk represents the intended model, run:

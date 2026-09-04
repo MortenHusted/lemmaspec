@@ -25,7 +25,7 @@ pub use artifact::{
     WalkReport,
 };
 pub use ast::{parse_program, ParseError};
-pub use check::check_artifact;
+pub use check::{bind_artifact, check_artifact};
 pub use eval::{Ann, Change, Engine, StoredFact, StratError};
 pub use html::render_projection_html;
 pub use intern::{Interner, Term, Value};
