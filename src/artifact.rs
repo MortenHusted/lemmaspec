@@ -148,6 +148,9 @@ pub struct WalkExpectation {
     pub expected_count: usize,
     pub actual_count: usize,
     pub satisfied: bool,
+    /// The facts the query matched, in deterministic order: the proof of a
+    /// satisfied claim, or what was found instead of the expected count.
+    pub found: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -1457,18 +1460,18 @@ pub(crate) fn evaluate_parsed_artifact(
 
     let mut expectations = Vec::new();
     for expectation in &artifact.expectations {
-        let actual_count = engine
-            .ask(&expectation.query)
-            .map_err(|error| {
-                ArtifactError::evaluation(format!("evaluate expect `{}`: {error}", expectation.id))
-            })?
-            .len();
+        let mut found = engine.ask(&expectation.query).map_err(|error| {
+            ArtifactError::evaluation(format!("evaluate expect `{}`: {error}", expectation.id))
+        })?;
+        found.sort();
+        let actual_count = found.len();
         expectations.push(WalkExpectation {
             id: expectation.id.clone(),
             query: expectation.query.clone(),
             expected_count: expectation.count,
             actual_count,
             satisfied: actual_count == expectation.count,
+            found,
         });
     }
 

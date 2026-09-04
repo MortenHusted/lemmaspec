@@ -348,6 +348,11 @@ fn report_walk(report: &lemmaspec::WalkReport, json: bool) -> Result<ExitCode, S
                 expectation.expected_count,
                 expectation.actual_count
             );
+            if !expectation.satisfied {
+                for fact in &expectation.found {
+                    println!("         {fact}");
+                }
+            }
         }
     }
 
