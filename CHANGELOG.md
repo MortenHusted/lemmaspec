@@ -7,6 +7,12 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- The rendered view builds its step buttons from DOM nodes instead of an
+  HTML string, so CodeQL no longer flags every rendered page with
+  `js/xss-through-dom` in the repositories that commit them.
+
 ## [0.3.0] - 2026-09-13
 
 ### Added
