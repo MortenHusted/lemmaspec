@@ -961,7 +961,13 @@ spec persistence_adapter_readiness {
     button.type = "button";
     const cards = section.querySelectorAll(".card").length;
     const title = section.querySelector("h2").textContent.replace(/^The /, "").replace(/^\w/, c => c.toUpperCase());
-    button.innerHTML = `${title}${cards ? ` <span class="n">${cards}</span>` : ""}`;
+    button.textContent = title;
+    if (cards) {
+      const count = document.createElement("span");
+      count.className = "n";
+      count.textContent = cards;
+      button.append(" ", count);
+    }
     if (section.dataset.step === "claims" && section.querySelector('.card[data-status="failed"]')) button.dataset.tone = "critical";
     if (section.dataset.step === "assumptions" && cards) button.dataset.tone = "attention";
     button.addEventListener("click", () => setStep(index));
