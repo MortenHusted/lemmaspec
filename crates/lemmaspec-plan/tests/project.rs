@@ -274,3 +274,53 @@ fn fences_and_bold_list_sublabels_are_narrative_only() {
         );
     }
 }
+
+#[test]
+fn external_gate_blocks_readiness_until_current_acceptance_is_observed() {
+    let plan = PLAN.replace("Dependencies:** None", "Dependencies:** G1");
+    for (status, blocked) in [
+        (STATUS.to_string(), false),
+        (
+            STATUS.replace(
+                "args: [release_check, current]",
+                "args: [release_check, old]",
+            ),
+            true,
+        ),
+        (
+            STATUS.replace(
+                "fact release_result { relation: observed args: [release_check, current] }",
+                "",
+            ),
+            true,
+        ),
+    ] {
+        let evidence = lemmaspec_plan::compose_status(
+            project_plan(&plan, "plan.md").unwrap(),
+            parse_artifact(&status).unwrap(),
+        )
+        .unwrap();
+        let report = check_artifact(CHECKER, &print_artifact(&evidence)).unwrap();
+        assert_eq!(
+            report
+                .facts
+                .iter()
+                .any(|f| f.relation == "blocked" && f.args == ["u1", "g1"]),
+            blocked
+        );
+        assert_eq!(
+            report
+                .facts
+                .iter()
+                .any(|f| f.relation == "ready" && f.args == ["u1"]),
+            !blocked
+        );
+    }
+    for invalid in ["G9", "G1-G2", "G1, G1", "D1"] {
+        assert!(project_plan(
+            &plan.replace("Dependencies:** G1", &format!("Dependencies:** {invalid}")),
+            "plan.md"
+        )
+        .is_err());
+    }
+}

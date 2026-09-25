@@ -35,6 +35,7 @@ spec plan_checker {
   rule admit_all_claims { derive: "accepted_evidence(U)" when: { condition_1: "acceptance_claim(C, U)" condition_2: "!missing_acceptance(U)" } }
   rule mark_incomplete { derive: "incomplete(U)" when: { condition_1: "scheduled(U)" condition_2: "!accepted_evidence(U)" } }
   rule block_dependency { derive: "blocked(U, D)" when: { condition_1: "depends_on(U, D)" condition_2: "incomplete(D)" } }
+  rule block_gate_dependency { derive: "blocked(U, G)" when: { condition_1: "depends_on(U, G)" condition_2: "open_gate(G)" } }
   rule find_blocker { derive: "has_blocker(U)" when: { condition_1: "blocked(U, D)" } }
   rule mark_ready { derive: "ready(U)" when: { condition_1: "scheduled(U)" condition_2: "!has_blocker(U)" } }
   rule cover_requirement { derive: "covered(R)" when: { condition_1: "requirement(R)" condition_2: "covers(U, R)" condition_3: "scheduled(U)" } }
@@ -77,6 +78,8 @@ spec plan_checker {
   fact fixture_depends_on_0 { relation: depends_on args: [next, waiting] }
   fact fixture_depends_on_1 { relation: depends_on args: [done, done] }
   fact fixture_depends_on_2 { relation: depends_on args: [waiting, done] }
+  fact fixture_depends_on_3 { relation: depends_on args: [waiting, open_check] }
+  fact fixture_depends_on_4 { relation: depends_on args: [done, closed_check] }
   fact fixture_gate_0 { relation: gate args: [open_check] }
   fact fixture_gate_1 { relation: gate args: [closed_check] }
   fact fixture_deferred_0 { relation: deferred args: [later_shape] }
@@ -102,10 +105,10 @@ spec plan_checker {
   expect partial_owner_is_not_admitted { query: "accepted_evidence(partial)" count: 0 }
   expect progress_is_not_acceptance { query: "accepted_evidence(progress_only)" count: 0 }
   expect missing_status_is_incomplete { query: "incomplete(U)" count: 4 }
-  expect one_dependency_is_blocked { query: "blocked(U, D)" count: 1 }
+  expect two_dependencies_are_blocked { query: "blocked(U, D)" count: 2 }
   expect next_waits_for_waiting { query: "blocked(next, waiting)" count: 1 }
-  expect one_unit_has_a_blocker { query: "has_blocker(U)" count: 1 }
-  expect five_units_have_no_blocker { query: "ready(U)" count: 5 }
+  expect two_units_have_a_blocker { query: "has_blocker(U)" count: 2 }
+  expect four_units_have_no_blocker { query: "ready(U)" count: 4 }
   expect two_requirements_are_covered { query: "covered(R)" count: 2 }
   expect undeclared_requirement_is_not_covered { query: "covered(unknown_requirement)" count: 0 }
   expect unscheduled_owner_does_not_cover { query: "covered(orphan_requirement)" count: 0 }

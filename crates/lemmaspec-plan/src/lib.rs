@@ -64,6 +64,7 @@ pub fn project_plan(markdown: &str, source: &str) -> Result<Artifact, String> {
     let mut units: Vec<Unit> = Vec::new();
     let mut current_unit = None;
     let mut requirement_ids = BTreeSet::new();
+    let mut gate_ids = BTreeSet::new();
     let mut ids = BTreeSet::new();
     let mut seen_sections = BTreeSet::new();
     let mut section_items = 0;
@@ -205,6 +206,8 @@ pub fn project_plan(markdown: &str, source: &str) -> Result<Artifact, String> {
             }
             if prefix == 'R' {
                 requirement_ids.insert(id.clone());
+            } else if prefix == 'G' {
+                gate_ids.insert(id.clone());
             }
             let location = format!("{source}#{anchor}");
             add_symbol(&mut artifact, &id, label, &location);
@@ -267,7 +270,7 @@ pub fn project_plan(markdown: &str, source: &str) -> Result<Artifact, String> {
             );
         }
         for dependency in dependencies {
-            if !unit_ids.contains(dependency.as_str()) {
+            if !unit_ids.contains(dependency.as_str()) && !gate_ids.contains(dependency) {
                 return Err(format!(
                     "{} references unknown dependency {dependency}",
                     unit.id
@@ -473,7 +476,19 @@ fn parse_unit_fields(mut text: &str, unit: &mut Unit) -> Result<(), String> {
         };
         let end = rest.find("**").unwrap_or(rest.len());
         let value = rest[..end].trim().trim_end_matches('.');
-        let refs = parse_references(value, kind)?;
+        let refs = if kind == 'U' && value != "None" {
+            let mut refs = BTreeSet::new();
+            for item in value.split(',').map(str::trim) {
+                let family = if item.starts_with('G') { 'G' } else { 'U' };
+                split_id(item, family)?;
+                if !refs.insert(item.to_ascii_lowercase()) {
+                    return Err(format!("duplicate reference {item}"));
+                }
+            }
+            refs.into_iter().collect()
+        } else {
+            parse_references(value, kind)?
+        };
         let field = if kind == 'R' {
             &mut unit.requirements
         } else {
@@ -525,6 +540,7 @@ fn reject_dependency_cycles(units: &[Unit]) -> Result<(), String> {
                     .as_ref()
                     .unwrap()
                     .iter()
+                    .filter(|id| id.starts_with('u'))
                     .map(String::as_str)
                     .collect(),
             )

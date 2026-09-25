@@ -39,8 +39,9 @@ may instead contain the sole item `- None`. Requirements must be nonempty.
   `**Dependencies:**` field, on separate lines or the same line. Fields take
   comma-separated IDs or `None`, with an optional final period.
 - Requirement fields support ascending, same-prefix ranges such as `RA1-RA3`.
-  Every expanded ID must exist. Dependency ranges are unsupported. Unit
-  dependencies can refer forward, but must exist and form an acyclic graph.
+  Every expanded ID must exist. Dependencies may name units (`U1`) or gates (`G1`), including an external
+  prerequisite explicitly declared as a gate. Dependency ranges are unsupported.
+  References can point forward, but must exist; unit dependencies must be acyclic.
 
 ```markdown
 ---
@@ -100,7 +101,8 @@ count into its own expectation. A unit explicitly declaring `Requirements: None`
 projects successfully and produces a failing coverage finding.
 
 Missing status is incomplete. `blocked(unit, dependency)` identifies incomplete
-dependencies; `ready(unit)` means only that no dependency is incomplete.
+dependencies, including gates without acceptance evidence; `ready(unit)` means
+only that no declared dependency is incomplete.
 It does not mean the unit itself has been implemented or accepted.
 
 Optional status composition uses:
