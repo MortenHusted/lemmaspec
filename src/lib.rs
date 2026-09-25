@@ -30,9 +30,14 @@ pub use ast::{parse_program, ParseError};
 pub use check::{bind_artifact, check_artifact};
 pub use eval::{Ann, Change, Engine, StoredFact, StratError};
 pub use guide::observation_identity_mismatch;
-pub use html::{render_projection_html, render_projection_html_with_target};
+pub use html::{
+    render_projection_html, render_projection_html_with_context, render_projection_html_with_target,
+};
 pub use intern::{Interner, Term, Value};
-pub use markdown::{render_projection_markdown, render_projection_markdown_with_target};
+pub use markdown::{
+    render_projection_markdown, render_projection_markdown_with_context,
+    render_projection_markdown_with_target,
+};
 pub use mutation::{
     mutate_artifact, MutationPolicyReport, MutationReport, MutationResult, MutationStatus,
     MutationSummary, MutationTarget,
@@ -42,7 +47,7 @@ pub use printer::print_artifact;
 pub use projection::{
     project_artifact, GraphEdge, GraphNode, GraphNodeData, GraphProjection, ProjectionError,
 };
-pub use source::is_safe_source;
+pub use source::{is_safe_source, SourceContext};
 
 impl Engine {
     /// Install a versioned batch of rules and facts.

@@ -9,8 +9,16 @@ cargo run -p lemmaspec-plan -- project crates/lemmaspec-plan/tests/fixtures/plan
 cargo run -p lemmaspec-plan -- checker -o /tmp/plan-checker.lemmaspec
 cargo run -p lemmaspec -- check /tmp/plan-checker.lemmaspec /tmp/plan.lemmaspec
 cargo run -p lemmaspec -- bind /tmp/plan-checker.lemmaspec /tmp/plan.lemmaspec -o /tmp/bound-plan.lemmaspec
+cargo run -p lemmaspec -- render /tmp/bound-plan.lemmaspec --source-root . -o /tmp/plan-report.html
+cargo run -p lemmaspec -- render /tmp/bound-plan.lemmaspec --format md --source-root . -o /tmp/plan-report.md
 cargo run -p lemmaspec -- mutate /tmp/plan-checker.lemmaspec
 ```
+
+The example runs from the workspace root. `--source-root .` keeps generated
+repository-relative citations linked to their source when the bound artifact
+and reports are under `/tmp`. For another layout, pass the directory relative
+to which the plan path was supplied to `project`. Stored citations remain
+unchanged. Without the flag, report links are relative to the report itself.
 
 ## Input contract
 

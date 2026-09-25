@@ -17,6 +17,17 @@ pub fn render_projection_html_with_target(
     projection: &GraphProjection,
     target: Option<&str>,
 ) -> String {
+    render_projection_html_with_context(source, projection, target, None)
+}
+
+/// Render with an explicit source root and report directory for citations.
+/// Without a context, authored destinations are preserved verbatim.
+pub fn render_projection_html_with_context(
+    source: &str,
+    projection: &GraphProjection,
+    target: Option<&str>,
+    context: Option<&crate::SourceContext>,
+) -> String {
     let title = humanize(&projection.spec);
     let (expectation_count, failed) = projection
         .nodes
@@ -39,7 +50,7 @@ pub fn render_projection_html_with_target(
         claims,
         stress_tests,
         reference,
-    } = render_guide(projection);
+    } = render_guide(projection, context);
     let relations = render_relations(projection);
     let brief = brief(projection);
     let labels = display_labels(projection);
@@ -52,7 +63,7 @@ pub fn render_projection_html_with_target(
 
     render_template(&BTreeMap::from([
         ("FRESHNESS", target.filter(|target| crate::guide::observation_identity_mismatch(projection, target)).map(|target| format!("<div class=\"freshness\" role=\"status\">Not current for target {}. Observed status was recorded against a different identity.</div>", html_escape(target))).unwrap_or_default()),
-        ("BRIEF", render_brief(&brief)),
+        ("BRIEF", render_brief(&brief, context)),
         ("DISPLAY_LABELS", escape_json_for_script(&serde_json::to_string(&labels).expect("labels serialize"))),
         ("ANSWER_CLOSURES", escape_json_for_script(&serde_json::to_string(&brief.answers.iter().map(|answer| (&answer.id, &answer.closure)).collect::<BTreeMap<_, _>>()).expect("closures serialize"))),
         ("ASSUMPTIONS", assumptions),

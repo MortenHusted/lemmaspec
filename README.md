@@ -19,13 +19,27 @@ reasoning and source citations. Select an answer to see its witness graph;
 open the full graph or walkthrough when you need the whole model.
 
 ```sh
-lemmaspec render tests/fixtures/readability/labelled_dependency.lemmaspec -o /tmp/report.html
-lemmaspec render tests/fixtures/readability/labelled_dependency.lemmaspec --format md -o /tmp/report.md
+lemmaspec render tests/fixtures/readability/labelled_dependency.lemmaspec --source-root . -o /tmp/report.html
+lemmaspec render tests/fixtures/readability/labelled_dependency.lemmaspec --format md --source-root . -o /tmp/report.md
 ```
 
 These examples intentionally fail an acceptance expectation, so the reports
 are written and the command exits 1. Display labels, notes and evidence bases
 never change evaluation output or proof identities.
+
+When citations are repository-relative and the report is written elsewhere,
+supply `--source-root PATH`. Relative roots are resolved from the invocation
+directory; no Git root is guessed. Links are rebased from the report directory
+to this explicit source directory. Without the flag, authored destinations stay
+unchanged and resolve relative to the report, preserving sibling-file links.
+HTTPS URLs and report-local fragments stay unchanged in either mode. The source
+root must exist; rendering creates the output directory if needed.
+
+Library callers can construct `SourceContext::new(source_root, output_directory)`
+from existing directories and pass it to `render_projection_html_with_context`
+or `render_projection_markdown_with_context`. Existing render functions preserve
+their link behavior. Context changes link destinations only, never citations,
+source artifacts, projection metadata or proof identities.
 
 A fact may declare its producing boundary with `basis: snapshot`, `policy`,
 `observed`, or `reviewer_declared`, plus a `source` string. Snapshot and observed
@@ -169,7 +183,7 @@ lemmaspec mutate <path.lemmaspec> [--json]
 lemmaspec check <checker.lemmaspec> <evidence.lemmaspec> [--json]
 lemmaspec bind <checker.lemmaspec> <evidence.lemmaspec> [-o <bound.lemmaspec>]
 lemmaspec project <path.lemmaspec> [--json]
-lemmaspec render <path.lemmaspec> [-o <path.html>]
+lemmaspec render <path.lemmaspec> [--format html|md] [--source-root <path>] [-o <path>]
 lemmaspec syntax
 ```
 

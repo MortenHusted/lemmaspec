@@ -1,7 +1,7 @@
 //! Deterministic answer-first reading for terminals, reviews and diffs.
 
 use crate::guide::{basis_label, brief, observation_identity_mismatch, BriefFact};
-use crate::{is_safe_source, GraphProjection};
+use crate::GraphProjection;
 
 pub fn render_projection_markdown(projection: &GraphProjection) -> String {
     render_projection_markdown_with_target(projection, None)
@@ -10,6 +10,16 @@ pub fn render_projection_markdown(projection: &GraphProjection) -> String {
 pub fn render_projection_markdown_with_target(
     projection: &GraphProjection,
     target: Option<&str>,
+) -> String {
+    render_projection_markdown_with_context(projection, target, None)
+}
+
+/// Render with an explicit source root and report directory for citations.
+/// Without a context, authored destinations are preserved verbatim.
+pub fn render_projection_markdown_with_context(
+    projection: &GraphProjection,
+    target: Option<&str>,
+    context: Option<&crate::SourceContext>,
 ) -> String {
     let brief = brief(projection);
     let mut out = format!(
@@ -47,7 +57,7 @@ pub fn render_projection_markdown_with_target(
             out.push_str("No matching witness was produced in this evaluated artifact. A zero result describes this model only.\n\n");
         }
         for (index, fact) in answer.steps.iter().take(8).enumerate() {
-            out.push_str(&format!("{}. {}\n", index + 1, fact_text(fact)));
+            out.push_str(&format!("{}. {}\n", index + 1, fact_text(fact, context)));
         }
         if answer.steps.len() > 8 {
             out.push_str(&format!(
@@ -55,7 +65,7 @@ pub fn render_projection_markdown_with_target(
                 answer.steps.len() - 8
             ));
             for (index, fact) in answer.steps.iter().enumerate().skip(8) {
-                out.push_str(&format!("{}. {}\n", index + 1, fact_text(fact)));
+                out.push_str(&format!("{}. {}\n", index + 1, fact_text(fact, context)));
             }
             out.push_str("\n</details>\n");
         }
@@ -64,14 +74,14 @@ pub fn render_projection_markdown_with_target(
             out.push_str("No positive premises in this witness.\n");
         }
         for fact in &answer.premises {
-            out.push_str(&format!("- {}\n", fact_text(fact)));
+            out.push_str(&format!("- {}\n", fact_text(fact, context)));
         }
         out.push('\n');
     }
     out
 }
 
-fn fact_text(fact: &BriefFact) -> String {
+fn fact_text(fact: &BriefFact, context: Option<&crate::SourceContext>) -> String {
     let mut text = format!("**{}:** {}", fact.standing, escape(&fact.sentence));
     if !fact.rules.is_empty() {
         text.push_str(&format!(
@@ -85,13 +95,16 @@ fn fact_text(fact: &BriefFact) -> String {
     }
     for source in &fact.sources {
         text.push(' ');
-        text.push_str(&citation(source));
+        text.push_str(&citation(source, context));
+    }
+    for provenance in &fact.provenance {
+        text.push_str(&format!(" Provenance: {}", literal_citation(provenance)));
     }
     for basis in &fact.bases {
         text.push_str(&format!(
             " — {}: {}",
             basis_label(&basis.kind),
-            citation(&basis.source)
+            citation(&basis.source, context)
         ));
         if let Some(identity) = &basis.identity {
             text.push_str(&format!(" as of {}", escape(identity)));
@@ -100,17 +113,21 @@ fn fact_text(fact: &BriefFact) -> String {
     text
 }
 
-fn citation(source: &str) -> String {
-    if is_safe_source(source) {
-        format!("[{}](<{}>)", escape(source), destination(source))
+fn citation(source: &str, context: Option<&crate::SourceContext>) -> String {
+    if let Some(resolved) = crate::source::source_destination(source, context) {
+        format!("[{}](<{}>)", escape(source), destination(&resolved))
     } else {
-        // A code span also prevents Markdown's automatic bare-URL linking.
-        let delimiter = "`".repeat(source.split(|c| c != '`').map(str::len).max().unwrap_or(0) + 1);
-        format!(
-            "{delimiter} {} {delimiter}",
-            source.replace(['\n', '\r'], " ")
-        )
+        literal_citation(source)
     }
+}
+
+fn literal_citation(source: &str) -> String {
+    // A code span also prevents Markdown's automatic bare-URL linking.
+    let delimiter = "`".repeat(source.split(|c| c != '`').map(str::len).max().unwrap_or(0) + 1);
+    format!(
+        "{delimiter} {} {delimiter}",
+        source.replace(['\n', '\r'], " ")
+    )
 }
 
 fn destination(value: &str) -> String {

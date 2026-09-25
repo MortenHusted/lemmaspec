@@ -51,6 +51,7 @@ struct Support<'a> {
 
 struct Index<'a> {
     projection: &'a GraphProjection,
+    source_context: Option<&'a crate::SourceContext>,
     nodes: BTreeMap<&'a str, &'a GraphNode>,
     relations: BTreeMap<&'a str, Relation<'a>>,
     symbols: BTreeMap<&'a str, Option<&'a str>>,
@@ -164,6 +165,7 @@ impl<'a> Index<'a> {
 
         Self {
             projection,
+            source_context: None,
             nodes,
             relations,
             symbols,
@@ -553,7 +555,7 @@ fn fact_meta(index: &Index, node: &GraphNode) -> String {
             meta.push(format!(
                 "{}: {}{}",
                 basis_label(&basis.kind),
-                source_html(&basis.source),
+                source_html(&basis.source, index.source_context),
                 basis
                     .identity
                     .as_ref()
@@ -646,8 +648,12 @@ pub struct GuideSections {
     pub reference: String,
 }
 
-pub fn render_guide(projection: &GraphProjection) -> GuideSections {
-    let index = Index::build(projection);
+pub fn render_guide(
+    projection: &GraphProjection,
+    context: Option<&crate::SourceContext>,
+) -> GuideSections {
+    let mut index = Index::build(projection);
+    index.source_context = context;
     GuideSections {
         question: render_question(&index),
         observations: render_observations(&index),
@@ -1130,7 +1136,7 @@ fn render_vocabulary(index: &Index) -> String {
                         html_escape(&index.symbol_text(symbol)),
                         plural(*uses, "use", "uses"),
                         index.nodes.get(id).and_then(|node| match &node.data {
-                            GraphNodeData::Symbol { source: Some(source), .. } => Some(format!(" <span class=\"citations\">{}</span>", source_html(source))),
+                            GraphNodeData::Symbol { source: Some(source), .. } => Some(format!(" <span class=\"citations\">{}</span>", source_html(source, index.source_context))),
                             _ => None,
                         }).unwrap_or_default()
                     )
@@ -1169,16 +1175,13 @@ pub(crate) struct BriefFact {
     pub bases: Vec<EvidenceBasis>,
     pub standing: String,
     pub sources: Vec<String>,
+    pub provenance: Vec<String>,
     pub rules: Vec<String>,
 }
 
 impl Index<'_> {
     fn brief_fact(&self, node: &GraphNode) -> BriefFact {
-        let mut sources: BTreeSet<String> = self
-            .evidence(node)
-            .into_iter()
-            .map(str::to_string)
-            .collect();
+        let mut sources = BTreeSet::new();
         for symbol in self
             .symbol_references
             .get(node.id.as_str())
@@ -1205,6 +1208,11 @@ impl Index<'_> {
             },
             standing: standing_text(node),
             sources: sources.into_iter().collect(),
+            provenance: self
+                .evidence(node)
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
             rules: self
                 .proof_rules
                 .get(node.id.as_str())
@@ -1381,16 +1389,16 @@ pub(crate) fn brief(projection: &GraphProjection) -> Brief {
     }
 }
 
-pub(crate) fn source_html(source: &str) -> String {
+pub(crate) fn source_html(source: &str, context: Option<&crate::SourceContext>) -> String {
     let escaped = html_escape(source);
-    if crate::is_safe_source(source) {
-        format!("<a href=\"{escaped}\">{escaped}</a>")
+    if let Some(destination) = crate::source::source_destination(source, context) {
+        format!("<a href=\"{}\">{escaped}</a>", html_escape(&destination))
     } else {
         format!("<span class=\"unsafe-source\">{escaped}</span>")
     }
 }
 
-fn brief_fact_html(fact: &BriefFact) -> String {
+fn brief_fact_html(fact: &BriefFact, context: Option<&crate::SourceContext>) -> String {
     let mut detail = format!(
         "<span class=\"chip\">{}</span> {}",
         html_escape(&fact.standing),
@@ -1411,7 +1419,17 @@ fn brief_fact_html(fact: &BriefFact) -> String {
             " <span class=\"citations\">[{}]</span>",
             fact.sources
                 .iter()
-                .map(|source| source_html(source))
+                .map(|source| source_html(source, context))
+                .collect::<Vec<_>>()
+                .join("; ")
+        ));
+    }
+    if !fact.provenance.is_empty() {
+        detail.push_str(&format!(
+            " <span class=\"citations\">Provenance: {}</span>",
+            fact.provenance
+                .iter()
+                .map(|value| html_escape(value))
                 .collect::<Vec<_>>()
                 .join("; ")
         ));
@@ -1420,7 +1438,7 @@ fn brief_fact_html(fact: &BriefFact) -> String {
         detail.push_str(&format!(
             " <span class=\"basis\">{}: {}{}</span>",
             basis_label(&basis.kind),
-            source_html(&basis.source),
+            source_html(&basis.source, context),
             basis
                 .identity
                 .as_ref()
@@ -1431,7 +1449,7 @@ fn brief_fact_html(fact: &BriefFact) -> String {
     detail
 }
 
-pub(crate) fn render_brief(brief: &Brief) -> String {
+pub(crate) fn render_brief(brief: &Brief, context: Option<&crate::SourceContext>) -> String {
     let mut html =
         String::from("<section class=\"brief\" id=\"brief\"><header><h2>Answers</h2></header>");
     if let Some(question) = &brief.question {
@@ -1454,7 +1472,7 @@ pub(crate) fn render_brief(brief: &Brief) -> String {
         } else {
             html.push_str("<ol>");
             for fact in answer.steps.iter().take(8) {
-                html.push_str(&format!("<li>{}</li>", brief_fact_html(fact)));
+                html.push_str(&format!("<li>{}</li>", brief_fact_html(fact, context)));
             }
             html.push_str("</ol>");
             if answer.steps.len() > 8 {
@@ -1463,14 +1481,14 @@ pub(crate) fn render_brief(brief: &Brief) -> String {
                     answer.steps.len() - 8
                 ));
                 for fact in answer.steps.iter().skip(8) {
-                    html.push_str(&format!("<li>{}</li>", brief_fact_html(fact)));
+                    html.push_str(&format!("<li>{}</li>", brief_fact_html(fact, context)));
                 }
                 html.push_str("</ol></details>");
             }
         }
         html.push_str("</details><details class=\"premises\"><summary>Observations and assumptions</summary><ul>");
         for fact in &answer.premises {
-            html.push_str(&format!("<li>{}</li>", brief_fact_html(fact)));
+            html.push_str(&format!("<li>{}</li>", brief_fact_html(fact, context)));
         }
         html.push_str("</ul></details></article>");
     }

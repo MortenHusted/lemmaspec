@@ -5,8 +5,8 @@ use lemmaspec::agent::{self, Agent};
 use lemmaspec::upgrade::{self, Install};
 use lemmaspec::{
     bind_artifact, check_artifact, mutate_artifact, observation_identity_mismatch,
-    project_artifact, render_projection_html_with_target, render_projection_markdown_with_target,
-    walk_artifact, MutationTarget,
+    project_artifact, render_projection_html_with_context, render_projection_markdown_with_context,
+    walk_artifact, MutationTarget, SourceContext,
 };
 
 const HELP: &str = "Usage:
@@ -42,6 +42,7 @@ Options:
   --json  Emit machine-readable JSON for walk, mutate, check, or project
   -o, --output <path>  Choose the render (.html/.md) or bind (.lemmaspec) output path
   --format html|md  Choose the report format (default: html)
+  --source-root <path>    Resolve repository citations from this explicit directory
   --target-identity <id>  Compare observed report status against this identity
   --claude, --codex  Limit agent install to one agent (default: both)
   --dir <project>  Project to install into (default: current directory)
@@ -570,24 +571,36 @@ fn run_project(args: &[String]) -> Result<ExitCode, String> {
 }
 
 fn run_render(args: &[String]) -> Result<ExitCode, String> {
-    let (path, output_path, format, target) = render_paths(args)?;
+    let RenderPaths {
+        path,
+        output: output_path,
+        format,
+        target,
+        source_root,
+    } = render_paths(args)?;
     let source =
         std::fs::read_to_string(path).map_err(|error| format!("read `{path}`: {error}"))?;
     let projection =
         project_artifact(&source).map_err(|error| format!("render `{path}`: {error}"))?;
-    let html = if format == "md" {
-        render_projection_markdown_with_target(&projection, target)
-    } else {
-        render_projection_html_with_target(&source, &projection, target)
-    };
-
-    if let Some(parent) = output_path
+    let output_directory = output_path
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
-    {
-        std::fs::create_dir_all(parent)
-            .map_err(|error| format!("create output directory `{}`: {error}", parent.display()))?;
-    }
+        .unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(output_directory).map_err(|error| {
+        format!(
+            "create output directory `{}`: {error}",
+            output_directory.display()
+        )
+    })?;
+    let context = source_root
+        .map(|root| SourceContext::new(Path::new(root), output_directory))
+        .transpose()?;
+    let html = if format == "md" {
+        render_projection_markdown_with_context(&projection, target, context.as_ref())
+    } else {
+        render_projection_html_with_context(&source, &projection, target, context.as_ref())
+    };
+
     std::fs::write(&output_path, html)
         .map_err(|error| format!("write `{}`: {error}", output_path.display()))?;
     println!(
@@ -609,7 +622,15 @@ fn run_render(args: &[String]) -> Result<ExitCode, String> {
     )
 }
 
-fn render_paths(args: &[String]) -> Result<(&str, PathBuf, &str, Option<&str>), String> {
+struct RenderPaths<'a> {
+    path: &'a str,
+    output: PathBuf,
+    format: &'a str,
+    target: Option<&'a str>,
+    source_root: Option<&'a str>,
+}
+
+fn render_paths(args: &[String]) -> Result<RenderPaths<'_>, String> {
     let Some(path) = args.first() else {
         return Err(format!("render requires a .lemmaspec path\n\n{HELP}"));
     };
@@ -620,9 +641,20 @@ fn render_paths(args: &[String]) -> Result<(&str, PathBuf, &str, Option<&str>), 
     let mut output = None;
     let mut format = "html";
     let mut target = None;
+    let mut source_root = None;
     let mut index = 1;
     while index < args.len() {
         match args[index].as_str() {
+            "--source-root" => {
+                if source_root.is_some() {
+                    return Err("render accepts only one source root".to_string());
+                }
+                let Some(value) = args.get(index + 1) else {
+                    return Err("--source-root requires a path".to_string());
+                };
+                source_root = Some(value.as_str());
+                index += 2;
+            }
             "--target-identity" => {
                 let Some(value) = args.get(index + 1) else {
                     return Err("--target-identity requires an identity".to_string());
@@ -660,5 +692,11 @@ fn render_paths(args: &[String]) -> Result<(&str, PathBuf, &str, Option<&str>), 
             output.display()
         ));
     }
-    Ok((path, output, format, target))
+    Ok(RenderPaths {
+        path,
+        output,
+        format,
+        target,
+        source_root,
+    })
 }
