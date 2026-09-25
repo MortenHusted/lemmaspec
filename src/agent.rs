@@ -39,22 +39,30 @@ The loop
   4. lemmaspec mutate FILE --json     when policies are declared; a survivor
                                       is a specification gap
   5. lemmaspec project FILE --json    the closed graph for other tools
-  6. lemmaspec render FILE            the page a human reads
+  6. lemmaspec render FILE            the answer-first page a human reads;
+                                      --format md writes Markdown
 
 Evidence discipline
-  - A fact with provenance is an observation. Without provenance, or below
-    100 confidence, it is an assumption: the render lists it as a decision
-    waiting to be made and shows what falls if it is wrong.
+  - Facts may declare basis: snapshot, policy, observed, or reviewer_declared.
+    Each basis requires source; snapshot and observed also require identity.
+    These fields describe a producer's claim, not authenticated authorship.
+  - Untyped facts remain reviewer-declared assumptions, even with provenance
+    or full confidence. Neither citations nor confidence upgrade a claim.
+    LLM-authored claims stay reviewer_declared; generated observations must
+    come from the named deterministic tool.
   - Never promote a guess to a fact to make an expectation pass.
   - An open expectation is a finding. Report it; do not change the count.
 
 Write for the human who will read the render
   - Comments before `spec` state the question. A comment directly above a
     relation, fact, rule, expectation, or mutation explains it.
+    Keep maintainer guidance in notes { text: "..." }, outside the question.
   - Give relations `roles` and a `reads` template so facts and rule
     conditions render as sentences: "{item} depends on {dependency}".
-  - Hand over the HTML with two pointers: press ? for the guide, and the
-    Assumptions step is where a decision or evidence is needed.
+    Give symbols labels and safe source links so readers can follow them.
+  - Hand over the answers first, with failed expectations and their numbered
+    witnesses. The graph starts on the selected answer's witness; the full
+    graph and walkthrough are opt-in. Press ? for the guide.
 
 Install the skill next to the project
   lemmaspec agent install                 .claude/skills and .codex/skills,
