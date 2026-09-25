@@ -21,6 +21,9 @@ pub fn print_artifact(artifact: &Artifact) -> String {
         out.push('\n');
     }
     let _ = writeln!(out, "spec {} {{", artifact.name);
+    if let Some(notes) = &artifact.notes {
+        let _ = writeln!(out, "  notes {{ text: {} }}\n", quoted(notes));
+    }
 
     let mut first = true;
     let mut block = |out: &mut String, doc: &Option<String>, body: String| {
@@ -34,6 +37,18 @@ pub fn print_artifact(artifact: &Artifact) -> String {
         out.push_str(&body);
     };
 
+    for symbol in &artifact.symbols {
+        let mut body = format!(
+            "  symbol {} {{\n    label: {}\n",
+            text(&symbol.value),
+            quoted(&symbol.label)
+        );
+        if let Some(source) = &symbol.source {
+            let _ = writeln!(body, "    source: {}", quoted(source));
+        }
+        body.push_str("  }\n");
+        block(&mut out, &symbol.doc, body);
+    }
     for relation in &artifact.relations {
         block(&mut out, &relation.doc, print_relation(relation));
     }

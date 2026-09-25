@@ -63,6 +63,9 @@ Example:
 const SYNTAX_HELP: &str = r#"Artifact:
   // Comments before `spec` document the artifact: the question it answers.
   spec NAME {
+    notes { text: "Maintainer guidance, separate from the reader's question." }
+    symbol value { label: "Human-readable value" source: "plan.md#value" }
+
     // A comment touching a declaration documents that declaration.
     relation NAME {
       args: [symbol, integer]
@@ -95,6 +98,12 @@ const SYNTAX_HELP: &str = r#"Artifact:
   }
 
 Artifact rules:
+  - symbol labels describe constants used by facts, rules, or expectations;
+    symbol keys may be bare identifiers or quoted strings, and source is optional
+  - one declaration per symbol; display labels may repeat and never affect proofs
+  - notes is an optional singleton block of maintainer guidance
+  - source links allow repository-relative paths, fragments, or HTTPS URLs;
+    unsafe destinations remain metadata for plain-text display
   - relation argument types are symbol or integer
   - roles is an optional identifier per argument; reads is an optional sentence
     template whose {placeholders} name a role or an argument position

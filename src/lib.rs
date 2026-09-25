@@ -17,12 +17,13 @@ pub mod mutation;
 mod narrative;
 pub mod printer;
 mod projection;
+mod source;
 pub mod upgrade;
 
 pub use artifact::{
     parse_artifact, walk_artifact, Artifact, ArtifactError, ExpectationDecl, FactDecl, FactValue,
-    MutationDecl, MutationOperator, RelationDecl, RuleDecl, ValueType, WalkExpectation, WalkFact,
-    WalkReport,
+    MutationDecl, MutationOperator, RelationDecl, RuleDecl, SymbolDecl, ValueType, WalkExpectation,
+    WalkFact, WalkReport,
 };
 pub use ast::{parse_program, ParseError};
 pub use check::{bind_artifact, check_artifact};
@@ -38,6 +39,7 @@ pub use printer::print_artifact;
 pub use projection::{
     project_artifact, GraphEdge, GraphNode, GraphNodeData, GraphProjection, ProjectionError,
 };
+pub use source::is_safe_source;
 
 impl Engine {
     /// Install a versioned batch of rules and facts.

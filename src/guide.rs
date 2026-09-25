@@ -379,7 +379,7 @@ fn label(node: &GraphNode) -> String {
             "{relation}({})",
             args.iter().map(value_text).collect::<Vec<_>>().join(", ")
         ),
-        GraphNodeData::Symbol { value } => value.clone(),
+        GraphNodeData::Symbol { value, .. } => value.clone(),
         GraphNodeData::Spec { name, .. }
         | GraphNodeData::Relation { name, .. }
         | GraphNodeData::Rule { name, .. }
@@ -1030,7 +1030,7 @@ fn render_vocabulary(index: &Index) -> String {
         ) else {
             continue;
         };
-        let (GraphNodeData::Fact { relation, .. }, GraphNodeData::Symbol { value }) =
+        let (GraphNodeData::Fact { relation, .. }, GraphNodeData::Symbol { value, .. }) =
             (&fact.data, &symbol.data)
         else {
             continue;

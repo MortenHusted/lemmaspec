@@ -118,12 +118,28 @@ impl MutationDecl {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct SymbolDecl {
+    pub value: String,
+    pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Artifact {
     pub name: String,
     /// Every comment written before the `spec` keyword: the question the
     /// artifact answers, in the author's words.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
+    /// Maintenance guidance, separate from the reader's question.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    /// Display metadata for constants already present in the artifact.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub symbols: Vec<SymbolDecl>,
     pub relations: Vec<RelationDecl>,
     pub facts: Vec<FactDecl>,
     pub rules: Vec<RuleDecl>,
@@ -625,7 +641,13 @@ impl<'a> Parser<'a> {
     fn block(&mut self) -> Result<RawBlock, ArtifactError> {
         let start = self.current().offset;
         let kind = self.expect_identifier("block kind")?;
-        let name = self.expect_identifier("block name")?;
+        let name = if kind == "notes" {
+            "notes".to_string()
+        } else if kind == "symbol" {
+            raw_text(self.value()?, "symbol value")?
+        } else {
+            self.expect_identifier("block name")?
+        };
         self.expect(TokenKind::LeftBrace, "`{`")?;
         let mut fields = BTreeMap::new();
         while !self.at(&TokenKind::RightBrace) {
@@ -772,6 +794,8 @@ impl Artifact {
         let mut artifact = Artifact {
             name,
             doc,
+            notes: None,
+            symbols: Vec::new(),
             relations: Vec::new(),
             facts: Vec::new(),
             rules: Vec::new(),
@@ -793,6 +817,22 @@ impl Artifact {
             }
 
             match block.kind.as_str() {
+                "notes" => {
+                    let text = take_text(&mut block, "text")?;
+                    reject_unknown_fields(&block)?;
+                    artifact.notes = Some(text);
+                }
+                "symbol" => {
+                    let label = take_text(&mut block, "label")?;
+                    let source = take_optional_text(&mut block, "source")?;
+                    reject_unknown_fields(&block)?;
+                    artifact.symbols.push(SymbolDecl {
+                        value: block.name,
+                        label,
+                        source,
+                        doc: block.doc,
+                    });
+                }
                 "relation" => {
                     let args = take_list(&mut block, "args")?
                         .into_iter()
@@ -938,12 +978,15 @@ impl Artifact {
                 }
                 other => {
                     return Err(ArtifactError::new(format!(
-                        "unknown block kind `{other}`; expected relation, fact, rule, expect, or mutation"
+                        "unknown block kind `{other}`; expected relation, fact, rule, expect, mutation, symbol, or notes"
                     )));
                 }
             }
         }
 
+        artifact
+            .symbols
+            .sort_by(|left, right| left.value.cmp(&right.value));
         artifact
             .relations
             .sort_by(|left, right| left.name.cmp(&right.name));
@@ -956,7 +999,74 @@ impl Artifact {
             .mutations
             .sort_by(|left, right| left.id.cmp(&right.id));
         artifact.validate_mutations()?;
+        if !artifact.symbols.is_empty() {
+            let referenced = artifact.referenced_symbols()?;
+            for symbol in &artifact.symbols {
+                if !referenced.contains(&symbol.value) {
+                    return Err(ArtifactError::new(format!(
+                        "symbol `{}` labels an unknown symbol",
+                        symbol.value
+                    )));
+                }
+            }
+        }
         Ok(artifact)
+    }
+
+    pub(crate) fn referenced_symbols(&self) -> Result<BTreeSet<String>, ArtifactError> {
+        fn collect(term: &Term, symbols: &mut BTreeSet<String>) {
+            match term {
+                Term::Sym(value) => {
+                    symbols.insert(value.clone());
+                }
+                Term::Agg(_, inner) => collect(inner, symbols),
+                _ => {}
+            }
+        }
+
+        let mut symbols = BTreeSet::new();
+        for fact in &self.facts {
+            for arg in &fact.args {
+                if let FactValue::Symbol(value) = arg {
+                    symbols.insert(value.clone());
+                }
+            }
+        }
+        let sources = self
+            .rules
+            .iter()
+            .map(|rule| format!("{}: {} :- {}.", rule.id, rule.derive, rule.when.join(", ")))
+            .chain(
+                self.expectations
+                    .iter()
+                    .map(|expectation| format!("{}.", expectation.query)),
+            );
+        for source in sources {
+            let clauses =
+                parse_program(&source).map_err(|error| ArtifactError::new(error.to_string()))?;
+            for clause in clauses {
+                for arg in &clause.head.args {
+                    collect(arg, &mut symbols);
+                }
+                for literal in &clause.body {
+                    match literal {
+                        Lit::Pos(atom) | Lit::Neg(atom) => {
+                            for arg in &atom.args {
+                                collect(arg, &mut symbols);
+                            }
+                        }
+                        Lit::Cmp(_, term, expression) => {
+                            collect(term, &mut symbols);
+                            crate::check_expression(expression, &mut |term| {
+                                collect(term, &mut symbols)
+                            });
+                        }
+                        Lit::Now(term) => collect(term, &mut symbols),
+                    }
+                }
+            }
+        }
+        Ok(symbols)
     }
 
     fn validate_mutations(&self) -> Result<(), ArtifactError> {

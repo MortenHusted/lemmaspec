@@ -7,6 +7,16 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- Symbol declarations attach human labels and optional source destinations to
+  existing constants, including quoted symbol keys. Metadata appears in the
+  graph projection without changing evaluation or proof identities.
+- A `notes { text: "..." }` block keeps maintainer guidance separate from the
+  question before `spec`. Printing and binding preserve labels and notes.
+- A shared source-link policy permits repository-relative paths, fragments,
+  and HTTPS destinations; unsafe destinations remain available as plain text.
+
 ## [0.3.1] - 2026-09-21
 
 ### Fixed

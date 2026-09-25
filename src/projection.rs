@@ -51,6 +51,8 @@ pub enum GraphNodeData {
         status: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         doc: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        notes: Option<String>,
     },
     Relation {
         name: String,
@@ -104,6 +106,12 @@ pub enum GraphNodeData {
     },
     Symbol {
         value: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        source: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        doc: Option<String>,
     },
 }
 
@@ -339,6 +347,7 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
             name: artifact.name.clone(),
             status: report.status.clone(),
             doc: artifact.doc.clone(),
+            notes: artifact.notes.clone(),
         },
     );
 
@@ -669,6 +678,22 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
         );
     }
 
+    for symbol in &artifact.symbols {
+        if let Some(node) =
+            builder
+                .nodes
+                .get_mut(&digest_id(&artifact.name, "symbol", &symbol.value))
+        {
+            if let GraphNodeData::Symbol {
+                label, source, doc, ..
+            } = &mut node.data
+            {
+                *label = Some(symbol.label.clone());
+                *source = symbol.source.clone();
+                *doc = symbol.doc.clone();
+            }
+        }
+    }
     let projection = builder.finish(report.status);
     projection
         .validate_closed()
@@ -794,6 +819,9 @@ fn symbol_node(builder: &mut ProjectionBuilder, value: &str) -> String {
         digest_id(&builder.spec, "symbol", &value),
         GraphNodeData::Symbol {
             value: value.to_string(),
+            label: None,
+            source: None,
+            doc: None,
         },
     )
 }

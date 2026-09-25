@@ -111,6 +111,22 @@ variables used with incompatible types. Its report separates asserted and
 derived facts and carries a deterministic `why` witness for every fact.
 Repeated walks over the same artifact produce byte-stable JSON.
 
+Artifacts can attach display metadata to their existing symbol values:
+
+```text
+symbol release { label: "Publish the release" source: "plan.md#publish" }
+symbol "module::verify" { label: "Verify calls" }
+notes { text: "Refresh the evidence when the plan changes." }
+```
+
+These declarations belong inside `spec`. A symbol must occur in a fact, rule,
+or expectation; forward references and repeated display labels are allowed.
+Labels, optional sources, and maintainer notes never change evaluation or proof
+identities. Notes are separate from the reader's question before `spec`.
+Source links allow repository-relative paths, fragments, and HTTPS URLs;
+unsafe destinations remain text. Binding keeps labels for surviving checker
+symbols, lets evidence labels override them, and combines both sets of notes.
+
 ## Commands
 
 ```text
