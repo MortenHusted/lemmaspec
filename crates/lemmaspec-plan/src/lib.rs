@@ -450,11 +450,16 @@ fn parse_semantic_input(text: &str) -> Result<(String, &str), String> {
 }
 
 fn looks_like_declaration(text: &str) -> bool {
-    text.chars().next().is_some_and(|c| "RUGDS".contains(c))
-        && text
-            .split_whitespace()
-            .next()
-            .is_some_and(|id| id.chars().any(|c| c.is_ascii_digit()))
+    let Some(id) = text
+        .split_whitespace()
+        .next()
+        .and_then(|word| word.strip_suffix('.'))
+    else {
+        return false;
+    };
+    id.chars()
+        .next()
+        .is_some_and(|family| "RUGDS".contains(family) && split_id(id, family).is_ok())
 }
 
 fn parse_unit_fields(mut text: &str, unit: &mut Unit) -> Result<(), String> {
@@ -591,7 +596,7 @@ pub fn compose_status(mut plan: Artifact, status: Artifact) -> Result<Artifact, 
             _ => None,
         })
         .collect();
-    let mut claims = BTreeMap::new();
+    let mut claims = BTreeSet::new();
     let mut targets = 0;
     for fact in &status.facts {
         match (fact.relation.as_str(), fact.args.as_slice()) {
@@ -601,7 +606,7 @@ pub fn compose_status(mut plan: Artifact, status: Artifact) -> Result<Artifact, 
                         "acceptance claim references unknown unit or gate {owner}"
                     ));
                 }
-                if claims.insert(claim.clone(), owner.clone()).is_some() {
+                if !claims.insert(claim) {
                     return Err(format!("duplicate acceptance claim {claim}"));
                 }
             }

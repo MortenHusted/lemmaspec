@@ -245,6 +245,12 @@ fn markdown_snapshot_identity_tracks_bytes_not_paths() {
 }
 
 #[test]
+fn narrative_unit_ranges_are_not_structural_declarations() {
+    let markdown = format!("{PLAN}\n## Completion\n- U1-U2 satisfy the acceptance criteria.\n- Rust2026 is a narrative label.\n");
+    assert!(project_plan(&markdown, "plan.md").is_ok());
+}
+
+#[test]
 fn fences_and_bold_list_sublabels_are_narrative_only() {
     for (open, close) in [("```mermaid", "```"), ("~~~~text", "~~~~~")] {
         let narrative = format!("{open}\n### U99. Pretend unit\n**Requirements:** R99. **Dependencies:** U98.\n## Requirements\n- R99. Pretend requirement\n```nested\n{close}\n");

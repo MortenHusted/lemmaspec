@@ -9,6 +9,12 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 
+- Answer-first HTML and deterministic Markdown reports, with selected-answer
+  witness graphs, explicit evidence standings and optional target identity checks.
+- Optional `lemmaspec-plan` workspace consumer for structured Markdown plans,
+  source-derived evidence, and identity-bound status composition; synthetic
+  fixtures run without private repositories.
+
 - Symbol declarations attach human labels and optional source destinations to
   existing constants, including quoted symbol keys. Metadata appears in the
   graph projection without changing evaluation or proof identities.

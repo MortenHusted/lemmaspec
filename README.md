@@ -12,6 +12,40 @@ expectations, and optional mutation policies in one reviewable file. The same
 artifact can produce a human report or a deterministic graph for another tool
 to consume.
 
+## Readable evidence
+
+HTML reports open on the answers, with failed expectations first, numbered
+reasoning and source citations. Select an answer to see its witness graph;
+open the full graph or walkthrough when you need the whole model.
+
+```sh
+lemmaspec render tests/fixtures/readability/labelled_dependency.lemmaspec -o /tmp/report.html
+lemmaspec render tests/fixtures/readability/labelled_dependency.lemmaspec --format md -o /tmp/report.md
+```
+
+These examples intentionally fail an acceptance expectation, so the reports
+are written and the command exits 1. Display labels, notes and evidence bases
+never change evaluation output or proof identities.
+
+A fact may declare its producing boundary with `basis: snapshot`, `policy`,
+`observed`, or `reviewer_declared`, plus a `source` string. Snapshot and observed
+facts also require an `identity` string. Untyped facts, including those with
+free-form provenance, render as reviewer-declared. This metadata describes the
+producer's claim; it does not authenticate authorship or prove truth. Generated
+observations must come from the named deterministic tool. LLM-authored claims
+remain reviewer-declared.
+
+Observed status reads “as of” its identity. Supply `--target-identity ID` to
+compare it with an explicit target: mismatches put a not-current banner first
+and return exit 1. A static report does not promise to monitor source changes.
+
+The optional [lemmaspec-plan](crates/lemmaspec-plan/README.md) consumer projects
+explicit Markdown plan fields into evidence. Its synthetic fixtures and public
+tests require no private checkout or credentials. The core engine has no
+dependency on that consumer. Build it separately with
+`cargo install --path crates/lemmaspec-plan`; it is not bundled in core binary
+releases.
+
 ## Install
 
 Versioned GitHub releases provide prebuilt binaries for macOS, glibc-based
