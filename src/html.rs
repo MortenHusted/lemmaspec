@@ -41,7 +41,9 @@ pub fn render_projection_html_with_target(
         reference,
     } = render_guide(projection);
     let relations = render_relations(projection);
-    let facts = render_facts(projection);
+    let brief = brief(projection);
+    let labels = display_labels(projection);
+    let facts = render_facts(projection, &labels);
     let graph_json = escape_json_for_script(
         &serde_json::to_string(projection).expect("graph projection is serializable"),
     );
@@ -50,9 +52,9 @@ pub fn render_projection_html_with_target(
 
     render_template(&BTreeMap::from([
         ("FRESHNESS", target.filter(|target| crate::guide::observation_identity_mismatch(projection, target)).map(|target| format!("<div class=\"freshness\" role=\"status\">Not current for target {}. Observed status was recorded against a different identity.</div>", html_escape(target))).unwrap_or_default()),
-        ("BRIEF", render_brief(projection)),
-        ("DISPLAY_LABELS", escape_json_for_script(&serde_json::to_string(&display_labels(projection)).expect("labels serialize"))),
-        ("ANSWER_CLOSURES", escape_json_for_script(&serde_json::to_string(&brief(projection).answers.iter().map(|answer| (&answer.id, &answer.closure)).collect::<BTreeMap<_, _>>()).expect("closures serialize"))),
+        ("BRIEF", render_brief(&brief)),
+        ("DISPLAY_LABELS", escape_json_for_script(&serde_json::to_string(&labels).expect("labels serialize"))),
+        ("ANSWER_CLOSURES", escape_json_for_script(&serde_json::to_string(&brief.answers.iter().map(|answer| (&answer.id, &answer.closure)).collect::<BTreeMap<_, _>>()).expect("closures serialize"))),
         ("ASSUMPTIONS", assumptions),
         ("CLAIMS", claims),
         ("CONCLUSIONS", conclusions),
@@ -171,13 +173,10 @@ fn render_relations(projection: &GraphProjection) -> String {
     }
 }
 
-fn render_facts(projection: &GraphProjection) -> String {
+fn render_facts(projection: &GraphProjection, labels: &BTreeMap<String, String>) -> String {
     let mut rows = String::new();
-    let labels = display_labels(projection);
     for node in &projection.nodes {
         if let GraphNodeData::Fact {
-            relation,
-            args,
             origin,
             confidence,
             provenance,
@@ -185,7 +184,6 @@ fn render_facts(projection: &GraphProjection) -> String {
             ..
         } = &node.data
         {
-            let _ = (relation, args);
             let tone = if origin == "asserted" {
                 "c-stable"
             } else {

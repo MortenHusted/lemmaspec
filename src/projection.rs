@@ -335,6 +335,11 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
             declarations
         },
     );
+    let facts_by_declaration: BTreeMap<_, _> = artifact
+        .facts
+        .iter()
+        .map(|fact| (fact.id.as_str(), fact))
+        .collect();
     let docs_by_declaration: BTreeMap<&str, &str> = artifact
         .facts
         .iter()
@@ -513,10 +518,11 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
                     provenance: row.fact.ann.prov.iter().cloned().collect(),
                     declarations: declarations.clone(),
                     bases: {
-                        let asserted: Vec<_> = artifact
-                            .facts
+                        let asserted: Vec<_> = declarations
                             .iter()
-                            .filter(|fact| declarations.contains(&fact.id))
+                            .filter_map(|declaration| {
+                                facts_by_declaration.get(declaration.as_str())
+                            })
                             .collect();
                         if asserted.iter().any(|fact| fact.basis.is_some()) {
                             asserted

@@ -53,6 +53,9 @@ struct Index<'a> {
     projection: &'a GraphProjection,
     nodes: BTreeMap<&'a str, &'a GraphNode>,
     relations: BTreeMap<&'a str, Relation<'a>>,
+    symbols: BTreeMap<&'a str, Option<&'a str>>,
+    symbol_references: BTreeMap<&'a str, Vec<&'a str>>,
+    proof_rules: BTreeMap<&'a str, Vec<&'a str>>,
     rules_by_name: BTreeMap<&'a str, &'a str>,
     expectations_by_name: BTreeMap<&'a str, &'a str>,
     supports: BTreeMap<&'a str, Vec<Support<'a>>>,
@@ -73,6 +76,7 @@ impl<'a> Index<'a> {
             .map(|node| (node.id.as_str(), node))
             .collect();
         let mut relations = BTreeMap::new();
+        let mut symbols = BTreeMap::new();
         let mut rules_by_name = BTreeMap::new();
         let mut expectations_by_name = BTreeMap::new();
         let mut declaration_ids = BTreeSet::new();
@@ -97,6 +101,9 @@ impl<'a> Index<'a> {
                         },
                     );
                 }
+                GraphNodeData::Symbol { value, label, .. } => {
+                    symbols.entry(value.as_str()).or_insert(label.as_deref());
+                }
                 GraphNodeData::Rule { name, .. } => {
                     rules_by_name.insert(name.as_str(), node.id.as_str());
                 }
@@ -114,6 +121,8 @@ impl<'a> Index<'a> {
         let mut matched_by: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
         let mut rule_yield: BTreeMap<&str, usize> = BTreeMap::new();
         let mut derived_by: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+        let mut symbol_references: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+        let mut proof_rules: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
         for edge in &projection.edges {
             let (from, to) = (edge.from.as_str(), edge.to.as_str());
             let node_type = |id: &str| nodes.get(id).map(|node| node.node_type());
@@ -141,6 +150,10 @@ impl<'a> Index<'a> {
                 }
                 ("derives", Some("proof_witness")) => {
                     *rule_yield.entry(from).or_default() += 1;
+                    proof_rules.entry(to).or_default().push(from);
+                }
+                ("references_symbol", _) => {
+                    symbol_references.entry(from).or_default().push(to);
                 }
                 ("derives", Some("declaration")) if node_type(to) == Some("relation") => {
                     derived_by.entry(to).or_default().push(from);
@@ -153,6 +166,9 @@ impl<'a> Index<'a> {
             projection,
             nodes,
             relations,
+            symbols,
+            symbol_references,
+            proof_rules,
             rules_by_name,
             expectations_by_name,
             supports,
@@ -209,20 +225,11 @@ impl<'a> Index<'a> {
     /// A fact as a sentence: the relation's template when it has one,
     /// otherwise the atom with role names alongside the values.
     fn symbol_text(&self, value: &str) -> String {
-        self.projection
-            .nodes
-            .iter()
-            .find_map(|node| match &node.data {
-                GraphNodeData::Symbol {
-                    value: key, label, ..
-                } if key == value => Some(
-                    label
-                        .clone()
-                        .unwrap_or_else(|| format!("{value} (unlabelled)")),
-                ),
-                _ => None,
-            })
-            .unwrap_or_else(|| value.to_string())
+        match self.symbols.get(value) {
+            Some(Some(label)) => (*label).to_string(),
+            Some(None) => format!("{value} (unlabelled)"),
+            None => value.to_string(),
+        }
     }
 
     fn sentence_text(&self, node: &GraphNode) -> String {
@@ -1172,19 +1179,22 @@ impl Index<'_> {
             .into_iter()
             .map(str::to_string)
             .collect();
-        for edge in &self.projection.edges {
-            if edge.from == node.id && edge.rel == "references_symbol" {
-                if let Some(GraphNode {
-                    data:
-                        GraphNodeData::Symbol {
-                            source: Some(source),
-                            ..
-                        },
-                    ..
-                }) = self.nodes.get(edge.to.as_str())
-                {
-                    sources.insert(source.clone());
-                }
+        for symbol in self
+            .symbol_references
+            .get(node.id.as_str())
+            .into_iter()
+            .flatten()
+        {
+            if let Some(GraphNode {
+                data:
+                    GraphNodeData::Symbol {
+                        source: Some(source),
+                        ..
+                    },
+                ..
+            }) = self.nodes.get(symbol)
+            {
+                sources.insert(source.clone());
             }
         }
         BriefFact {
@@ -1196,15 +1206,11 @@ impl Index<'_> {
             standing: standing_text(node),
             sources: sources.into_iter().collect(),
             rules: self
-                .projection
-                .edges
-                .iter()
-                .filter(|edge| {
-                    edge.to == node.id
-                        && edge.rel == "derives"
-                        && edge.basis.as_deref() == Some("proof_witness")
-                })
-                .filter_map(|edge| self.nodes.get(edge.from.as_str()))
+                .proof_rules
+                .get(node.id.as_str())
+                .into_iter()
+                .flatten()
+                .filter_map(|rule| self.nodes.get(rule))
                 .filter_map(|node| match &node.data {
                     GraphNodeData::Rule {
                         name, when, doc, ..
@@ -1332,12 +1338,14 @@ pub(crate) fn brief(projection: &GraphProjection) -> Brief {
                     .collect::<Vec<_>>()
                     .join("; ")
             };
-            let mut closure: BTreeSet<String> = order.iter().map(|id| id.to_string()).collect();
+            let witness_ids: BTreeSet<&str> = order.iter().copied().collect();
+            let mut closure: BTreeSet<String> =
+                witness_ids.iter().map(|id| id.to_string()).collect();
             closure.insert(node.id.clone());
             for edge in &projection.edges {
                 if (edge.rel == "derives"
                     && edge.basis.as_deref() == Some("proof_witness")
-                    && order.contains(&edge.to.as_str()))
+                    && witness_ids.contains(edge.to.as_str()))
                     || (edge.rel == "expects" && edge.from == node.id)
                 {
                     closure.insert(edge.from.clone());
@@ -1346,7 +1354,7 @@ pub(crate) fn brief(projection: &GraphProjection) -> Brief {
             }
             // Include the concepts and labelled vocabulary mentioned by the witness.
             for edge in &projection.edges {
-                if order.contains(&edge.from.as_str())
+                if witness_ids.contains(edge.from.as_str())
                     && matches!(edge.rel.as_str(), "references_symbol" | "instance_of")
                 {
                     closure.insert(edge.to.clone());
@@ -1423,8 +1431,7 @@ fn brief_fact_html(fact: &BriefFact) -> String {
     detail
 }
 
-pub(crate) fn render_brief(projection: &GraphProjection) -> String {
-    let brief = brief(projection);
+pub(crate) fn render_brief(brief: &Brief) -> String {
     let mut html =
         String::from("<section class=\"brief\" id=\"brief\"><header><h2>Answers</h2></header>");
     if let Some(question) = &brief.question {
