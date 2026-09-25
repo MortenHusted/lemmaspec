@@ -1,0 +1,126 @@
+// Which declared plan items still prevent acceptance?
+// This checker includes synthetic adversarial fixtures; check/bind replace them.
+spec plan_checker {
+  notes { text: "Mutation policies exercise synthetic fixtures. Bound evidence drops these policies and uses its own structural or acceptance expectations. Missing status is incomplete; only all declared claims observed at the target can admit an item." }
+  relation plan { args: [symbol] roles: [plan] reads: "{plan} is the plan under review" }
+  relation plan_item { args: [symbol, symbol] roles: [plan, item] reads: "{item} belongs to {plan}" }
+  relation scheduled { args: [symbol] roles: [unit] reads: "{unit} is scheduled" }
+  relation requirement { args: [symbol] roles: [requirement] reads: "{requirement} is required" }
+  relation covers { args: [symbol, symbol] roles: [unit, requirement] reads: "{unit} covers {requirement}" }
+  relation depends_on { args: [symbol, symbol] roles: [unit, dependency] reads: "{unit} depends on {dependency}" }
+  relation gate { args: [symbol] roles: [gate] reads: "{gate} must pass" }
+  relation deferred { args: [symbol] roles: [shape] reads: "{shape} is deferred" }
+  relation semantic_input { args: [symbol] roles: [input] reads: "{input} supplies plan semantics" }
+  relation acceptance_claim { args: [symbol, symbol] roles: [claim, item] reads: "{claim} is required to accept {item}" }
+  relation observed { args: [symbol, symbol] roles: [claim, identity] reads: "{claim} was observed at {identity}" }
+  relation target_identity { args: [symbol] roles: [identity] reads: "{identity} is the target identity" }
+  relation matched_claim { args: [symbol] roles: [claim] reads: "{claim} was observed at the target identity" }
+  relation missing_acceptance { args: [symbol] roles: [item] reads: "{item} lacks a required acceptance observation" }
+  relation accepted_evidence { args: [symbol] roles: [item] reads: "{item} has all declared acceptance observations at the target" }
+  relation incomplete { args: [symbol] roles: [unit] reads: "{unit} has not been accepted" }
+  relation blocked { args: [symbol, symbol] roles: [unit, dependency] reads: "{unit} waits on {dependency}" }
+  relation has_blocker { args: [symbol] roles: [unit] reads: "{unit} has an incomplete dependency" }
+  relation ready { args: [symbol] roles: [unit] reads: "{unit} has no incomplete dependency" }
+  relation covered { args: [symbol] roles: [requirement] reads: "{requirement} is covered by a scheduled unit" }
+  relation uncovered { args: [symbol] roles: [requirement] reads: "{requirement} has no scheduled unit" }
+  relation unit_covered { args: [symbol] roles: [unit] reads: "{unit} covers a declared requirement" }
+  relation uncovered_unit { args: [symbol] roles: [unit] reads: "{unit} covers no declared requirement" }
+  relation omitted { args: [symbol] roles: [shape] reads: "{shape} is deferred from scheduled work" }
+  relation open_gate { args: [symbol] roles: [gate] reads: "{gate} lacks acceptance evidence" }
+  relation acceptance_blocker { args: [symbol] roles: [item] reads: "{item} prevents acceptance" }
+  relation blocked_plan { args: [symbol] roles: [plan] reads: "{plan} has an acceptance blocker" }
+  relation accepted { args: [symbol] roles: [plan] reads: "{plan} satisfies the acceptance policy" }
+  rule match_identity { derive: "matched_claim(C)" when: { condition_1: "observed(C, I)" condition_2: "target_identity(I)" } }
+  rule find_missing_claim { derive: "missing_acceptance(U)" when: { condition_1: "acceptance_claim(C, U)" condition_2: "!matched_claim(C)" } }
+  rule admit_all_claims { derive: "accepted_evidence(U)" when: { condition_1: "acceptance_claim(C, U)" condition_2: "!missing_acceptance(U)" } }
+  rule mark_incomplete { derive: "incomplete(U)" when: { condition_1: "scheduled(U)" condition_2: "!accepted_evidence(U)" } }
+  rule block_dependency { derive: "blocked(U, D)" when: { condition_1: "depends_on(U, D)" condition_2: "incomplete(D)" } }
+  rule find_blocker { derive: "has_blocker(U)" when: { condition_1: "blocked(U, D)" } }
+  rule mark_ready { derive: "ready(U)" when: { condition_1: "scheduled(U)" condition_2: "!has_blocker(U)" } }
+  rule cover_requirement { derive: "covered(R)" when: { condition_1: "requirement(R)" condition_2: "covers(U, R)" condition_3: "scheduled(U)" } }
+  rule find_uncovered { derive: "uncovered(R)" when: { condition_1: "requirement(R)" condition_2: "!covered(R)" } }
+  rule cover_unit { derive: "unit_covered(U)" when: { condition_1: "scheduled(U)" condition_2: "covers(U, R)" condition_3: "requirement(R)" } }
+  rule find_uncovered_unit { derive: "uncovered_unit(U)" when: { condition_1: "scheduled(U)" condition_2: "!unit_covered(U)" } }
+  rule find_omitted { derive: "omitted(S)" when: { condition_1: "deferred(S)" condition_2: "!scheduled(S)" } }
+  rule find_open_gate { derive: "open_gate(G)" when: { condition_1: "gate(G)" condition_2: "!accepted_evidence(G)" } }
+  rule block_incomplete { derive: "acceptance_blocker(U)" when: { condition_1: "incomplete(U)" } }
+  rule block_gate { derive: "acceptance_blocker(G)" when: { condition_1: "open_gate(G)" } }
+  rule block_uncovered { derive: "acceptance_blocker(R)" when: { condition_1: "uncovered(R)" } }
+  rule block_uncovered_unit { derive: "acceptance_blocker(U)" when: { condition_1: "uncovered_unit(U)" } }
+  rule block_plan { derive: "blocked_plan(P)" when: { condition_1: "plan_item(P, I)" condition_2: "acceptance_blocker(I)" } }
+  rule accept_plan { derive: "accepted(P)" when: { condition_1: "plan(P)" condition_2: "!blocked_plan(P)" } }
+  fact fixture_plan_0 { relation: plan args: [unfinished] }
+  fact fixture_plan_1 { relation: plan args: [finished] }
+  fact fixture_plan_item_0 { relation: plan_item args: [unfinished, waiting] }
+  fact fixture_plan_item_1 { relation: plan_item args: [unfinished, missing_requirement] }
+  fact fixture_plan_item_2 { relation: plan_item args: [unfinished, open_check] }
+  fact fixture_plan_item_3 { relation: plan_item args: [unfinished, empty_unit] }
+  fact fixture_plan_item_4 { relation: plan_item args: [finished, done] }
+  fact fixture_plan_item_5 { relation: plan_item args: [finished, closed_check] }
+  fact fixture_scheduled_0 { relation: scheduled args: [waiting] }
+  fact fixture_scheduled_1 { relation: scheduled args: [next] }
+  fact fixture_scheduled_2 { relation: scheduled args: [done] }
+  fact fixture_scheduled_3 { relation: scheduled args: [empty_unit] }
+  fact fixture_scheduled_4 { relation: scheduled args: [partial] }
+  fact fixture_scheduled_5 { relation: scheduled args: [scheduled_shape] }
+  fact fixture_requirement_0 { relation: requirement args: [first] }
+  fact fixture_requirement_1 { relation: requirement args: [second] }
+  fact fixture_requirement_2 { relation: requirement args: [missing_requirement] }
+  fact fixture_requirement_3 { relation: requirement args: [orphan_requirement] }
+  fact fixture_covers_0 { relation: covers args: [waiting, first] }
+  fact fixture_covers_1 { relation: covers args: [next, first] }
+  fact fixture_covers_2 { relation: covers args: [done, second] }
+  fact fixture_covers_3 { relation: covers args: [partial, first] }
+  fact fixture_covers_4 { relation: covers args: [scheduled_shape, first] }
+  fact fixture_covers_5 { relation: covers args: [ghost, orphan_requirement] }
+  fact fixture_covers_6 { relation: covers args: [empty_unit, unknown_requirement] }
+  fact fixture_depends_on_0 { relation: depends_on args: [next, waiting] }
+  fact fixture_depends_on_1 { relation: depends_on args: [done, done] }
+  fact fixture_depends_on_2 { relation: depends_on args: [waiting, done] }
+  fact fixture_gate_0 { relation: gate args: [open_check] }
+  fact fixture_gate_1 { relation: gate args: [closed_check] }
+  fact fixture_deferred_0 { relation: deferred args: [later_shape] }
+  fact fixture_deferred_1 { relation: deferred args: [scheduled_shape] }
+  fact fixture_semantic_input_0 { relation: semantic_input args: [grammar] }
+  fact fixture_acceptance_claim_0 { relation: acceptance_claim args: [done_check, done] }
+  fact fixture_acceptance_claim_1 { relation: acceptance_claim args: [closed_check_result, closed_check] }
+  fact fixture_acceptance_claim_2 { relation: acceptance_claim args: [partial_a, partial] }
+  fact fixture_acceptance_claim_3 { relation: acceptance_claim args: [partial_b, partial] }
+  fact fixture_acceptance_claim_4 { relation: acceptance_claim args: [stale_check, waiting] }
+  fact fixture_acceptance_claim_5 { relation: acceptance_claim args: [empty_check, empty_unit] }
+  fact fixture_observed_0 { relation: observed args: [done_check, current] }
+  fact fixture_observed_1 { relation: observed args: [closed_check_result, current] }
+  fact fixture_observed_2 { relation: observed args: [partial_a, current] }
+  fact fixture_observed_3 { relation: observed args: [stale_check, old] }
+  fact fixture_observed_4 { relation: observed args: [empty_check, current] }
+  fact fixture_observed_5 { relation: observed args: [progress_only, current] }
+  fact fixture_target_identity_0 { relation: target_identity args: [current] }
+  expect current_claims_match { query: "matched_claim(C)" count: 5 }
+  expect stale_claim_does_not_match { query: "matched_claim(stale_check)" count: 0 }
+  expect two_owners_lack_claims { query: "missing_acceptance(U)" count: 2 }
+  expect three_owners_have_all_claims { query: "accepted_evidence(U)" count: 3 }
+  expect partial_owner_is_not_admitted { query: "accepted_evidence(partial)" count: 0 }
+  expect progress_is_not_acceptance { query: "accepted_evidence(progress_only)" count: 0 }
+  expect missing_status_is_incomplete { query: "incomplete(U)" count: 4 }
+  expect one_dependency_is_blocked { query: "blocked(U, D)" count: 1 }
+  expect next_waits_for_waiting { query: "blocked(next, waiting)" count: 1 }
+  expect one_unit_has_a_blocker { query: "has_blocker(U)" count: 1 }
+  expect five_units_have_no_blocker { query: "ready(U)" count: 5 }
+  expect two_requirements_are_covered { query: "covered(R)" count: 2 }
+  expect undeclared_requirement_is_not_covered { query: "covered(unknown_requirement)" count: 0 }
+  expect unscheduled_owner_does_not_cover { query: "covered(orphan_requirement)" count: 0 }
+  expect two_requirements_are_uncovered { query: "uncovered(R)" count: 2 }
+  expect five_units_cover_requirements { query: "unit_covered(U)" count: 5 }
+  expect unscheduled_owner_is_not_unit_covered { query: "unit_covered(ghost)" count: 0 }
+  expect one_unit_has_no_coverage { query: "uncovered_unit(U)" count: 1 }
+  expect deferred_unscheduled_shape_is_omitted { query: "omitted(S)" count: 1 }
+  expect one_gate_is_open { query: "open_gate(G)" count: 1 }
+  expect eight_distinct_acceptance_blockers { query: "acceptance_blocker(U)" count: 8 }
+  expect accepted_but_uncovered_unit_blocks { query: "acceptance_blocker(empty_unit)" count: 1 }
+  expect one_plan_is_blocked { query: "blocked_plan(P)" count: 1 }
+  expect only_one_plan_is_accepted { query: "accepted(P)" count: 1 }
+  expect finished_plan_is_accepted { query: "accepted(finished)" count: 1 }
+  expect unfinished_plan_is_not_accepted { query: "accepted(unfinished)" count: 0 }
+  mutation rules_matter { operator: drop_rule }
+  mutation conditions_matter { operator: drop_condition }
+}

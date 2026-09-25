@@ -30,3 +30,8 @@ lto = "thin"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
+
+[workspace]
+members = [".", "crates/lemmaspec-plan"]
+default-members = ["."]
+resolver = "2"
