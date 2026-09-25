@@ -122,6 +122,13 @@ fn print_fact(fact: &FactDecl) -> String {
     if !fact.provenance.is_empty() {
         let _ = writeln!(out, "    provenance: [{}]", texts(&fact.provenance));
     }
+    if let Some(basis) = &fact.basis {
+        let _ = writeln!(out, "    basis: {}", basis.kind.as_str());
+        let _ = writeln!(out, "    source: {}", quoted(&basis.source));
+        if let Some(identity) = &basis.identity {
+            let _ = writeln!(out, "    identity: {}", quoted(identity));
+        }
+    }
     out.push_str("  }\n");
     out
 }

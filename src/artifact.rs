@@ -37,6 +37,35 @@ pub struct RelationDecl {
     pub doc: Option<String>,
 }
 
+/// The producer's declared evidence boundary, not an authentication claim.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EvidenceKind {
+    Snapshot,
+    Policy,
+    Observed,
+    ReviewerDeclared,
+}
+
+impl EvidenceKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Snapshot => "snapshot",
+            Self::Policy => "policy",
+            Self::Observed => "observed",
+            Self::ReviewerDeclared => "reviewer_declared",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub struct EvidenceBasis {
+    pub kind: EvidenceKind,
+    pub source: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identity: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct FactDecl {
     pub id: String,
@@ -44,6 +73,8 @@ pub struct FactDecl {
     pub args: Vec<FactValue>,
     pub confidence: f64,
     pub provenance: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub basis: Option<EvidenceBasis>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
 }
@@ -897,6 +928,7 @@ impl Artifact {
                         }
                         None => Vec::new(),
                     };
+                    let basis = take_evidence_basis(&mut block)?;
                     reject_unknown_fields(&block)?;
                     artifact.facts.push(FactDecl {
                         id: block.name,
@@ -904,6 +936,7 @@ impl Artifact {
                         args,
                         confidence,
                         provenance,
+                        basis,
                         doc: block.doc,
                     });
                 }
@@ -1347,6 +1380,44 @@ pub(crate) fn template_placeholders(template: &str) -> Result<Vec<&str>, String>
         rest = &after[close + 1..];
     }
     Ok(placeholders)
+}
+
+fn take_evidence_basis(block: &mut RawBlock) -> Result<Option<EvidenceBasis>, ArtifactError> {
+    let Some(kind) = take_optional_text(block, "basis")? else {
+        return Ok(None);
+    };
+    let kind = match kind.as_str() {
+        "snapshot" => EvidenceKind::Snapshot,
+        "policy" => EvidenceKind::Policy,
+        "observed" => EvidenceKind::Observed,
+        "reviewer_declared" => EvidenceKind::ReviewerDeclared,
+        _ => {
+            return Err(ArtifactError::new(
+                "basis must be snapshot, policy, observed, or reviewer_declared",
+            ))
+        }
+    };
+    let source = take_text(block, "source")?;
+    let identity = take_optional_text(block, "identity")?;
+    if source.trim().is_empty()
+        || identity
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
+    {
+        return Err(ArtifactError::new(
+            "evidence source and identity must not be empty",
+        ));
+    }
+    if matches!(kind, EvidenceKind::Snapshot | EvidenceKind::Observed) && identity.is_none() {
+        return Err(ArtifactError::new(
+            "snapshot and observed evidence require an identity",
+        ));
+    }
+    Ok(Some(EvidenceBasis {
+        kind,
+        source,
+        identity,
+    }))
 }
 
 fn take_list(block: &mut RawBlock, field: &str) -> Result<Vec<RawValue>, ArtifactError> {

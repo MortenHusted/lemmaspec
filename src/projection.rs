@@ -6,7 +6,10 @@ use std::fmt;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-use crate::artifact::{evaluate_artifact, ArtifactError, FactValue, MutationOperator, ValueType};
+use crate::artifact::{
+    evaluate_artifact, ArtifactError, EvidenceBasis, EvidenceKind, FactValue, MutationOperator,
+    ValueType,
+};
 use crate::ast::{Atom, Expr, Lit};
 use crate::eval::Support;
 use crate::narrative::read_fact;
@@ -71,6 +74,8 @@ pub enum GraphNodeData {
         confidence: f64,
         provenance: Vec<String>,
         declarations: Vec<String>,
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        bases: Vec<EvidenceBasis>,
         /// The fact read through its relation's `reads` template.
         #[serde(skip_serializing_if = "Option::is_none")]
         reading: Option<String>,
@@ -507,6 +512,29 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
                     confidence: row.fact.ann.conf,
                     provenance: row.fact.ann.prov.iter().cloned().collect(),
                     declarations: declarations.clone(),
+                    bases: {
+                        let asserted: Vec<_> = artifact
+                            .facts
+                            .iter()
+                            .filter(|fact| declarations.contains(&fact.id))
+                            .collect();
+                        if asserted.iter().any(|fact| fact.basis.is_some()) {
+                            asserted
+                                .into_iter()
+                                .map(|fact| {
+                                    fact.basis.clone().unwrap_or_else(|| EvidenceBasis {
+                                        kind: EvidenceKind::ReviewerDeclared,
+                                        source: fact.id.clone(),
+                                        identity: None,
+                                    })
+                                })
+                                .collect::<BTreeSet<_>>()
+                                .into_iter()
+                                .collect()
+                        } else {
+                            Vec::new()
+                        }
+                    },
                     reading,
                     doc: (!doc.is_empty()).then(|| doc.join("\n\n")),
                 },
