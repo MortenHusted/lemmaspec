@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use crate::artifact::MutationOperator;
+use crate::artifact::{EvidenceBasis, EvidenceKind, FactValue, MutationOperator};
 use crate::html::html_escape;
 use crate::narrative::{read_with, value_text};
 use crate::projection::{GraphNode, GraphNodeData, GraphProjection};
@@ -23,7 +23,7 @@ impl Standing {
     fn label(self) -> &'static str {
         match self {
             Standing::Observation => "observation",
-            Standing::Assumption => "assumption",
+            Standing::Assumption => "reviewer-declared",
             Standing::Conclusion => "conclusion",
         }
     }
@@ -189,15 +189,17 @@ impl<'a> Index<'a> {
 
     fn standing(&self, node: &'a GraphNode) -> Standing {
         match &node.data {
-            GraphNodeData::Fact {
-                origin, confidence, ..
-            } => {
+            GraphNodeData::Fact { origin, bases, .. } => {
                 if origin == "derived" {
                     Standing::Conclusion
-                } else if self.evidence(node).is_empty() || *confidence < 1.0 {
-                    Standing::Assumption
-                } else {
+                } else if !bases.is_empty()
+                    && bases
+                        .iter()
+                        .all(|basis| basis.kind != EvidenceKind::ReviewerDeclared)
+                {
                     Standing::Observation
+                } else {
+                    Standing::Assumption
                 }
             }
             _ => Standing::Conclusion,
@@ -206,21 +208,46 @@ impl<'a> Index<'a> {
 
     /// A fact as a sentence: the relation's template when it has one,
     /// otherwise the atom with role names alongside the values.
-    fn sentence(&self, node: &GraphNode) -> String {
-        let GraphNodeData::Fact {
-            relation,
-            args,
-            reading,
-            ..
-        } = &node.data
-        else {
-            return html_escape(&label(node));
+    fn symbol_text(&self, value: &str) -> String {
+        self.projection
+            .nodes
+            .iter()
+            .find_map(|node| match &node.data {
+                GraphNodeData::Symbol {
+                    value: key, label, ..
+                } if key == value => Some(
+                    label
+                        .clone()
+                        .unwrap_or_else(|| format!("{value} (unlabelled)")),
+                ),
+                _ => None,
+            })
+            .unwrap_or_else(|| value.to_string())
+    }
+
+    fn sentence_text(&self, node: &GraphNode) -> String {
+        let GraphNodeData::Fact { relation, args, .. } = &node.data else {
+            return label(node);
         };
-        if let Some(reading) = reading {
-            return html_escape(reading);
+        let texts: Vec<String> = args
+            .iter()
+            .map(|value| match value {
+                FactValue::Symbol(value) => self.symbol_text(value),
+                FactValue::Integer(value) => value.to_string(),
+            })
+            .collect();
+        match self.relations.get(relation.as_str()) {
+            Some(Relation {
+                reads: Some(template),
+                roles,
+                ..
+            }) => read_with(template, roles, &texts),
+            _ => format!("{}: {}", relation.replace('_', " "), texts.join(", ")),
         }
-        let texts: Vec<String> = args.iter().map(value_text).collect();
-        self.atom_markup(relation, &texts)
+    }
+
+    fn sentence(&self, node: &GraphNode) -> String {
+        html_escape(&self.sentence_text(node))
     }
 
     fn atom_markup(&self, relation: &str, args: &[String]) -> String {
@@ -258,7 +285,7 @@ impl<'a> Index<'a> {
                         |(position, arg)| match (arg.as_str(), roles.get(position)) {
                             ("_", Some(role)) => format!("any {role}"),
                             ("_", None) => "anything".to_string(),
-                            _ => arg,
+                            _ => self.symbol_text(arg.trim_matches('"')),
                         },
                     )
                     .collect();
@@ -335,7 +362,7 @@ impl<'a> Index<'a> {
                 html.push_str(&format!(
                     "<li><span class=\"chip {}\">{}</span> {}",
                     standing.tone(),
-                    standing.label(),
+                    standing_text(node),
                     self.link(body)
                 ));
                 if standing == Standing::Conclusion
@@ -379,7 +406,9 @@ fn label(node: &GraphNode) -> String {
             "{relation}({})",
             args.iter().map(value_text).collect::<Vec<_>>().join(", ")
         ),
-        GraphNodeData::Symbol { value, .. } => value.clone(),
+        GraphNodeData::Symbol { value, label, .. } => label
+            .clone()
+            .unwrap_or_else(|| format!("{value} (unlabelled)")),
         GraphNodeData::Spec { name, .. }
         | GraphNodeData::Relation { name, .. }
         | GraphNodeData::Rule { name, .. }
@@ -512,6 +541,20 @@ fn fact_meta(index: &Index, node: &GraphNode) -> String {
     };
     let sources = index.evidence(node);
     let mut meta = vec![format!("<code>{}</code>", html_escape(relation))];
+    if let GraphNodeData::Fact { bases, .. } = &node.data {
+        for basis in bases {
+            meta.push(format!(
+                "{}: {}{}",
+                basis_label(&basis.kind),
+                source_html(&basis.source),
+                basis
+                    .identity
+                    .as_ref()
+                    .map(|identity| format!(" as of {}", html_escape(identity)))
+                    .unwrap_or_default()
+            ));
+        }
+    }
     if !sources.is_empty() {
         meta.push(format!(
             "evidence: {}",
@@ -538,7 +581,7 @@ fn fact_card(index: &Index, node: &GraphNode, hint: String, extra: &str) -> Stri
         class: "fact",
         attrs: format!(" data-standing=\"{}\"", standing.label()),
         tone: standing.tone(),
-        chip: standing.label(),
+        chip: &standing_text(node),
         summary: index.sentence(node),
         hint,
         detail: format!(
@@ -634,8 +677,8 @@ fn render_observations(index: &Index) -> String {
     step(
         "observations",
         "Observations",
-        "Asserted facts with evidence attached: the ground the argument stands on.",
-        "No asserted fact cites evidence yet. Add provenance to the facts you have verified.",
+        "Facts with an explicitly declared observed standing.",
+        "No typed observations are declared. Freeform provenance alone does not establish an observation.",
         grouped_facts(index, &facts, ("fact", "facts"), |_| String::new()),
     )
 }
@@ -679,8 +722,8 @@ fn render_assumptions(index: &Index) -> String {
     step(
         "assumptions",
         "Assumptions",
-        "Asserted without evidence, or below full confidence. Each is a decision waiting to be made, ordered by how much rests on it. Hover one to see what it holds up.",
-        "Every asserted fact carries evidence. Nothing here is taken on trust.",
+        "Reviewer-declared facts. Citations identify their sources but do not verify the declarations.",
+        "No reviewer-declared facts.",
         cards,
     )
 }
@@ -1012,7 +1055,24 @@ fn render_reference(index: &Index) -> String {
         }));
     }
 
-    format!("<h3>Concepts</h3>{concepts}{}", render_vocabulary(index))
+    let notes = index
+        .projection
+        .nodes
+        .iter()
+        .find_map(|node| match &node.data {
+            GraphNodeData::Spec {
+                notes: Some(notes), ..
+            } => Some(format!(
+                "<details><summary>Maintainer notes</summary>{}</details>",
+                paragraphs(notes)
+            )),
+            _ => None,
+        })
+        .unwrap_or_default();
+    format!(
+        "{notes}<h3>Concepts</h3>{concepts}{}",
+        render_vocabulary(index)
+    )
 }
 
 /// Symbols grouped by the role they play. A role name shared by several
@@ -1058,10 +1118,14 @@ fn render_vocabulary(index: &Index) -> String {
                 .iter()
                 .map(|(symbol, (uses, id))| {
                     format!(
-                        "<li><a class=\"ref\" href=\"#\" data-node=\"{}\"><code>{}</code></a><span class=\"count\">{}</span></li>",
+                        "<li><a class=\"ref\" href=\"#\" data-node=\"{}\"><code>{}</code></a><span class=\"count\">{}</span>{}</li>",
                         html_escape(id),
-                        html_escape(symbol),
-                        plural(*uses, "use", "uses")
+                        html_escape(&index.symbol_text(symbol)),
+                        plural(*uses, "use", "uses"),
+                        index.nodes.get(id).and_then(|node| match &node.data {
+                            GraphNodeData::Symbol { source: Some(source), .. } => Some(format!(" <span class=\"citations\">{}</span>", source_html(source))),
+                            _ => None,
+                        }).unwrap_or_default()
                     )
                 })
                 .collect();
@@ -1074,4 +1138,385 @@ fn render_vocabulary(index: &Index) -> String {
         })
         .collect();
     format!("<h3>Vocabulary</h3>{groups}")
+}
+
+/// The answer and its finite proof closure, shared by both human report formats.
+pub(crate) struct Brief {
+    pub question: Option<String>,
+    pub answers: Vec<Answer>,
+}
+
+pub(crate) struct Answer {
+    pub id: String,
+    pub sentence: String,
+    pub explanation: Option<String>,
+    pub satisfied: bool,
+    pub counts: String,
+    pub steps: Vec<BriefFact>,
+    pub premises: Vec<BriefFact>,
+    pub closure: Vec<String>,
+}
+
+pub(crate) struct BriefFact {
+    pub sentence: String,
+    pub bases: Vec<EvidenceBasis>,
+    pub standing: String,
+    pub sources: Vec<String>,
+    pub rules: Vec<String>,
+}
+
+impl Index<'_> {
+    fn brief_fact(&self, node: &GraphNode) -> BriefFact {
+        let mut sources: BTreeSet<String> = self
+            .evidence(node)
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        for edge in &self.projection.edges {
+            if edge.from == node.id && edge.rel == "references_symbol" {
+                if let Some(GraphNode {
+                    data:
+                        GraphNodeData::Symbol {
+                            source: Some(source),
+                            ..
+                        },
+                    ..
+                }) = self.nodes.get(edge.to.as_str())
+                {
+                    sources.insert(source.clone());
+                }
+            }
+        }
+        BriefFact {
+            sentence: self.sentence_text(node),
+            bases: match &node.data {
+                GraphNodeData::Fact { bases, .. } => bases.clone(),
+                _ => Vec::new(),
+            },
+            standing: standing_text(node),
+            sources: sources.into_iter().collect(),
+            rules: self
+                .projection
+                .edges
+                .iter()
+                .filter(|edge| {
+                    edge.to == node.id
+                        && edge.rel == "derives"
+                        && edge.basis.as_deref() == Some("proof_witness")
+                })
+                .filter_map(|edge| self.nodes.get(edge.from.as_str()))
+                .filter_map(|node| match &node.data {
+                    GraphNodeData::Rule {
+                        name, when, doc, ..
+                    } => Some(doc.clone().unwrap_or_else(|| {
+                        format!(
+                            "{name}: {}",
+                            when.iter()
+                                .map(|condition| self.query_text(condition))
+                                .collect::<Vec<_>>()
+                                .join(" and ")
+                        )
+                    })),
+                    _ => None,
+                })
+                .collect(),
+        }
+    }
+
+    fn witness_order<'a>(&'a self, roots: &[&'a str]) -> Vec<&'a str> {
+        let mut seen = BTreeSet::new();
+        let mut result = Vec::new();
+        let mut stack: Vec<(&str, bool)> = roots.iter().rev().map(|id| (*id, false)).collect();
+        while let Some((id, expanded)) = stack.pop() {
+            if expanded {
+                result.push(id);
+                continue;
+            }
+            if !seen.insert(id) {
+                continue;
+            }
+            stack.push((id, true));
+            for support in self.supports.get(id).into_iter().flatten().rev() {
+                stack.extend(support.body.iter().rev().map(|id| (*id, false)));
+            }
+        }
+        result
+    }
+
+    fn query_text(&self, query: &str) -> String {
+        let Some((negated, relation, args)) = split_atom(query) else {
+            return query.to_string();
+        };
+        let args: Vec<_> = args
+            .iter()
+            .map(|arg| self.symbol_text(arg.trim_matches('"')))
+            .collect();
+        let text = match self.relations.get(relation) {
+            Some(Relation {
+                reads: Some(template),
+                roles,
+                ..
+            }) => read_with(template, roles, &args),
+            _ => format!("{}: {}", relation.replace('_', " "), args.join(", ")),
+        };
+        if negated {
+            format!("not {text}")
+        } else {
+            text
+        }
+    }
+}
+
+pub(crate) fn brief(projection: &GraphProjection) -> Brief {
+    let index = Index::build(projection);
+    let mut expectations: Vec<_> = projection
+        .nodes
+        .iter()
+        .filter(|node| matches!(node.data, GraphNodeData::Expectation { .. }))
+        .collect();
+    expectations.sort_by_key(|node| match node.data {
+        GraphNodeData::Expectation { satisfied, .. } => satisfied,
+        _ => true,
+    });
+    let answers = expectations
+        .into_iter()
+        .map(|node| {
+            let GraphNodeData::Expectation {
+                query,
+                expected_count,
+                actual_count,
+                satisfied,
+                doc,
+                ..
+            } = &node.data
+            else {
+                unreachable!()
+            };
+            let roots: Vec<&str> = index
+                .proven_by
+                .get(node.id.as_str())
+                .into_iter()
+                .flatten()
+                .chain(index.matched_by.get(node.id.as_str()).into_iter().flatten())
+                .copied()
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect();
+            let order = index.witness_order(&roots);
+            let steps: Vec<_> = order
+                .iter()
+                .filter_map(|id| index.nodes.get(id))
+                .map(|node| index.brief_fact(node))
+                .collect();
+            let premises = order
+                .iter()
+                .filter_map(|id| index.nodes.get(id))
+                .filter(|node| index.standing(node) != Standing::Conclusion)
+                .map(|node| index.brief_fact(node))
+                .collect();
+            let sentence = if roots.is_empty() {
+                format!(
+                    "{}: {}.",
+                    if *actual_count == 0 {
+                        "No matching result"
+                    } else {
+                        "Results found"
+                    },
+                    index.query_text(query)
+                )
+            } else {
+                roots
+                    .iter()
+                    .filter_map(|id| index.nodes.get(id))
+                    .map(|node| index.sentence_text(node))
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            };
+            let mut closure: BTreeSet<String> = order.iter().map(|id| id.to_string()).collect();
+            closure.insert(node.id.clone());
+            for edge in &projection.edges {
+                if (edge.rel == "derives"
+                    && edge.basis.as_deref() == Some("proof_witness")
+                    && order.contains(&edge.to.as_str()))
+                    || (edge.rel == "expects" && edge.from == node.id)
+                {
+                    closure.insert(edge.from.clone());
+                    closure.insert(edge.to.clone());
+                }
+            }
+            // Include the concepts and labelled vocabulary mentioned by the witness.
+            for edge in &projection.edges {
+                if order.contains(&edge.from.as_str())
+                    && matches!(edge.rel.as_str(), "references_symbol" | "instance_of")
+                {
+                    closure.insert(edge.to.clone());
+                }
+            }
+            Answer {
+                id: node.id.clone(),
+                sentence,
+                explanation: doc.clone(),
+                satisfied: *satisfied,
+                counts: format!("Expected {expected_count}; found {actual_count}."),
+                steps,
+                premises,
+                closure: closure.into_iter().collect(),
+            }
+        })
+        .collect();
+    Brief {
+        question: projection.nodes.iter().find_map(|node| match &node.data {
+            GraphNodeData::Spec { doc, .. } => doc.clone(),
+            _ => None,
+        }),
+        answers,
+    }
+}
+
+pub(crate) fn source_html(source: &str) -> String {
+    let escaped = html_escape(source);
+    if crate::is_safe_source(source) {
+        format!("<a href=\"{escaped}\">{escaped}</a>")
+    } else {
+        format!("<span class=\"unsafe-source\">{escaped}</span>")
+    }
+}
+
+fn brief_fact_html(fact: &BriefFact) -> String {
+    let mut detail = format!(
+        "<span class=\"chip\">{}</span> {}",
+        html_escape(&fact.standing),
+        html_escape(&fact.sentence)
+    );
+    if !fact.rules.is_empty() {
+        detail.push_str(&format!(
+            " <span class=\"meta\">Rule: {}</span>",
+            fact.rules
+                .iter()
+                .map(|rule| html_escape(rule))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    if !fact.sources.is_empty() {
+        detail.push_str(&format!(
+            " <span class=\"citations\">[{}]</span>",
+            fact.sources
+                .iter()
+                .map(|source| source_html(source))
+                .collect::<Vec<_>>()
+                .join("; ")
+        ));
+    }
+    for basis in &fact.bases {
+        detail.push_str(&format!(
+            " <span class=\"basis\">{}: {}{}</span>",
+            basis_label(&basis.kind),
+            source_html(&basis.source),
+            basis
+                .identity
+                .as_ref()
+                .map(|identity| format!(" as of {}", html_escape(identity)))
+                .unwrap_or_default()
+        ));
+    }
+    detail
+}
+
+pub(crate) fn render_brief(projection: &GraphProjection) -> String {
+    let brief = brief(projection);
+    let mut html =
+        String::from("<section class=\"brief\" id=\"brief\"><header><h2>Answers</h2></header>");
+    if let Some(question) = &brief.question {
+        html.push_str(&format!(
+            "<div class=\"question\">{}</div>",
+            paragraphs(question)
+        ));
+    }
+    if brief.answers.is_empty() {
+        html.push_str(
+            "<p>No expectations are declared. This artifact makes no acceptance claim.</p>",
+        );
+    }
+    for (position, answer) in brief.answers.iter().enumerate() {
+        html.push_str(&format!("<article class=\"answer\" data-answer=\"{}\" data-status=\"{}\"><button type=\"button\" class=\"answer-select\" aria-pressed=\"{}\"><span class=\"chip {}\">{}</span> {}</button><p class=\"meta\">{} <span>Acceptance criterion: reviewer-declared.</span></p>", html_escape(&answer.id), if answer.satisfied { "passed" } else { "failed" }, position == 0, if answer.satisfied { "c-stable" } else { "c-critical" }, if answer.satisfied { "confirmed" } else { "failed" }, html_escape(&answer.sentence), html_escape(&answer.counts)));
+        html.push_str(&doc_markup(answer.explanation.as_deref()));
+        html.push_str("<details class=\"witness\" open><summary>Why this answer holds</summary>");
+        if answer.steps.is_empty() {
+            html.push_str("<p>No matching witness was produced in this evaluated artifact. A zero result describes this model only.</p>");
+        } else {
+            html.push_str("<ol>");
+            for fact in answer.steps.iter().take(8) {
+                html.push_str(&format!("<li>{}</li>", brief_fact_html(fact)));
+            }
+            html.push_str("</ol>");
+            if answer.steps.len() > 8 {
+                html.push_str(&format!(
+                    "<details><summary>{} more steps</summary><ol start=\"9\">",
+                    answer.steps.len() - 8
+                ));
+                for fact in answer.steps.iter().skip(8) {
+                    html.push_str(&format!("<li>{}</li>", brief_fact_html(fact)));
+                }
+                html.push_str("</ol></details>");
+            }
+        }
+        html.push_str("</details><details class=\"premises\"><summary>Observations and assumptions</summary><ul>");
+        for fact in &answer.premises {
+            html.push_str(&format!("<li>{}</li>", brief_fact_html(fact)));
+        }
+        html.push_str("</ul></details></article>");
+    }
+    html.push_str("</section>");
+    html
+}
+
+pub(crate) fn display_labels(projection: &GraphProjection) -> BTreeMap<String, String> {
+    let index = Index::build(projection);
+    projection
+        .nodes
+        .iter()
+        .map(|node| {
+            (
+                node.id.clone(),
+                match node.data {
+                    GraphNodeData::Fact { .. } => index.sentence_text(node),
+                    _ => label(node),
+                },
+            )
+        })
+        .collect()
+}
+
+pub(crate) fn basis_label(kind: &EvidenceKind) -> &'static str {
+    match kind {
+        EvidenceKind::Snapshot => "snapshot fact",
+        EvidenceKind::Policy => "policy fact",
+        EvidenceKind::Observed => "observed status",
+        EvidenceKind::ReviewerDeclared => "reviewer-declared",
+    }
+}
+
+fn standing_text(node: &GraphNode) -> String {
+    match &node.data {
+        GraphNodeData::Fact { origin, .. } if origin == "derived" => "conclusion".to_string(),
+        GraphNodeData::Fact { bases, .. } if !bases.is_empty() => bases
+            .iter()
+            .map(|basis| basis_label(&basis.kind))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>()
+            .join(" / "),
+        _ => "reviewer-declared".to_string(),
+    }
+}
+
+/// Freshness is meaningful only against an operator-supplied identity.
+pub fn observation_identity_mismatch(projection: &GraphProjection, target: &str) -> bool {
+    projection.nodes.iter().any(|node| match &node.data {
+        GraphNodeData::Fact { bases, .. } => bases.iter().any(|basis| {
+            basis.kind == EvidenceKind::Observed && basis.identity.as_deref() != Some(target)
+        }),
+        _ => false,
+    })
 }
