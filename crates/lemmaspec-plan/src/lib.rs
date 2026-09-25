@@ -641,12 +641,41 @@ pub fn compose_status(mut plan: Artifact, status: Artifact) -> Result<Artifact, 
     if targets != 1 {
         return Err("status requires exactly one target_identity fact".into());
     }
+    plan.doc = Some("What prevents acceptance, and which declared dependencies are still open? Status is evidence about the recorded content identity.".into());
+    // Query each declared dependency against a fixed acceptance criterion. This
+    // exposes blocker witnesses without deriving expected counts from results.
+    let dependencies: Vec<_> = plan
+        .facts
+        .iter()
+        .filter(|fact| fact.relation == "depends_on")
+        .filter_map(|fact| match fact.args.as_slice() {
+            [FactValue::Symbol(unit), FactValue::Symbol(dependency)] => {
+                Some((unit.clone(), dependency.clone()))
+            }
+            _ => None,
+        })
+        .collect();
+    for (unit, dependency) in dependencies {
+        expectation(
+            &mut plan,
+            &format!("acceptance_dependency_{unit}_{dependency}"),
+            &format!("blocked({unit}, {dependency})"),
+            0,
+        );
+    }
     // Acceptance is an explicit policy query, never an inferred ready count.
     // Install these fixed expectations even if a status producer omitted them.
     for (id, query) in [
         ("status_acceptance_policy", "accepted(plan)"),
         ("status_single_target", "target_identity(Identity)"),
     ] {
+        if status
+            .expectations
+            .iter()
+            .any(|e| e.query == query && e.count == 1)
+        {
+            continue;
+        }
         merge_named(
             &mut plan.expectations,
             ExpectationDecl {

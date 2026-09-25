@@ -324,3 +324,32 @@ fn external_gate_blocks_readiness_until_current_acceptance_is_observed() {
         .is_err());
     }
 }
+
+#[test]
+fn status_reports_explain_dependency_blockers_without_duplicate_acceptance() {
+    let status = STATUS.replace("args: [extra_check, current]", "args: [extra_check, old]");
+    let status = status.replacen(
+        "spec status {",
+        "spec status { expect producer_acceptance { query: \"accepted(plan)\" count: 1 }",
+        1,
+    );
+    let evidence = with_status(&status).unwrap();
+    let parsed = parse_artifact(&evidence).unwrap();
+    assert_eq!(
+        parsed
+            .expectations
+            .iter()
+            .filter(|e| e.query == "accepted(plan)")
+            .count(),
+        1
+    );
+    let report = check_artifact(CHECKER, &evidence).unwrap();
+    assert!(report
+        .expectations
+        .iter()
+        .any(|e| e.query == "blocked(u2, u1)" && !e.satisfied));
+    let bound = bind_artifact(CHECKER, &evidence).unwrap();
+    let projection = lemmaspec::project_artifact(&bound).unwrap();
+    let rendered = lemmaspec::render_projection_html(&bound, &projection);
+    assert!(rendered.contains("waits on"));
+}

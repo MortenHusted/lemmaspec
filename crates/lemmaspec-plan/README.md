@@ -131,7 +131,8 @@ a stale observation does not match. Missing claims, absent status, open gates,
 and uncovered requirements/units create `acceptance_blocker(item)` facts.
 `accepted(plan)` requires no blocker among the plan's owned items. Deferred
 work does not block acceptance. Status composition adds explicit expectations
-for `accepted(plan)` and exactly one target; a structural-only projection makes
+for `accepted(plan)`, exactly one target, and zero blocked declared dependencies.
+Dependency findings bring their positive witnesses into the answer-first report; a structural-only projection makes
 no acceptance assertion.
 
 Status cannot add relations, rules, mutations, structural facts, unknown owners,
