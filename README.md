@@ -12,6 +12,54 @@ expectations, and optional mutation policies in one reviewable file. The same
 artifact can produce a human report or a deterministic graph for another tool
 to consume.
 
+## Readable evidence
+
+HTML reports open on the answers, with failed expectations first, numbered
+reasoning and source citations. Select an answer to see its witness graph;
+open the full graph or walkthrough when you need the whole model.
+
+```sh
+lemmaspec render tests/fixtures/readability/labelled_dependency.lemmaspec --source-root . -o /tmp/report.html
+lemmaspec render tests/fixtures/readability/labelled_dependency.lemmaspec --format md --source-root . -o /tmp/report.md
+```
+
+These examples intentionally fail an acceptance expectation, so the reports
+are written and the command exits 1. Display labels, notes and evidence bases
+never change evaluation output or proof identities.
+
+When citations are repository-relative and the report is written elsewhere,
+supply `--source-root PATH`. Relative roots are resolved from the invocation
+directory; no Git root is guessed. Links are rebased from the report directory
+to this explicit source directory. Without the flag, authored destinations stay
+unchanged and resolve relative to the report, preserving sibling-file links.
+HTTPS URLs and report-local fragments stay unchanged in either mode. The source
+root must exist; rendering creates the output directory if needed.
+
+Library callers can construct `SourceContext::new(source_root, output_directory)`
+from existing directories and pass it to `render_projection_html_with_context`
+or `render_projection_markdown_with_context`. Existing render functions preserve
+their link behavior. Context changes link destinations only, never citations,
+source artifacts, projection metadata or proof identities.
+
+A fact may declare its producing boundary with `basis: snapshot`, `policy`,
+`observed`, or `reviewer_declared`, plus a `source` string. Snapshot and observed
+facts also require an `identity` string. Untyped facts, including those with
+free-form provenance, render as reviewer-declared. This metadata describes the
+producer's claim; it does not authenticate authorship or prove truth. Generated
+observations must come from the named deterministic tool. LLM-authored claims
+remain reviewer-declared.
+
+Observed status reads “as of” its identity. Supply `--target-identity ID` to
+compare it with an explicit target: mismatches put a not-current banner first
+and return exit 1. A static report does not promise to monitor source changes.
+
+The optional [lemmaspec-plan](crates/lemmaspec-plan/README.md) consumer projects
+explicit Markdown plan fields into evidence. Its synthetic fixtures and public
+tests require no private checkout or credentials. The core engine has no
+dependency on that consumer. Build it separately with
+`cargo install --path crates/lemmaspec-plan`; it is not bundled in core binary
+releases.
+
 ## Install
 
 Versioned GitHub releases provide prebuilt binaries for macOS, glibc-based
@@ -111,6 +159,22 @@ variables used with incompatible types. Its report separates asserted and
 derived facts and carries a deterministic `why` witness for every fact.
 Repeated walks over the same artifact produce byte-stable JSON.
 
+Artifacts can attach display metadata to their existing symbol values:
+
+```text
+symbol release { label: "Publish the release" source: "plan.md#publish" }
+symbol "module::verify" { label: "Verify calls" }
+notes { text: "Refresh the evidence when the plan changes." }
+```
+
+These declarations belong inside `spec`. A symbol must occur in a fact, rule,
+or expectation; forward references and repeated display labels are allowed.
+Labels, optional sources, and maintainer notes never change evaluation or proof
+identities. Notes are separate from the reader's question before `spec`.
+Source links allow repository-relative paths, fragments, and HTTPS URLs;
+unsafe destinations remain text. Binding keeps labels for surviving checker
+symbols, lets evidence labels override them, and combines both sets of notes.
+
 ## Commands
 
 ```text
@@ -119,7 +183,7 @@ lemmaspec mutate <path.lemmaspec> [--json]
 lemmaspec check <checker.lemmaspec> <evidence.lemmaspec> [--json]
 lemmaspec bind <checker.lemmaspec> <evidence.lemmaspec> [-o <bound.lemmaspec>]
 lemmaspec project <path.lemmaspec> [--json]
-lemmaspec render <path.lemmaspec> [-o <path.html>]
+lemmaspec render <path.lemmaspec> [--format html|md] [--source-root <path>] [-o <path>]
 lemmaspec syntax
 ```
 

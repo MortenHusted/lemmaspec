@@ -6,7 +6,10 @@ use std::fmt;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-use crate::artifact::{evaluate_artifact, ArtifactError, FactValue, MutationOperator, ValueType};
+use crate::artifact::{
+    evaluate_artifact, ArtifactError, EvidenceBasis, EvidenceKind, FactValue, MutationOperator,
+    ValueType,
+};
 use crate::ast::{Atom, Expr, Lit};
 use crate::eval::Support;
 use crate::narrative::read_fact;
@@ -51,6 +54,8 @@ pub enum GraphNodeData {
         status: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         doc: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        notes: Option<String>,
     },
     Relation {
         name: String,
@@ -69,6 +74,8 @@ pub enum GraphNodeData {
         confidence: f64,
         provenance: Vec<String>,
         declarations: Vec<String>,
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        bases: Vec<EvidenceBasis>,
         /// The fact read through its relation's `reads` template.
         #[serde(skip_serializing_if = "Option::is_none")]
         reading: Option<String>,
@@ -104,6 +111,12 @@ pub enum GraphNodeData {
     },
     Symbol {
         value: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        source: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        doc: Option<String>,
     },
 }
 
@@ -322,6 +335,11 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
             declarations
         },
     );
+    let facts_by_declaration: BTreeMap<_, _> = artifact
+        .facts
+        .iter()
+        .map(|fact| (fact.id.as_str(), fact))
+        .collect();
     let docs_by_declaration: BTreeMap<&str, &str> = artifact
         .facts
         .iter()
@@ -339,6 +357,7 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
             name: artifact.name.clone(),
             status: report.status.clone(),
             doc: artifact.doc.clone(),
+            notes: artifact.notes.clone(),
         },
     );
 
@@ -498,6 +517,30 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
                     confidence: row.fact.ann.conf,
                     provenance: row.fact.ann.prov.iter().cloned().collect(),
                     declarations: declarations.clone(),
+                    bases: {
+                        let asserted: Vec<_> = declarations
+                            .iter()
+                            .filter_map(|declaration| {
+                                facts_by_declaration.get(declaration.as_str())
+                            })
+                            .collect();
+                        if asserted.iter().any(|fact| fact.basis.is_some()) {
+                            asserted
+                                .into_iter()
+                                .map(|fact| {
+                                    fact.basis.clone().unwrap_or_else(|| EvidenceBasis {
+                                        kind: EvidenceKind::ReviewerDeclared,
+                                        source: fact.id.clone(),
+                                        identity: None,
+                                    })
+                                })
+                                .collect::<BTreeSet<_>>()
+                                .into_iter()
+                                .collect()
+                        } else {
+                            Vec::new()
+                        }
+                    },
                     reading,
                     doc: (!doc.is_empty()).then(|| doc.join("\n\n")),
                 },
@@ -669,6 +712,22 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
         );
     }
 
+    for symbol in &artifact.symbols {
+        if let Some(node) =
+            builder
+                .nodes
+                .get_mut(&digest_id(&artifact.name, "symbol", &symbol.value))
+        {
+            if let GraphNodeData::Symbol {
+                label, source, doc, ..
+            } = &mut node.data
+            {
+                *label = Some(symbol.label.clone());
+                *source = symbol.source.clone();
+                *doc = symbol.doc.clone();
+            }
+        }
+    }
     let projection = builder.finish(report.status);
     projection
         .validate_closed()
@@ -794,6 +853,9 @@ fn symbol_node(builder: &mut ProjectionBuilder, value: &str) -> String {
         digest_id(&builder.spec, "symbol", &value),
         GraphNodeData::Symbol {
             value: value.to_string(),
+            label: None,
+            source: None,
+            doc: None,
         },
     )
 }

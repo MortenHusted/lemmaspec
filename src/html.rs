@@ -2,13 +2,32 @@
 
 use std::collections::BTreeMap;
 
-use crate::artifact::{FactValue, ValueType};
-use crate::guide::{render_guide, GuideSections};
+use crate::artifact::ValueType;
+use crate::guide::{brief, display_labels, render_brief, render_guide, GuideSections};
 use crate::projection::{GraphNodeData, GraphProjection};
 
 const TEMPLATE: &str = include_str!("html_template.html");
 
 pub fn render_projection_html(source: &str, projection: &GraphProjection) -> String {
+    render_projection_html_with_target(source, projection, None)
+}
+
+pub fn render_projection_html_with_target(
+    source: &str,
+    projection: &GraphProjection,
+    target: Option<&str>,
+) -> String {
+    render_projection_html_with_context(source, projection, target, None)
+}
+
+/// Render with an explicit source root and report directory for citations.
+/// Without a context, authored destinations are preserved verbatim.
+pub fn render_projection_html_with_context(
+    source: &str,
+    projection: &GraphProjection,
+    target: Option<&str>,
+    context: Option<&crate::SourceContext>,
+) -> String {
     let title = humanize(&projection.spec);
     let (expectation_count, failed) = projection
         .nodes
@@ -31,9 +50,11 @@ pub fn render_projection_html(source: &str, projection: &GraphProjection) -> Str
         claims,
         stress_tests,
         reference,
-    } = render_guide(projection);
+    } = render_guide(projection, context);
     let relations = render_relations(projection);
-    let facts = render_facts(projection);
+    let brief = brief(projection);
+    let labels = display_labels(projection);
+    let facts = render_facts(projection, &labels);
     let graph_json = escape_json_for_script(
         &serde_json::to_string(projection).expect("graph projection is serializable"),
     );
@@ -41,6 +62,10 @@ pub fn render_projection_html(source: &str, projection: &GraphProjection) -> Str
     let status_label = if failed == 0 { "clean" } else { "incomplete" };
 
     render_template(&BTreeMap::from([
+        ("FRESHNESS", target.filter(|target| crate::guide::observation_identity_mismatch(projection, target)).map(|target| format!("<div class=\"freshness\" role=\"status\">Not current for target {}. Observed status was recorded against a different identity.</div>", html_escape(target))).unwrap_or_default()),
+        ("BRIEF", render_brief(&brief, context)),
+        ("DISPLAY_LABELS", escape_json_for_script(&serde_json::to_string(&labels).expect("labels serialize"))),
+        ("ANSWER_CLOSURES", escape_json_for_script(&serde_json::to_string(&brief.answers.iter().map(|answer| (&answer.id, &answer.closure)).collect::<BTreeMap<_, _>>()).expect("closures serialize"))),
         ("ASSUMPTIONS", assumptions),
         ("CLAIMS", claims),
         ("CONCLUSIONS", conclusions),
@@ -159,12 +184,10 @@ fn render_relations(projection: &GraphProjection) -> String {
     }
 }
 
-fn render_facts(projection: &GraphProjection) -> String {
+fn render_facts(projection: &GraphProjection, labels: &BTreeMap<String, String>) -> String {
     let mut rows = String::new();
     for node in &projection.nodes {
         if let GraphNodeData::Fact {
-            relation,
-            args,
             origin,
             confidence,
             provenance,
@@ -172,7 +195,6 @@ fn render_facts(projection: &GraphProjection) -> String {
             ..
         } = &node.data
         {
-            let args = args.iter().map(fact_value).collect::<Vec<_>>().join(", ");
             let tone = if origin == "asserted" {
                 "c-stable"
             } else {
@@ -189,10 +211,9 @@ fn render_facts(projection: &GraphProjection) -> String {
                 declarations.join(", ")
             };
             rows.push_str(&format!(
-                r#"<tr><td><span class="chip {tone}">{}</span></td><td><code>{}({})</code></td><td>{:.0}%</td><td>{}</td><td>{}</td></tr>"#,
+                r#"<tr><td><span class="chip {tone}">{}</span></td><td><span>{}</span></td><td>{:.0}%</td><td>{}</td><td>{}</td></tr>"#,
                 html_escape(origin),
-                html_escape(relation),
-                html_escape(&args),
+                html_escape(&labels[&node.id]),
                 confidence * 100.0,
                 html_escape(&evidence),
                 html_escape(&declarations)
@@ -212,13 +233,6 @@ fn value_type(value: &ValueType) -> &'static str {
     match value {
         ValueType::Symbol => "symbol",
         ValueType::Integer => "integer",
-    }
-}
-
-fn fact_value(value: &FactValue) -> String {
-    match value {
-        FactValue::Symbol(value) => value.clone(),
-        FactValue::Integer(value) => value.to_string(),
     }
 }
 
