@@ -220,7 +220,7 @@ spec comparison_symbols {
         .find(|node| {
             matches!(
                 &node.data,
-                lemmaspec::GraphNodeData::Symbol { value } if value == "release"
+                lemmaspec::GraphNodeData::Symbol { value, .. } if value == "release"
             )
         })
         .expect("release symbol")
@@ -320,7 +320,7 @@ spec aggregate_projection {
         .nodes
         .iter()
         .find_map(|node| match &node.data {
-            GraphNodeData::Symbol { value } if value == "spitfire" => Some(node.id.as_str()),
+            GraphNodeData::Symbol { value, .. } if value == "spitfire" => Some(node.id.as_str()),
             _ => None,
         })
         .expect("aggregate symbol");

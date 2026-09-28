@@ -4,8 +4,9 @@ use std::process::ExitCode;
 use lemmaspec::agent::{self, Agent};
 use lemmaspec::upgrade::{self, Install};
 use lemmaspec::{
-    bind_artifact, check_artifact, mutate_artifact, project_artifact, render_projection_html,
-    walk_artifact, MutationTarget,
+    bind_artifact, check_artifact, mutate_artifact, observation_identity_mismatch,
+    project_artifact, render_projection_html_with_context, render_projection_markdown_with_context,
+    walk_artifact, MutationTarget, SourceContext,
 };
 
 const HELP: &str = "Usage:
@@ -14,7 +15,7 @@ const HELP: &str = "Usage:
   lemmaspec check <checker.lemmaspec> <evidence.lemmaspec> [--json]
   lemmaspec bind <checker.lemmaspec> <evidence.lemmaspec> [-o <bound.lemmaspec>]
   lemmaspec project <path.lemmaspec> [--json]
-  lemmaspec render <path.lemmaspec> [-o <path.html>]
+  lemmaspec render <path.lemmaspec> [--format html|md] [-o <path>]
   lemmaspec syntax
   lemmaspec intro
   lemmaspec agent install [--claude] [--codex] [--dir <project>] [--marketplace]
@@ -28,7 +29,7 @@ Commands:
   check   Evaluate a checker's rules over another file's facts and expectations
   bind    Write the checker bound to the evidence as one self-contained artifact
   project Emit its closed, deterministic graph projection
-  render  Write a self-contained human HTML view beside the artifact
+  render  Write an answer-first HTML or Markdown report beside the artifact
   syntax  Show the supported artifact and rule language
   intro   Orient an agent: what LemmaSpec is for and how to work with it
   agent   install: put this binary's skill into a project's .claude and .codex
@@ -39,7 +40,10 @@ Commands:
 
 Options:
   --json  Emit machine-readable JSON for walk, mutate, check, or project
-  -o, --output <path>  Choose the render (.html) or bind (.lemmaspec) output path
+  -o, --output <path>  Choose the render (.html/.md) or bind (.lemmaspec) output path
+  --format html|md  Choose the report format (default: html)
+  --source-root <path>    Resolve repository citations from this explicit directory
+  --target-identity <id>  Compare observed report status against this identity
   --claude, --codex  Limit agent install to one agent (default: both)
   --dir <project>  Project to install into (default: current directory)
   --marketplace  Run the agents' plugin marketplace commands instead
@@ -63,6 +67,9 @@ Example:
 const SYNTAX_HELP: &str = r#"Artifact:
   // Comments before `spec` document the artifact: the question it answers.
   spec NAME {
+    notes { text: "Maintainer guidance, separate from the reader's question." }
+    symbol value { label: "Human-readable value" source: "plan.md#value" }
+
     // A comment touching a declaration documents that declaration.
     relation NAME {
       args: [symbol, integer]
@@ -95,13 +102,23 @@ const SYNTAX_HELP: &str = r#"Artifact:
   }
 
 Artifact rules:
+  - symbol labels describe constants used by facts, rules, or expectations;
+    symbol keys may be bare identifiers or quoted strings, and source is optional
+  - one declaration per symbol; display labels may repeat and never affect proofs
+  - notes is an optional singleton block of maintainer guidance
+  - source links allow repository-relative paths, fragments, or HTTPS URLs;
+    unsafe destinations remain metadata for plain-text display
   - relation argument types are symbol or integer
   - roles is an optional identifier per argument; reads is an optional sentence
     template whose {placeholders} name a role or an argument position
   - comments separated from a declaration by a blank line are section headings
     and document nothing; a comment trailing a closing brace documents that block
   - confidence is an optional integer percentage from 0 through 100
-  - provenance is an optional list of symbols or strings
+  - provenance is an optional list of symbols or strings; it does not verify a fact
+  - optional fact metadata: basis: snapshot|policy|observed|reviewer_declared,
+    source: "citation", identity: "content identity" (required for snapshot/observed)
+  - basis names a declared producer, not authenticated authorship; tools emit
+    snapshot/policy/observed bases; LLM-created claims remain reviewer_declared
   - every predicate used by facts, rules, or expectations needs a relation
   - an asserted relation cannot also be derived by a rule
   - expectations require an exact result count
@@ -554,20 +571,36 @@ fn run_project(args: &[String]) -> Result<ExitCode, String> {
 }
 
 fn run_render(args: &[String]) -> Result<ExitCode, String> {
-    let (path, output_path) = render_paths(args)?;
+    let RenderPaths {
+        path,
+        output: output_path,
+        format,
+        target,
+        source_root,
+    } = render_paths(args)?;
     let source =
         std::fs::read_to_string(path).map_err(|error| format!("read `{path}`: {error}"))?;
     let projection =
         project_artifact(&source).map_err(|error| format!("render `{path}`: {error}"))?;
-    let html = render_projection_html(&source, &projection);
-
-    if let Some(parent) = output_path
+    let output_directory = output_path
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
-    {
-        std::fs::create_dir_all(parent)
-            .map_err(|error| format!("create output directory `{}`: {error}", parent.display()))?;
-    }
+        .unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(output_directory).map_err(|error| {
+        format!(
+            "create output directory `{}`: {error}",
+            output_directory.display()
+        )
+    })?;
+    let context = source_root
+        .map(|root| SourceContext::new(Path::new(root), output_directory))
+        .transpose()?;
+    let html = if format == "md" {
+        render_projection_markdown_with_context(&projection, target, context.as_ref())
+    } else {
+        render_projection_html_with_context(&source, &projection, target, context.as_ref())
+    };
+
     std::fs::write(&output_path, html)
         .map_err(|error| format!("write `{}`: {error}", output_path.display()))?;
     println!(
@@ -578,14 +611,26 @@ fn run_render(args: &[String]) -> Result<ExitCode, String> {
         projection.edges.len()
     );
 
-    Ok(if projection.status == "clean" {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::from(1)
-    })
+    Ok(
+        if projection.status == "clean"
+            && !target.is_some_and(|target| observation_identity_mismatch(&projection, target))
+        {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::from(1)
+        },
+    )
 }
 
-fn render_paths(args: &[String]) -> Result<(&str, PathBuf), String> {
+struct RenderPaths<'a> {
+    path: &'a str,
+    output: PathBuf,
+    format: &'a str,
+    target: Option<&'a str>,
+    source_root: Option<&'a str>,
+}
+
+fn render_paths(args: &[String]) -> Result<RenderPaths<'_>, String> {
     let Some(path) = args.first() else {
         return Err(format!("render requires a .lemmaspec path\n\n{HELP}"));
     };
@@ -594,9 +639,39 @@ fn render_paths(args: &[String]) -> Result<(&str, PathBuf), String> {
     }
 
     let mut output = None;
+    let mut format = "html";
+    let mut target = None;
+    let mut source_root = None;
     let mut index = 1;
     while index < args.len() {
         match args[index].as_str() {
+            "--source-root" => {
+                if source_root.is_some() {
+                    return Err("render accepts only one source root".to_string());
+                }
+                let Some(value) = args.get(index + 1) else {
+                    return Err("--source-root requires a path".to_string());
+                };
+                source_root = Some(value.as_str());
+                index += 2;
+            }
+            "--target-identity" => {
+                let Some(value) = args.get(index + 1) else {
+                    return Err("--target-identity requires an identity".to_string());
+                };
+                target = Some(value.as_str());
+                index += 2;
+            }
+            "--format" => {
+                let Some(value) = args.get(index + 1) else {
+                    return Err("--format requires html or md".to_string());
+                };
+                if !matches!(value.as_str(), "html" | "md") {
+                    return Err(format!("unsupported render format `{value}`"));
+                }
+                format = value;
+                index += 2;
+            }
             "-o" | "--output" => {
                 if output.is_some() {
                     return Err("render accepts only one output path".to_string());
@@ -610,12 +685,18 @@ fn render_paths(args: &[String]) -> Result<(&str, PathBuf), String> {
             unexpected => return Err(format!("unexpected argument `{unexpected}`")),
         }
     }
-    let output = output.unwrap_or_else(|| Path::new(path).with_extension("html"));
-    if output.extension().and_then(|value| value.to_str()) != Some("html") {
+    let output = output.unwrap_or_else(|| Path::new(path).with_extension(format));
+    if output.extension().and_then(|value| value.to_str()) != Some(format) {
         return Err(format!(
-            "render output must be an .html file, got `{}`",
+            "render output must be an .{format} file, got `{}`",
             output.display()
         ));
     }
-    Ok((path, output))
+    Ok(RenderPaths {
+        path,
+        output,
+        format,
+        target,
+        source_root,
+    })
 }

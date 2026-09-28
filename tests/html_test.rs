@@ -116,12 +116,12 @@ spec guide {
         "{html}"
     );
 
-    // Evidence decides standing: provenance makes an observation, its absence an assumption.
+    // Freeform provenance cannot upgrade a reviewer-declared fact into an observation.
     assert!(html.contains("data-step=\"observations\""), "{html}");
-    assert!(html.contains("<span class=\"chip c-stable\">observation</span><span class=\"sentence\">tests is incomplete</span>"), "{html}");
+    assert!(html.contains("<span class=\"chip c-attention\">reviewer-declared</span><span class=\"sentence\">tests (unlabelled) is incomplete</span>"), "{html}");
     assert!(html.contains("evidence: plan:test-gate"), "{html}");
     assert!(html.contains("data-step=\"assumptions\""), "{html}");
-    assert!(html.contains("<span class=\"chip c-attention\">assumption</span><span class=\"sentence\">release depends on tests</span>"), "{html}");
+    assert!(html.contains("<span class=\"chip c-attention\">reviewer-declared</span><span class=\"sentence\">release (unlabelled) depends on tests (unlabelled)</span>"), "{html}");
     assert!(
         html.contains("If this is wrong, 1 conclusion and 1 claim fall with it."),
         "{html}"
@@ -145,7 +145,7 @@ spec guide {
     assert!(html.contains("data-step=\"conclusions\""), "{html}");
     assert!(html.contains("via rule <a class=\"ref\" href=\"#n-lemmaspec-guide-rule-blocked_by_incomplete_dependency\">blocked_by_incomplete_dependency</a>"), "{html}");
     assert!(
-        html.contains("<span class=\"chip c-attention\">assumption</span> <a class=\"ref\""),
+        html.contains("<span class=\"chip c-attention\">reviewer-declared</span> <a class=\"ref\""),
         "{html}"
     );
 
@@ -156,7 +156,7 @@ spec guide {
         open < confirmed,
         "open claims are listed before confirmed ones"
     );
-    assert!(html.contains("There must be exactly 1 result where <span class=\"sentence\">release is blocked</span>."), "{html}");
+    assert!(html.contains("There must be exactly 1 result where <span class=\"sentence\">release (unlabelled) is blocked</span>."), "{html}");
     assert!(html.contains("Found 1. Confirmed."), "{html}");
     assert!(html.contains("Found 0. This claim is open"), "{html}");
 
@@ -173,7 +173,7 @@ spec open {
         "{open_html}"
     );
     assert!(
-        open_html.contains("popup is a loose end</a>"),
+        open_html.contains("popup (unlabelled) is a loose end</a>"),
         "{open_html}"
     );
 
@@ -190,7 +190,15 @@ fn committed_persistence_adapter_view_matches_its_incomplete_projection() {
     assert_eq!(projection.status, "incomplete");
 
     let html = render_projection_html(PERSISTENCE_ADAPTER, &projection);
-    assert_eq!(html, PERSISTENCE_ADAPTER_HTML);
+    // Archived reports retain their original presentation. Their canonical graph
+    // remains the contract when the current renderer intentionally changes.
+    let archived: serde_json::Value = serde_json::from_str(between(
+        PERSISTENCE_ADAPTER_HTML,
+        "<script type=\"application/json\" id=\"lemmaspec-graph\">",
+        "</script>",
+    ))
+    .unwrap();
+    assert_eq!(archived, serde_json::to_value(&projection).unwrap());
 
     let json = between(
         &html,

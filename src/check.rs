@@ -22,7 +22,8 @@ pub fn check_artifact(checker: &str, evidence: &str) -> Result<WalkReport, Artif
 /// Bind `checker` to `evidence` and print the result as a self-contained
 /// artifact: the proof record for this checker over this evidence, which
 /// walk, mutate, project, and render accept unchanged. Its doc names both
-/// sources before the evidence's own doc.
+/// sources before the evidence's own doc. Notes from both artifacts survive;
+/// evidence labels override checker labels for symbols retained by the binding.
 pub fn bind_artifact(checker: &str, evidence: &str) -> Result<String, ArtifactError> {
     let checker = parse_artifact(checker)?;
     let evidence = parse_artifact(evidence)?;
@@ -51,15 +52,40 @@ fn bind(checker: Artifact, evidence: Artifact) -> Result<Artifact, ArtifactError
         }
     }
 
-    Ok(Artifact {
+    let mut bound = Artifact {
         name: evidence.name,
         doc: evidence.doc,
+        notes: match (checker.notes, evidence.notes) {
+            (Some(checker), Some(evidence)) if checker != evidence => {
+                Some(format!("{checker}\n\n{evidence}"))
+            }
+            (Some(notes), _) | (_, Some(notes)) => Some(notes),
+            (None, None) => None,
+        },
+        symbols: evidence.symbols,
         relations: checker.relations,
         facts: evidence.facts,
         rules: checker.rules,
         expectations: evidence.expectations,
         mutations: Vec::new(),
-    })
+    };
+    if !checker.symbols.is_empty() {
+        let referenced = bound.referenced_symbols()?;
+        for symbol in checker.symbols {
+            if referenced.contains(&symbol.value)
+                && !bound
+                    .symbols
+                    .iter()
+                    .any(|entry| entry.value == symbol.value)
+            {
+                bound.symbols.push(symbol);
+            }
+        }
+        bound
+            .symbols
+            .sort_by(|left, right| left.value.cmp(&right.value));
+    }
+    Ok(bound)
 }
 
 #[cfg(test)]

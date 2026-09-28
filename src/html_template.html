@@ -243,16 +243,41 @@
     body { overflow:auto }
     .top { height:auto; flex-wrap:wrap; padding:10px 14px }
     .stepper { margin-left:0; width:100% }
-    .stage { grid-template-columns:1fr; grid-template-rows:60vh auto; height:auto }
+    .freshness { background:var(--critical); color:var(--bg); padding:12px 20px; font-weight:600 }
+  .stage { grid-template-columns:1fr; grid-template-rows:60vh auto; height:auto }
     .journey { border-left:0; border-top:1px solid var(--line) }
     .journey-body { overflow:visible }
+  }
+  .stage { grid-template-columns:minmax(380px, 55%) minmax(0, 1fr) }
+  .journey { order:-1; border-left:0; border-right:1px solid var(--line) }
+  .answer { padding:18px 0; border-top:1px solid var(--line); overflow-wrap:anywhere }
+  .answer-select { display:block; width:100%; text-align:left; border:0; border-left:3px solid transparent; padding:8px 10px; background:none; color:var(--ink); font:600 17px/1.5 var(--sans); cursor:pointer }
+  .answer-select[aria-pressed="true"] { border-color:var(--accent); background:var(--panel) }
+  .answer details { margin:14px 0; color:var(--dim) }
+  .answer li { margin:9px 0 }
+  .answer summary { cursor:pointer; color:var(--ink) }
+  .citations { font-size:12px }
+  .brief h2 { font-size:22px; margin:0 0 12px }
+  #walkthrough, .stepper, .journey-nav { display:none }
+  body.walkthrough #brief { display:none }
+  body.walkthrough #walkthrough { display:block }
+  body.walkthrough .stepper, body.walkthrough .journey-nav { display:flex }
+  #mode-toggle { background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:6px 10px; cursor:pointer }
+  @media(max-width:900px) {
+    .stage { display:flex; flex-direction:column; height:auto }
+    .journey { order:-1; border-right:0 }
+    .journey-body { overflow:visible }
+    .graph-viewport { height:440px; min-height:440px }
+    .overlay { flex-wrap:wrap }
   }
 </style>
 </head>
 <body>
+@@FRESHNESS@@
 <header class="top">
   <h1>@@TITLE@@<span>@@SPEC_NAME@@</span></h1>
   <div class="verdict"><span class="status">@@STATUS_LABEL@@</span><button type="button" class="help-button" id="help-open" title="How to read this page (?)">? guide</button></div>
+  <button type="button" id="mode-toggle" aria-pressed="false">Full walkthrough</button>
   <nav class="stepper" id="stepper" aria-label="Journey"></nav>
 </header>
 
@@ -261,6 +286,7 @@
     <svg id="graph" role="img" aria-label="LemmaSpec dependency graph"></svg>
     <div class="overlay">
       <input type="search" id="graph-search" placeholder="find…" aria-label="Find node">
+      <button type="button" id="full-graph" aria-pressed="false">Full graph</button>
       <button type="button" id="filters-toggle" aria-pressed="false" aria-controls="filters">filters</button>
       <button type="button" id="labels" title="Labels: auto keeps them from overlapping, all shows every one, none shows only what is lit">labels: auto</button>
       <button type="button" id="cycles" aria-pressed="false" title="Highlight facts that depend on each other through recursive rules">cycles</button>
@@ -282,6 +308,8 @@
   <aside class="journey">
     <div class="journey-body" id="journey">
       <div class="selection" id="selection" hidden></div>
+      @@BRIEF@@
+      <div id="walkthrough">
 
       <section class="step" data-step="question" hidden>
         <header class="step-head"><h2>The question</h2></header>
@@ -318,6 +346,7 @@
         </div>
       </section>
     </div>
+    </div>
     <div class="journey-nav">
       <button type="button" id="prev">← back</button>
       <span class="where" id="where"></span>
@@ -336,8 +365,8 @@
       <h3>The journey</h3>
       <dl class="help-steps">
         <dt>Question</dt><dd>What the author set out to determine, in their own words, and the verdict the engine reached.</dd>
-        <dt>Observations</dt><dd>Facts asserted with evidence attached. Start here when you want to know what this argument stands on.</dd>
-        <dt>Assumptions</dt><dd>Facts taken on trust: no evidence, or less than full confidence. Each one says how many conclusions and claims fall if it turns out to be wrong. This is where decisions and missing evidence live.</dd>
+        <dt>Observations</dt><dd>Facts with a declared snapshot, policy, or observed basis. A declared producer is not authenticated by this report.</dd>
+        <dt>Assumptions</dt><dd>Reviewer-declared facts. A citation alone does not establish an observation. Each fact says how many conclusions and claims depend on it.</dd>
         <dt>Reasoning</dt><dd>The rules. Read each as: this follows whenever all of these hold. Named conditions are the handles for mutation tests.</dd>
         <dt>Conclusions</dt><dd>What the rules derived. Select one to unfold why: the rule, then the facts it needed, back to the observations.</dd>
         <dt>Claims</dt><dd>What the specification commits to, checked against the walk. Open claims come first and show what was found instead of the expected count.</dd>
@@ -421,14 +450,31 @@
     if (edge.rel === "targets" && clusterOf.has(edge.to)) clusterOf.set(edge.from, clusterOf.get(edge.to));
   });
 
-  function label(node) {
-    if (node.type === "fact") return node.reading || `${node.relation}(${node.args.join(", ")})`;
-    if (node.type === "symbol") return node.value;
-    return node.name || node.type;
-  }
+  const displayLabels = @@DISPLAY_LABELS@@;
+  const answerClosures = @@ANSWER_CLOSURES@@;
+  let selectedAnswer = document.querySelector("[data-answer]")?.dataset.answer || null;
+  let fullGraph = false;
+  function label(node) { return displayLabels[node.id] || node.name || node.type; }
+  document.getElementById("full-graph").addEventListener("click", event => {
+    fullGraph = !fullGraph;
+    event.currentTarget.setAttribute("aria-pressed", String(fullGraph));
+    event.currentTarget.textContent = fullGraph ? "Witness graph" : "Full graph";
+    redraw(180); fit();
+  });
+  document.getElementById("mode-toggle").addEventListener("click", event => {
+    const walking = document.body.classList.toggle("walkthrough");
+    event.currentTarget.setAttribute("aria-pressed", String(walking));
+    event.currentTarget.textContent = walking ? "Answer brief" : "Full walkthrough";
+    clearSelection(); fit();
+  });
+  document.querySelectorAll(".answer-select").forEach(button => button.addEventListener("click", () => {
+    selectedAnswer = button.closest("[data-answer]").dataset.answer;
+    document.querySelectorAll(".answer-select").forEach(other => other.setAttribute("aria-pressed", String(other === button)));
+    focus = null; clearSelection(); redraw(180); fit();
+  }));
   function tone(node) {
     if (node.type === "expectation") return node.satisfied ? "stable" : "critical";
-    if (node.type === "fact") return node.origin === "asserted" ? "stable" : "additive";
+    if (node.type === "fact") return node.origin !== "asserted" ? "additive" : (node.bases?.length && node.bases.every(basis => basis.kind !== "reviewer_declared") ? "stable" : "attention");
     if (node.type === "rule" || node.type === "mutation") return "attention";
     return "neutral";
   }
@@ -466,7 +512,7 @@
         out.get(fact).filter(e => e.rel === "proves").forEach(e => lit.add(e.to));
       });
     } else if (node.type === "expectation") {
-      into.get(id).filter(e => e.rel === "proves" || e.rel === "matches").forEach(e => lit.add(e.from));
+      (answerClosures[id] || []).forEach(item => lit.add(item));
       out.get(id).filter(e => e.rel === "expects").forEach(e => lit.add(e.to));
     } else if (node.type === "relation") {
       data.nodes.forEach(other => { if (clusterOf.get(other.id) === id) lit.add(other.id); });
@@ -611,6 +657,10 @@
 
   function visibleNodes() {
     let nodes = data.nodes.filter(node => shownTypes.has(node.type) || revealed.has(node.id));
+    if (!fullGraph) {
+      const closure = new Set(answerClosures[selectedAnswer] || []);
+      nodes = nodes.filter(node => closure.has(node.id));
+    }
     if (focus) {
       const keep = new Set([focus]);
       neighbours.get(focus).forEach(a => { keep.add(a); neighbours.get(a).forEach(b => keep.add(b)); });
@@ -997,7 +1047,7 @@
     if (group) group.classList.add("selected");
     if (options && options.centre) centreOn(id);
     const card = cardFor(id);
-    if (card) {
+    if (card && document.body.classList.contains("walkthrough")) {
       const index = stepOf(card);
       if (index !== current) setStep(index, { keepSelection: true, keepScroll: true });
       let ancestor = card.parentElement;

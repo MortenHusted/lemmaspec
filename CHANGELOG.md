@@ -7,6 +7,26 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- Answer-first HTML and deterministic Markdown reports, with selected-answer
+  witness graphs, explicit evidence standings and optional target identity checks.
+- Optional `lemmaspec-plan` workspace consumer for structured Markdown plans,
+  source-derived evidence, and identity-bound status composition; synthetic
+  fixtures run without private repositories.
+
+- Symbol declarations attach human labels and optional source destinations to
+  existing constants, including quoted symbol keys. Metadata appears in the
+  graph projection without changing evaluation or proof identities.
+- A `notes { text: "..." }` block keeps maintainer guidance separate from the
+  question before `spec`. Printing and binding preserve labels and notes.
+- Explicit `render --source-root` and library source context rebase citations
+  for relocated HTML/Markdown reports without changing authored metadata or
+  the default sibling-relative link behavior. Legacy provenance remains text;
+  only explicit symbol and basis source metadata is linked.
+- A shared source-link policy permits repository-relative paths, fragments,
+  and HTTPS destinations; unsafe destinations remain available as plain text.
+
 ## [0.3.1] - 2026-09-21
 
 ### Fixed

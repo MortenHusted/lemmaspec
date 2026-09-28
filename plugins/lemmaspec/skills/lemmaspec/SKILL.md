@@ -45,8 +45,8 @@ command is rejected, report the installed version before changing the artifact.
 3. Declare every predicate as a typed `relation`. Prefer relations that remain meaningful outside one sentence, such as `requires`, `changes`, `calls`, `blocked_by`, `implemented`, or `satisfies`.
 4. Express consequences and invariants as `rule` blocks. Use stable descriptive IDs for facts, rules, and expectations.
 5. Express acceptance criteria as `expect` blocks with exact counts. An expectation is a claim to test, not a desired value to force.
-6. Keep uncertain evidence explicit with `confidence` and `provenance`. A fact with provenance renders as an observation; a fact without it, or below full confidence, renders as an assumption that a human still has to decide on. Omit both fields only when the fact is simply authoritative within the artifact.
-7. Write for the reader, not only the engine. Comments before `spec` state the question the artifact answers. A comment directly above a relation, fact, rule, expectation, or mutation explains it in the rendered guide. Give relations `roles` naming each argument and a `reads` sentence template such as `"{item} depends on {dependency}"` so facts and rule conditions render as prose.
+6. Keep the evidence's standing explicit. Facts may declare `basis: snapshot`, `policy`, `observed`, or `reviewer_declared`. Each basis requires a `source` string; `snapshot` and `observed` also require an `identity` string. This metadata states the producer's claim and does not authenticate authorship or prove truth. Untyped facts remain reviewer-declared, including facts with provenance or full confidence. Neither citations nor confidence upgrade LLM-authored claims: those stay `reviewer_declared`. Generated observations must come from the named deterministic tool.
+7. Write for the reader, not only the engine. Comments before `spec` state the question the artifact answers; keep maintainer guidance in `notes { text: "..." }`. A comment directly above a relation, fact, rule, expectation, or mutation explains it in the rendered guide. Give relations `roles` naming each argument and a `reads` sentence template such as `"{item} depends on {dependency}"` so facts and rule conditions render as prose. Give symbols human labels and source links; unlabelled symbols remain visibly marked.
 
 Run `lemmaspec syntax` rather than guessing the grammar. Important boundaries:
 
@@ -114,13 +114,13 @@ mutants twice would make the report misleading.
 
 ## Check evidence against a checker
 
-A checker is an artifact whose facts are a fixture and whose expectations and mutation policies prove the rules bite. To apply it to real code, write an evidence file: a `spec` containing only facts over the checker's relations, each with provenance naming the file and declaration it was read from, plus the expectations that should hold for that codebase. Then run:
+A checker is an artifact whose facts are a fixture and whose expectations and mutation policies prove the rules bite. To apply it to real code, produce an evidence file: a `spec` containing facts over the checker's relations, source citations and declared bases from their producers, plus the expectations that should hold for that codebase. Labels and notes may accompany the evidence. Agent-authored facts stay reviewer-declared even when they cite code. Then run:
 
 ```sh
 lemmaspec check path/to/checker.lemmaspec path/to/evidence.lemmaspec --json
 ```
 
-The checker's fixture and expectations are replaced by the evidence file's; the report and exit status read as for `walk`. Assert only facts you established from the code; never invent a fact to satisfy an expectation. A failed expectation with its `why` witness is the finding: report the derived fact, the rule, and the provenance of the asserted facts beneath it. An exemption is an asserted fact with provenance naming the review that granted it, not a deleted piece of evidence.
+The checker's fixture and expectations are replaced by the evidence file's; the report and exit status read as for `walk`. Assert only facts you established from the code; never invent a fact to satisfy an expectation. A failed expectation with its `why` witness is the finding: report the derived fact, the rule, and the sources and standings of the asserted facts beneath it. An exemption is a reviewer-declared fact citing the review that granted it, not a deleted piece of evidence.
 
 To keep, render, or project the result, bind it to a file:
 
@@ -128,7 +128,7 @@ To keep, render, or project the result, bind it to a file:
 lemmaspec bind path/to/checker.lemmaspec path/to/evidence.lemmaspec
 ```
 
-This writes `path/to/evidence.bound.lemmaspec` (or the `-o` path), a self-contained artifact that `walk`, `mutate`, `project`, and `render` accept unchanged. It is the committable proof record for that checker over that codebase; render it when a human needs to read the finding.
+This writes `path/to/evidence.bound.lemmaspec` (or the `-o` path), a self-contained artifact that `walk`, `mutate`, `project`, and `render` accept unchanged. It records that checker over that codebase; render it when a human needs to read the finding. Keep private evidence, reports and identifying source references local unless publication is explicitly authorized.
 
 ## Project the graph
 
@@ -155,10 +155,15 @@ Generate the standalone view after the graph represents the intended model:
 
 ```sh
 lemmaspec render path/to/spec.lemmaspec
-lemmaspec render path/to/spec.lemmaspec --output path/to/report.html
+lemmaspec render path/to/spec.lemmaspec --source-root . --output path/to/report.html
+lemmaspec render path/to/spec.lemmaspec --format md
 ```
 
-The default output replaces `.lemmaspec` with `.html`. The document works offline: the graph, clustered by relation, is the stage, and a journey panel beside it walks the reader from the question through observations, assumptions, reasoning, conclusions with their proof trees, claims, and stress tests to the reference tables. Each step lights its part of the graph, and a card and its node are one selection. The page explains itself: tell a human reader to press `?` for the guide, and point them at the Assumptions step when a decision or missing evidence is what you need from them. Comments, `roles`, and `reads` templates in the source are what make the journey read as prose; without them facts render as atoms. Exit `1` still writes the document: preserve and report its visibly open claims rather than treating it as a rendering error.
+The default output replaces `.lemmaspec` with `.html`; `--format md` uses `.md`. Both formats open on the answers, with failed expectations first, numbered witness steps, and the premises' declared standings and sources. Maintainer notes stay outside this brief. The offline HTML graph starts on the selected answer's witness; the full graph and walkthrough are opt-in. Tell a human reader to press `?` for the guide, and point them to the failed answer or reviewer-declared premise that needs attention.
+
+When source citations are repository-relative, pass `--source-root` with that repository's directory so links resolve from the report's output location. `--source-root .` uses the invocation directory. Without this option, relative links resolve beside the report; no repository root is inferred. HTTPS links and fragments keep their authored destinations.
+
+Observed status says which identity it was recorded against. Pass `--target-identity ID` to compare with an explicit target; a mismatch puts a not-current banner first and exits `1`. A static report does not monitor source changes. Exit `1` still writes the report: preserve and report its open claims or stale observations rather than treating them as a rendering error.
 
 ## Report the result
 
@@ -168,7 +173,7 @@ Return:
 - asserted facts versus derived conclusions;
 - each expectation and whether it passed;
 - node and edge counts when projected;
-- the rendered HTML path when a human view was requested;
+- the rendered HTML or Markdown path when a human view was requested;
 - any failed expectation as unresolved work, not as a parser failure;
 - any modeling choice that could materially change the answer.
 

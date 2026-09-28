@@ -21,6 +21,9 @@ pub fn print_artifact(artifact: &Artifact) -> String {
         out.push('\n');
     }
     let _ = writeln!(out, "spec {} {{", artifact.name);
+    if let Some(notes) = &artifact.notes {
+        let _ = writeln!(out, "  notes {{ text: {} }}\n", quoted(notes));
+    }
 
     let mut first = true;
     let mut block = |out: &mut String, doc: &Option<String>, body: String| {
@@ -34,6 +37,18 @@ pub fn print_artifact(artifact: &Artifact) -> String {
         out.push_str(&body);
     };
 
+    for symbol in &artifact.symbols {
+        let mut body = format!(
+            "  symbol {} {{\n    label: {}\n",
+            text(&symbol.value),
+            quoted(&symbol.label)
+        );
+        if let Some(source) = &symbol.source {
+            let _ = writeln!(body, "    source: {}", quoted(source));
+        }
+        body.push_str("  }\n");
+        block(&mut out, &symbol.doc, body);
+    }
     for relation in &artifact.relations {
         block(&mut out, &relation.doc, print_relation(relation));
     }
@@ -106,6 +121,13 @@ fn print_fact(fact: &FactDecl) -> String {
     }
     if !fact.provenance.is_empty() {
         let _ = writeln!(out, "    provenance: [{}]", texts(&fact.provenance));
+    }
+    if let Some(basis) = &fact.basis {
+        let _ = writeln!(out, "    basis: {}", basis.kind.as_str());
+        let _ = writeln!(out, "    source: {}", quoted(&basis.source));
+        if let Some(identity) = &basis.identity {
+            let _ = writeln!(out, "    identity: {}", quoted(identity));
+        }
     }
     out.push_str("  }\n");
     out
