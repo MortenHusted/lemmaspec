@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-01
+
 ### Changed
 
 - `lemmaspec mutate` evaluates mutants in parallel across the available cores.
@@ -98,7 +100,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Closed graph projection and dependency-free HTML rendering.
 - Project-local Codex and Claude authoring skills.
 
-[Unreleased]: https://github.com/MortenHusted/lemmaspec/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/MortenHusted/lemmaspec/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/MortenHusted/lemmaspec/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/MortenHusted/lemmaspec/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/MortenHusted/lemmaspec/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/MortenHusted/lemmaspec/compare/v0.2.0...v0.3.0
