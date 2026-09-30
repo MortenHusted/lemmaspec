@@ -226,6 +226,24 @@ fn mutation_report_is_byte_stable() {
 }
 
 #[test]
+fn parallel_report_matches_the_sequential_report() {
+    let report = mutate_artifact(include_str!("fixtures/mutation/parallel_order.lemmaspec"))
+        .expect("mutate parallel order fixture");
+
+    assert!(report.policies.len() > 1);
+    assert!(
+        report.summary.killed > 0
+            && report.summary.survived > 0
+            && report.summary.rejected > 0
+            && report.summary.excluded > 0
+    );
+    assert_eq!(
+        serde_json::to_string_pretty(&report).unwrap(),
+        include_str!("fixtures/mutation/parallel_order.json").trim_end()
+    );
+}
+
+#[test]
 fn validates_mutation_configuration() {
     let without_policy = MUTATION_EXAMPLE
         .split("  mutation rule_coverage")
