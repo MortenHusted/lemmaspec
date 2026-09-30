@@ -7,6 +7,11 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- `lemmaspec mutate` evaluates mutants in parallel across the available cores.
+  Reports keep the sequential order and stay byte-identical, in text and JSON.
+
 ## [0.4.0] - 2026-09-28
 
 ### Added

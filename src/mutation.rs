@@ -1,5 +1,10 @@
 //! Deterministic mutation analysis for one self-contained artifact.
 
+use std::num::NonZeroUsize;
+use std::panic;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::thread;
+
 use serde::Serialize;
 
 use crate::artifact::{
@@ -121,10 +126,24 @@ pub fn mutate_artifact(source: &str) -> Result<MutationReport, ArtifactError> {
         });
     }
 
-    let mut results = Vec::new();
+    let mut mutants = Vec::new();
     for policy in &artifact.mutations {
-        generate_policy_mutations(&artifact, policy, &mut results)?;
+        generate_policy_mutants(&artifact, policy, &mut mutants);
     }
+    let queue: Vec<_> = mutants.iter().filter(|mutant| !mutant.excluded).collect();
+    let mut evaluated = evaluate_in_parallel(&artifact, &queue).into_iter();
+    let results = mutants
+        .into_iter()
+        .map(|mutant| {
+            if mutant.excluded {
+                Ok(excluded_result(mutant.id, mutant.policy, mutant.target))
+            } else {
+                evaluated
+                    .next()
+                    .expect("every queued mutant has an outcome")
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     let summary = summarize(results.iter());
     let policies: Vec<_> = artifact
@@ -151,50 +170,55 @@ pub fn mutate_artifact(source: &str) -> Result<MutationReport, ArtifactError> {
     })
 }
 
-fn generate_policy_mutations(
+/// One mutant in report order. The target alone determines the mutated artifact.
+struct Mutant<'a> {
+    id: String,
+    policy: &'a MutationDecl,
+    target: MutationTarget,
+    excluded: bool,
+}
+
+impl<'a> Mutant<'a> {
+    fn new(policy: &'a MutationDecl, target: MutationTarget, excluded: bool) -> Self {
+        Self {
+            id: mutation_id(policy, &target),
+            policy,
+            target,
+            excluded,
+        }
+    }
+}
+
+fn generate_policy_mutants<'a>(
     artifact: &Artifact,
-    policy: &MutationDecl,
-    results: &mut Vec<MutationResult>,
-) -> Result<(), ArtifactError> {
+    policy: &'a MutationDecl,
+    mutants: &mut Vec<Mutant<'a>>,
+) {
     match policy.operator {
         MutationOperator::DropRule => {
             for rule in &artifact.rules {
                 let target = MutationTarget::Rule {
                     rule: rule.id.clone(),
                 };
-                let id = mutation_id(policy, &target);
-                if policy.except.contains(&rule.id) {
-                    results.push(excluded_result(id, policy, target));
-                    continue;
-                }
-                let mut mutated = artifact.clone();
-                mutated.rules.retain(|candidate| candidate.id != rule.id);
-                results.push(evaluate_mutation(id, policy, target, mutated)?);
+                mutants.push(Mutant::new(
+                    policy,
+                    target,
+                    policy.except.contains(&rule.id),
+                ));
             }
         }
         MutationOperator::DropCondition => {
             for rule in &artifact.rules {
                 for (index, expression) in rule.when.iter().enumerate() {
                     let condition = rule.condition_id(index).map(str::to_string);
+                    let excluded = policy.excludes_condition(&rule.id, condition.as_deref());
                     let target = MutationTarget::Condition {
                         rule: rule.id.clone(),
-                        condition: condition.clone(),
+                        condition,
                         index: index + 1,
                         expression: expression.clone(),
                     };
-                    let id = mutation_id(policy, &target);
-                    if policy.excludes_condition(&rule.id, condition.as_deref()) {
-                        results.push(excluded_result(id, policy, target));
-                        continue;
-                    }
-                    let mut mutated = artifact.clone();
-                    let mutated_rule = mutated
-                        .rules
-                        .iter_mut()
-                        .find(|candidate| candidate.id == rule.id)
-                        .expect("cloned artifact retains selected rule");
-                    mutated_rule.remove_condition(index);
-                    results.push(evaluate_mutation(id, policy, target, mutated)?);
+                    mutants.push(Mutant::new(policy, target, excluded));
                 }
             }
         }
@@ -212,18 +236,75 @@ fn generate_policy_mutations(
                     fact: fact.id.clone(),
                     relation: fact.relation.clone(),
                 };
-                let id = mutation_id(policy, &target);
-                if policy.except.contains(&fact.id) {
-                    results.push(excluded_result(id, policy, target));
-                    continue;
-                }
-                let mut mutated = artifact.clone();
-                mutated.facts.retain(|candidate| candidate.id != fact.id);
-                results.push(evaluate_mutation(id, policy, target, mutated)?);
+                mutants.push(Mutant::new(
+                    policy,
+                    target,
+                    policy.except.contains(&fact.id),
+                ));
             }
         }
     }
-    Ok(())
+}
+
+/// Evaluates the queued mutants on every available core and returns their
+/// outcomes in queue order, so the report never depends on scheduling.
+fn evaluate_in_parallel(
+    artifact: &Artifact,
+    queue: &[&Mutant],
+) -> Vec<Result<MutationResult, ArtifactError>> {
+    let workers = thread::available_parallelism()
+        .map_or(1, NonZeroUsize::get)
+        .min(queue.len());
+    let next = AtomicUsize::new(0);
+    let mut outcomes: Vec<_> = thread::scope(|scope| {
+        let handles: Vec<_> = (0..workers)
+            .map(|_| {
+                scope.spawn(|| {
+                    let mut outcomes = Vec::new();
+                    loop {
+                        let index = next.fetch_add(1, Ordering::Relaxed);
+                        let Some(mutant) = queue.get(index) else {
+                            return outcomes;
+                        };
+                        let outcome = evaluate_mutation(
+                            mutant.id.clone(),
+                            mutant.policy,
+                            mutant.target.clone(),
+                            mutated_artifact(artifact, &mutant.target),
+                        );
+                        outcomes.push((index, outcome));
+                    }
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .flat_map(|handle| {
+                handle
+                    .join()
+                    .unwrap_or_else(|payload| panic::resume_unwind(payload))
+            })
+            .collect()
+    });
+    outcomes.sort_unstable_by_key(|&(index, _)| index);
+    outcomes.into_iter().map(|(_, outcome)| outcome).collect()
+}
+
+fn mutated_artifact(artifact: &Artifact, target: &MutationTarget) -> Artifact {
+    let mut mutated = artifact.clone();
+    match target {
+        MutationTarget::Rule { rule } => mutated.rules.retain(|candidate| &candidate.id != rule),
+        MutationTarget::Condition { rule, index, .. } => mutated
+            .rules
+            .iter_mut()
+            .find(|candidate| &candidate.id == rule)
+            .expect("cloned artifact retains selected rule")
+            .remove_condition(index - 1),
+        MutationTarget::Fact { fact, .. } => {
+            mutated.facts.retain(|candidate| &candidate.id != fact)
+        }
+    }
+    mutated
 }
 
 fn evaluate_mutation(
