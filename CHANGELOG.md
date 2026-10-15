@@ -7,6 +7,35 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-15
+
+### Added
+
+- Parsed-artifact library entrypoints (`walk_parsed_artifact`,
+  `mutate_parsed_artifact`, `project_parsed_artifact`, `check_parsed_artifact`,
+  and `bind_parsed_artifact`) so callers can evaluate, mutate, project, check,
+  and bind an already-parsed `Artifact` without re-parsing source text.
+
+### Changed
+
+- Rules and expectation queries are compiled once into typed AST clauses and
+  atoms and reused across evaluation, mutation analysis, and graph projection.
+- `lemmaspec mutate` reuses pre-compiled rules and expectations across worker
+  threads and skips unused proof-tree string formatting during baseline and
+  mutant runs.
+- Datalog join evaluation uses WAM-style trail undo for negated body literals,
+  defers provenance `BTreeSet` cloning until argument binding succeeds, and
+  runs one-shot artifact evaluations in batch mode without change-feed
+  allocations.
+- HTML report rendering builds the graph index once per render and uses
+  pre-indexed expectation and witness edges when assembling answer briefs.
+- Split the `artifact`, `eval`, and `guide` modules into focused submodules.
+
+### Fixed
+
+- Linear arithmetic expression solving uses checked `i64` addition and
+  subtraction instead of wrapping on integer overflow.
+
 ## [0.4.1] - 2026-10-01
 
 ### Changed
@@ -100,7 +129,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Closed graph projection and dependency-free HTML rendering.
 - Project-local Codex and Claude authoring skills.
 
-[Unreleased]: https://github.com/MortenHusted/lemmaspec/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/MortenHusted/lemmaspec/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/MortenHusted/lemmaspec/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/MortenHusted/lemmaspec/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/MortenHusted/lemmaspec/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/MortenHusted/lemmaspec/compare/v0.3.0...v0.3.1
