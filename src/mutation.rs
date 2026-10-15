@@ -8,8 +8,8 @@ use std::thread;
 use serde::Serialize;
 
 use crate::artifact::{
-    evaluate_parsed_artifact, parse_artifact, Artifact, ArtifactError, MutationDecl,
-    MutationOperator, WalkExpectation,
+    evaluate_prepared_expectations, evaluate_prepared_mutant, parse_artifact, prepare_artifact,
+    Artifact, ArtifactError, MutationDecl, MutationOperator, PreparedArtifact, WalkExpectation,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -96,22 +96,27 @@ pub struct MutationReport {
 
 pub fn mutate_artifact(source: &str) -> Result<MutationReport, ArtifactError> {
     let artifact = parse_artifact(source)?;
+    mutate_parsed_artifact(&artifact)
+}
+
+pub fn mutate_parsed_artifact(artifact: &Artifact) -> Result<MutationReport, ArtifactError> {
     if artifact.mutations.is_empty() {
         return Err(ArtifactError::new("artifact declares no mutation policies"));
     }
+    artifact.validate_mutations()?;
 
-    let baseline = evaluate_parsed_artifact(artifact.clone())?.report;
-    let baseline_failures: Vec<_> = baseline
-        .expectations
-        .iter()
+    let prepared = prepare_artifact(artifact)?;
+    let (baseline_status, baseline_expectations) =
+        evaluate_prepared_expectations(artifact, &prepared)?;
+    let baseline_failures: Vec<_> = baseline_expectations
+        .into_iter()
         .filter(|expectation| !expectation.satisfied)
-        .cloned()
         .collect();
     if !baseline_failures.is_empty() {
         return Ok(MutationReport {
-            spec: artifact.name,
+            spec: artifact.name.clone(),
             status: "baseline_incomplete".to_string(),
-            baseline_status: baseline.status,
+            baseline_status,
             baseline_failures,
             summary: MutationSummary {
                 total: 0,
@@ -128,10 +133,10 @@ pub fn mutate_artifact(source: &str) -> Result<MutationReport, ArtifactError> {
 
     let mut mutants = Vec::new();
     for policy in &artifact.mutations {
-        generate_policy_mutants(&artifact, policy, &mut mutants);
+        generate_policy_mutants(artifact, policy, &mut mutants);
     }
     let queue: Vec<_> = mutants.iter().filter(|mutant| !mutant.excluded).collect();
-    let mut evaluated = evaluate_in_parallel(&artifact, &queue).into_iter();
+    let mut evaluated = evaluate_in_parallel(artifact, &prepared, &queue).into_iter();
     let results = mutants
         .into_iter()
         .map(|mutant| {
@@ -160,9 +165,9 @@ pub fn mutate_artifact(source: &str) -> Result<MutationReport, ArtifactError> {
     };
 
     Ok(MutationReport {
-        spec: artifact.name,
+        spec: artifact.name.clone(),
         status: status.to_string(),
-        baseline_status: baseline.status,
+        baseline_status,
         baseline_failures,
         summary,
         policies,
@@ -250,6 +255,7 @@ fn generate_policy_mutants<'a>(
 /// outcomes in queue order, so the report never depends on scheduling.
 fn evaluate_in_parallel(
     artifact: &Artifact,
+    prepared: &PreparedArtifact,
     queue: &[&Mutant],
 ) -> Vec<Result<MutationResult, ArtifactError>> {
     let workers = thread::available_parallelism()
@@ -270,7 +276,8 @@ fn evaluate_in_parallel(
                             mutant.id.clone(),
                             mutant.policy,
                             mutant.target.clone(),
-                            mutated_artifact(artifact, &mutant.target),
+                            artifact,
+                            prepared,
                         );
                         outcomes.push((index, outcome));
                     }
@@ -290,34 +297,16 @@ fn evaluate_in_parallel(
     outcomes.into_iter().map(|(_, outcome)| outcome).collect()
 }
 
-fn mutated_artifact(artifact: &Artifact, target: &MutationTarget) -> Artifact {
-    let mut mutated = artifact.clone();
-    match target {
-        MutationTarget::Rule { rule } => mutated.rules.retain(|candidate| &candidate.id != rule),
-        MutationTarget::Condition { rule, index, .. } => mutated
-            .rules
-            .iter_mut()
-            .find(|candidate| &candidate.id == rule)
-            .expect("cloned artifact retains selected rule")
-            .remove_condition(index - 1),
-        MutationTarget::Fact { fact, .. } => {
-            mutated.facts.retain(|candidate| &candidate.id != fact)
-        }
-    }
-    mutated
-}
-
 fn evaluate_mutation(
     id: String,
     policy: &MutationDecl,
     target: MutationTarget,
-    artifact: Artifact,
+    artifact: &Artifact,
+    prepared: &PreparedArtifact,
 ) -> Result<MutationResult, ArtifactError> {
-    match evaluate_parsed_artifact(artifact) {
-        Ok(evaluation) => {
-            let failed_expectations: Vec<_> = evaluation
-                .report
-                .expectations
+    match evaluate_prepared_mutant(artifact, prepared, &target) {
+        Ok(expectations) => {
+            let failed_expectations: Vec<_> = expectations
                 .into_iter()
                 .filter(|expectation| !expectation.satisfied)
                 .collect();
@@ -438,11 +427,12 @@ fn summarize_policy(policy: &MutationDecl, results: &[MutationResult]) -> Mutati
         "vacuous"
     } else {
         "clean"
-    };
+    }
+    .to_string();
     MutationPolicyReport {
         id: policy.id.clone(),
         operator: policy.operator,
-        status: status.to_string(),
+        status,
         summary,
     }
 }

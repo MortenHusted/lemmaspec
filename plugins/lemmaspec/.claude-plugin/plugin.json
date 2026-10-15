@@ -1,7 +1,7 @@
 {
   "name": "lemmaspec",
   "description": "Author and verify typed, executable LemmaSpec artifacts.",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "author": {
     "name": "Morten Lochmann"
   },

@@ -404,3 +404,71 @@ spec roles {
     );
     parse_artifact(&positional).expect("positional placeholders need no roles");
 }
+
+#[test]
+fn parsed_artifact_entrypoints_match_source_entrypoints() {
+    let parsed = parse_artifact(MUTATION_ANALYSIS).expect("parse mutation analysis");
+
+    assert_eq!(
+        lemmaspec::walk_parsed_artifact(&parsed).expect("walk parsed"),
+        walk_artifact(MUTATION_ANALYSIS).expect("walk source"),
+    );
+    assert_eq!(
+        lemmaspec::mutate_parsed_artifact(&parsed).expect("mutate parsed"),
+        lemmaspec::mutate_artifact(MUTATION_ANALYSIS).expect("mutate source"),
+    );
+    assert_eq!(
+        lemmaspec::project_parsed_artifact(&parsed).expect("project parsed"),
+        lemmaspec::project_artifact(MUTATION_ANALYSIS).expect("project source"),
+    );
+
+    let checker_source = r#"
+        spec checker {
+          relation input { args: [symbol] }
+          relation flagged { args: [symbol] }
+          fact fixture { relation: input args: [fixture] }
+          rule flag_every_input { derive: "flagged(X)" when: ["input(X)"] }
+          expect fixture_is_flagged { query: "flagged(fixture)" count: 1 }
+        }
+    "#;
+    let evidence_source = r#"
+        spec evidence {
+          fact real { relation: input args: [real] }
+          expect real_is_flagged { query: "flagged(real)" count: 1 }
+        }
+    "#;
+    let checker = parse_artifact(checker_source).expect("parse checker");
+    let evidence = parse_artifact(evidence_source).expect("parse evidence");
+
+    assert_eq!(
+        lemmaspec::check_parsed_artifact(&checker, &evidence).expect("check parsed"),
+        lemmaspec::check_artifact(checker_source, evidence_source).expect("check source"),
+    );
+    let bound = lemmaspec::bind_parsed_artifact(&checker, &evidence).expect("bind parsed");
+    assert_eq!(
+        lemmaspec::print_artifact(&bound),
+        lemmaspec::bind_artifact(checker_source, evidence_source).expect("bind source"),
+    );
+}
+
+#[test]
+fn integer_overflow_in_linear_expression_does_not_wrap() {
+    let source = format!(
+        r#"
+spec overflow {{
+  relation num {{ args: [integer] }}
+  relation next {{ args: [integer] }}
+  fact max_val {{ relation: num args: [{}] }}
+  rule step {{
+    derive: "next(Y)"
+    when: ["num(X)", "Y = X + 1"]
+  }}
+  expect no_wrapped_fact {{ query: "next(Y)" count: 0 }}
+}}
+"#,
+        i64::MAX
+    );
+    let report = walk_artifact(&source).expect("overflow must not panic or wrap");
+    assert_eq!(report.status, "clean");
+    assert_eq!(report.derived, 0);
+}
