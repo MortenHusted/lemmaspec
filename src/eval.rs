@@ -1,293 +1,19 @@
 //! The evaluation core: fact store, semiring annotations, stratification,
 //! seminaive fixpoint evaluation, and provenance tracking.
 
-use crate::ast::{Clause, CmpOp, Lit};
-use crate::intern::{Interner, Term, Value};
+mod store;
+mod stratify;
+
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write as _;
 
-/// Semiring annotation carried by every fact:
-/// confidence in [0,1] (product t-norm on joins) and provenance
-/// (set of episode/source ids, union on joins).
-#[derive(Debug, Clone, PartialEq)]
-pub struct Ann {
-    pub conf: f64,
-    pub prov: BTreeSet<String>,
-}
+use crate::ast::{parse_program, Atom, Clause, CmpOp, Lit};
+use crate::intern::{Interner, Term, Value};
 
-impl Default for Ann {
-    fn default() -> Self {
-        Ann::unit()
-    }
-}
-
-impl Ann {
-    pub fn base(conf: f64, prov: impl IntoIterator<Item: Into<String>>) -> Self {
-        Ann {
-            conf: conf.clamp(0.0, 1.0),
-            prov: prov.into_iter().map(Into::into).collect(),
-        }
-    }
-
-    pub fn unit() -> Self {
-        Ann {
-            conf: 1.0,
-            prov: BTreeSet::new(),
-        }
-    }
-
-    /// Semiring product: how annotations combine across a rule body.
-    pub fn join(&self, other: &Ann) -> Ann {
-        Ann {
-            conf: (self.conf * other.conf).clamp(0.0, 1.0),
-            prov: self.prov.union(&other.prov).cloned().collect(),
-        }
-    }
-}
-
-pub type Key = (String, Vec<Value>);
-
-/// One event in the streaming change feed. Downstream projections (e.g. a
-/// vector index or a UI) subscribe via `changes_since`: additions cover
-/// every new fact, `Updated` marks an annotation improvement on an existing
-/// tuple, `Retracted` marks explicit EDB removals, and `Cleared` marks a
-/// derived relation that was wholesale rebuilt (scoped/program recompute) —
-/// the signal to re-sync that predicate from scratch.
-#[derive(Debug, Clone, PartialEq)]
-pub enum Change {
-    Added(u64, Key),
-    Updated(u64, Key),
-    Retracted(u64, Key),
-    Cleared(u64, String),
-}
-
-impl Change {
-    pub fn epoch(&self) -> u64 {
-        match self {
-            Change::Added(e, _)
-            | Change::Updated(e, _)
-            | Change::Retracted(e, _)
-            | Change::Cleared(e, _) => *e,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum InsertOutcome {
-    New,
-    Improved,
-    Unchanged,
-}
-
-#[derive(Debug)]
-struct Emission {
-    key: Key,
-    is_new: bool,
-}
-
-/// How one derived fact was produced.
-#[derive(Debug, Clone, PartialEq)]
-pub enum Support {
-    /// Asserted directly (EDB).
-    Base,
-    /// Derived by rule `rule` from body facts `body`.
-    Rule { rule: String, body: Vec<Key> },
-}
-
-#[derive(Debug, Clone)]
-pub struct StoredFact {
-    pub ann: Ann,
-    pub supports: Vec<Support>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Row {
-    pub key: Vec<Value>,
-    pub fact: StoredFact,
-}
-
-/// A predicate's tuple set: rows in insertion order, with a key map for
-/// dedup and lazy per-position secondary indexes whose lookups return row
-/// ids (cheap) instead of cloned keys.
-#[derive(Debug, Default, Clone)]
-pub struct Relation {
-    pub rows: Vec<Row>,
-    by_key: HashMap<Vec<Value>, usize>,
-    /// position -> value -> row ids
-    idx: HashMap<usize, HashMap<Value, Vec<usize>>>,
-    /// Facts added since the last completed `run()` (epoch delta).
-    pub pending: BTreeSet<Vec<Value>>,
-}
-
-fn merge_supports(existing: &mut Vec<Support>, incoming: Vec<Support>) {
-    for support in incoming {
-        match support {
-            Support::Base => {
-                if !existing
-                    .iter()
-                    .any(|support| matches!(support, Support::Base))
-                {
-                    existing.push(Support::Base);
-                }
-            }
-            Support::Rule { rule, body } => {
-                if let Some(Support::Rule {
-                    body: existing_body,
-                    ..
-                }) = existing.iter_mut().find(
-                    |support| matches!(support, Support::Rule { rule: existing, .. } if existing == &rule),
-                ) {
-                    if body < *existing_body {
-                        *existing_body = body;
-                    }
-                } else {
-                    existing.push(Support::Rule { rule, body });
-                }
-            }
-        }
-    }
-}
-
-impl Relation {
-    /// Insert or merge, distinguishing tuple creation from an annotation
-    /// improvement that must flow through dependent rules.
-    fn insert(&mut self, args: Vec<Value>, mut f: StoredFact) -> InsertOutcome {
-        let supports = std::mem::take(&mut f.supports);
-        merge_supports(&mut f.supports, supports);
-        if let Some(&id) = self.by_key.get(&args) {
-            let existing = &mut self.rows[id].fact;
-            let previous_conf = existing.ann.conf.to_bits();
-            let previous_provenance_len = existing.ann.prov.len();
-            // lattice-merge annotations: max confidence, union provenance
-            existing.ann.conf = existing.ann.conf.max(f.ann.conf);
-            existing.ann.prov.extend(f.ann.prov);
-            merge_supports(&mut existing.supports, f.supports);
-            let improved = existing.ann.conf.to_bits() != previous_conf
-                || existing.ann.prov.len() != previous_provenance_len;
-            if improved {
-                self.pending.insert(args);
-                InsertOutcome::Improved
-            } else {
-                InsertOutcome::Unchanged
-            }
-        } else {
-            let id = self.rows.len();
-            self.index_row(id, &args);
-            self.by_key.insert(args.clone(), id);
-            self.rows.push(Row { key: args, fact: f });
-            let key = self.rows[id].key.clone();
-            self.pending.insert(key);
-            InsertOutcome::New
-        }
-    }
-
-    fn remove(&mut self, args: &[Value]) -> bool {
-        let Some(&id) = self.by_key.get(args) else {
-            return false;
-        };
-        let last = self.rows.len() - 1;
-        self.unindex_row(id);
-        self.by_key.remove(args);
-        if id != last {
-            // swap_remove moves the LAST row into the hole; its key map
-            // and index entries must follow it. (swap_remove itself
-            // returns the removed row, not the relocated one.)
-            let last_key = self.rows[last].key.clone();
-            self.unindex_row(last);
-            self.rows.swap_remove(id); // last row is now at `id`
-            self.by_key.insert(last_key, id);
-            let relocated_key = self.rows[id].key.clone();
-            self.index_row(id, &relocated_key);
-        } else {
-            self.rows.pop();
-        }
-        true
-    }
-
-    fn index_row(&mut self, id: usize, key: &[Value]) {
-        for (pos, v) in key.iter().enumerate() {
-            self.idx
-                .entry(pos)
-                .or_default()
-                .entry(*v)
-                .or_default()
-                .push(id);
-        }
-    }
-
-    fn unindex_row(&mut self, id: usize) {
-        let key = self.rows[id].key.clone();
-        for (pos, v) in key.iter().enumerate() {
-            if let Some(bucket) = self.idx.get_mut(&pos).and_then(|m| m.get_mut(v)) {
-                bucket.retain(|&i| i != id);
-            }
-        }
-    }
-
-    /// Clear all contents (scoped recompute).
-    fn clear(&mut self) {
-        self.rows.clear();
-        self.by_key.clear();
-        self.idx.clear();
-        self.pending.clear();
-    }
-
-    /// Candidate row ids for a pattern given pre-resolved bound positions.
-    /// Uses the bound position with the smallest bucket; falls back to a
-    /// full scan when nothing is bound. Indexes are maintained eagerly on
-    /// insert/remove, so this needs only `&self`.
-    pub fn lookup(&self, bound: &[Option<Value>]) -> Vec<usize> {
-        let mut best: Option<(usize, usize)> = None; // (size, pos)
-        for (pos, b) in bound.iter().enumerate() {
-            if let Some(v) = b {
-                let size = self
-                    .idx
-                    .get(&pos)
-                    .and_then(|m| m.get(v))
-                    .map(|s| s.len())
-                    .unwrap_or(0);
-                if size == 0 {
-                    return Vec::new(); // bound to a value with no facts
-                }
-                if best.map(|(s, _)| size < s).unwrap_or(true) {
-                    best = Some((size, pos));
-                }
-            }
-        }
-        match best {
-            Some((_, pos)) => {
-                let v = bound[pos].unwrap();
-                self.idx[&pos][&v]
-                    .iter()
-                    .copied()
-                    .filter(|&id| {
-                        bound
-                            .iter()
-                            .zip(&self.rows[id].key)
-                            .all(|(b, v)| b.as_ref().map(|bv| bv == v).unwrap_or(true))
-                    })
-                    .collect()
-            }
-            None => (0..self.rows.len()).collect(),
-        }
-    }
-
-    pub fn get(&self, args: &[Value]) -> Option<&StoredFact> {
-        self.by_key.get(args).map(|&id| &self.rows[id].fact)
-    }
-
-    pub fn contains(&self, args: &[Value]) -> bool {
-        self.by_key.contains_key(args)
-    }
-
-    pub fn len(&self) -> usize {
-        self.rows.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.rows.is_empty()
-    }
-}
+pub use store::{Ann, Change, Key, Relation, Row, StoredFact, Support};
+pub(crate) use store::{Emission, InsertOutcome};
+pub(crate) use stratify::check_expression;
+pub use stratify::StratError;
 
 // ------------------------------------------------------------- environment
 
@@ -391,16 +117,9 @@ pub struct Engine {
     /// Predicates retracted since the last `run()`; triggers a scoped
     /// recompute of their transitive dependents.
     retracted: BTreeSet<String>,
+    /// Whether to record streaming `feed` events (disabled in one-shot batch mode).
+    record_feed: bool,
 }
-
-#[derive(Debug)]
-pub struct StratError(pub String);
-impl std::fmt::Display for StratError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "stratification error: {}", self.0)
-    }
-}
-impl std::error::Error for StratError {}
 
 impl Default for Engine {
     fn default() -> Self {
@@ -426,7 +145,61 @@ impl Engine {
             last_run_log_len: 0,
             epoch: 0,
             retracted: BTreeSet::new(),
+            record_feed: true,
         }
+    }
+
+    /// Construct a batch-mode engine for one-shot artifact evaluation,
+    /// skipping streaming change-feed allocations.
+    pub(crate) fn new_batch() -> Self {
+        let mut engine = Self::new();
+        engine.record_feed = false;
+        engine
+    }
+
+    /// Install a versioned batch of rules and facts from source text.
+    pub fn install_program(&mut self, source: &str) -> Result<String, Box<dyn std::error::Error>> {
+        let clauses = parse_program(source)?;
+        self.install_clauses(clauses, source.to_string())
+    }
+
+    /// Install pre-parsed clauses directly without re-tokenizing or re-parsing.
+    pub(crate) fn install_clauses(
+        &mut self,
+        clauses: Vec<Clause>,
+        source: String,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        self.validate_aggregates(&clauses)?;
+        self.validate_rule_safety(&clauses)?;
+        let previous_clause_count = self.clauses.len();
+        let previous_ever_derived = self.ever_derived.clone();
+        for (offset, clause) in clauses.iter().enumerate() {
+            if !clause.is_fact {
+                self.ever_derived.insert(clause.head.pred.clone());
+                if clause
+                    .head
+                    .args
+                    .iter()
+                    .any(|term| matches!(term, Term::Agg(..)))
+                {
+                    let temp_clause = self.clauses.len() + offset;
+                    self.ever_derived
+                        .insert(format!("__agg:{}:{temp_clause}", clause.head.pred));
+                }
+            }
+        }
+        self.clauses.extend(clauses);
+        if let Err(error) = self.check_program() {
+            self.clauses.truncate(previous_clause_count);
+            self.ever_derived = previous_ever_derived;
+            return Err(error);
+        }
+        let id = format!("b{}", self.batch_counter);
+        self.batch_counter += 1;
+        self.rule_batches
+            .push((id.clone(), source, self.clauses.len()));
+        self.program_dirty = true;
+        Ok(id)
     }
 
     // ------------------------------------------------------------- EDB API
@@ -441,13 +214,22 @@ impl Engine {
                 supports: vec![Support::Base],
             },
         );
-        let key = (pred.to_string(), args.to_vec());
         match outcome {
             InsertOutcome::New => {
-                self.feed.push(Change::Added(self.epoch, key.clone()));
+                let key = (pred.to_string(), args.to_vec());
+                if self.record_feed {
+                    self.feed.push(Change::Added(self.epoch, key.clone()));
+                }
                 self.change_log.push((self.epoch, key));
             }
-            InsertOutcome::Improved => self.feed.push(Change::Updated(self.epoch, key)),
+            InsertOutcome::Improved => {
+                if self.record_feed {
+                    self.feed.push(Change::Updated(
+                        self.epoch,
+                        (pred.to_string(), args.to_vec()),
+                    ));
+                }
+            }
             InsertOutcome::Unchanged => {}
         }
         outcome == InsertOutcome::New
@@ -485,7 +267,7 @@ impl Engine {
         }
         self.run();
         self.last_hypothetical_facts = self.change_log.len() - log_mark;
-        let rows = self.ask(goal)?;
+        let rows = self.ask_atom(&prog[0].head);
 
         self.relations = backup_relations;
         self.change_log = backup_log;
@@ -522,10 +304,12 @@ impl Engine {
             let existed = rel.remove(args);
             rel.pending.remove(args);
             if existed {
-                self.feed.push(Change::Retracted(
-                    self.epoch,
-                    (pred.to_string(), args.to_vec()),
-                ));
+                if self.record_feed {
+                    self.feed.push(Change::Retracted(
+                        self.epoch,
+                        (pred.to_string(), args.to_vec()),
+                    ));
+                }
                 self.retracted.insert(pred.to_string());
             }
             existed
@@ -555,218 +339,18 @@ impl Engine {
         }
     }
 
-    // ----------------------------------------------------------- stratify
-
-    /// Stratum assignment: depth(p) = max over rules defining p of
-    ///   depth(q)        for positive dependencies, and
-    ///   depth(q) + 1    for negated dependencies.
-    /// Rejects programs where a negative edge lies on a dependency cycle.
-    pub fn strata(&self) -> Result<Vec<Vec<usize>>, StratError> {
-        let mut defines: HashMap<&str, Vec<usize>> = HashMap::new();
-        for (i, c) in self.clauses.iter().enumerate() {
-            if !c.is_fact {
-                defines.entry(c.head.pred.as_str()).or_default().push(i);
-            }
-        }
-        // dependency graph over IDB predicates (head -> body dep)
-        let mut deps: HashMap<&str, Vec<(&str, bool)>> = HashMap::new();
-        for c in &self.clauses {
-            if c.is_fact {
-                continue;
-            }
-            for lit in &c.body {
-                let (neg, dep) = match lit {
-                    Lit::Neg(a) => (true, a.pred.as_str()),
-                    Lit::Pos(a) => (false, a.pred.as_str()),
-                    Lit::Cmp(..) | Lit::Now(_) => continue,
-                };
-                if defines.contains_key(dep) {
-                    deps.entry(c.head.pred.as_str())
-                        .or_default()
-                        .push((dep, neg));
-                }
-            }
-        }
-        // negation-cycle check: for every negated edge h -> b, b must not
-        // reach h through the dependency graph
-        for (h, edges) in &deps {
-            for (b, neg) in edges {
-                if *neg && reaches(&deps, b, h) {
-                    return Err(StratError(format!(
-                        "unstratifiable: negation of {b} in a dependency cycle with {h}"
-                    )));
-                }
-            }
-        }
-        // aggregates must not be read by their own bodies (recursively):
-        // folding requires the body to be complete first
-        let agg_heads: BTreeSet<&str> = self
-            .clauses
-            .iter()
-            .filter(|c| !c.is_fact && Self::is_agg_clause(c))
-            .map(|c| c.head.pred.as_str())
-            .collect();
-        for c in &self.clauses {
-            if c.is_fact || !Self::is_agg_clause(c) {
-                continue;
-            }
-            for lit in &c.body {
-                if let Lit::Pos(a) | Lit::Neg(a) = lit {
-                    if a.pred == c.head.pred || reaches(&deps, &a.pred, &c.head.pred) {
-                        return Err(StratError(format!(
-                            "aggregation over recursive dependency: {} reads {}",
-                            c.head.pred, a.pred
-                        )));
-                    }
-                }
-            }
-        }
-        // mixed definition: a predicate defined by aggregation clauses may
-        // not also have ordinary defining clauses (fold/merge semantics
-        // would collide)
-        for c in &self.clauses {
-            if c.is_fact {
-                continue;
-            }
-            if !Self::is_agg_clause(c) && agg_heads.contains(c.head.pred.as_str()) {
-                return Err(StratError(format!(
-                    "mixed definition: {} is aggregated in one clause and ordinary in another",
-                    c.head.pred
-                )));
-            }
-        }
-        // stratification by SCC condensation: predicates in the same
-        // strongly-connected component (mutual/self recursion) share a
-        // stratum; every cross-SCC dependency is strictly ordered, so a
-        // scoped recompute can clear and rebuild level by level with
-        // same-pass reader propagation (no extra full-rebuild rounds)
-        let idb_list: Vec<&str> = defines.keys().copied().collect();
-        let index_of: HashMap<&str, usize> =
-            idb_list.iter().enumerate().map(|(i, p)| (*p, i)).collect();
-        let n = idb_list.len();
-        // Tarjan SCC over head -> dep edges
-        let mut adj: Vec<Vec<usize>> = vec![Vec::new(); n];
-        for (h, edges) in &deps {
-            if let Some(&hi) = index_of.get(*h) {
-                for (d, _) in edges {
-                    if let Some(&di) = index_of.get(*d) {
-                        adj[hi].push(di);
-                    }
-                }
-            }
-        }
-        let mut scc_of: Vec<usize> = vec![usize::MAX; n];
-        let mut low = vec![0usize; n];
-        let mut disc = vec![0usize; n];
-        let mut on_stack = vec![false; n];
-        let mut stack: Vec<usize> = Vec::new();
-        let mut next_disc = 1usize;
-        let mut scc_count = 0usize;
-        for start_node in 0..n {
-            if disc[start_node] != 0 {
-                continue;
-            }
-            // iterative Tarjan
-            let mut call: Vec<(usize, usize)> = vec![(start_node, 0)];
-            while let Some((v, ai)) = call.pop() {
-                if ai == 0 {
-                    disc[v] = next_disc;
-                    low[v] = next_disc;
-                    next_disc += 1;
-                    stack.push(v);
-                    on_stack[v] = true;
-                }
-                let mut recursed = false;
-                for (i, &w) in adj[v].iter().enumerate().skip(ai) {
-                    if disc[w] == 0 {
-                        call.push((v, i + 1));
-                        call.push((w, 0));
-                        recursed = true;
-                        break;
-                    } else if on_stack[w] {
-                        low[v] = low[v].min(disc[w]);
-                    }
-                }
-                if recursed {
-                    continue;
-                }
-                if low[v] == disc[v] {
-                    loop {
-                        let w = stack.pop().unwrap();
-                        on_stack[w] = false;
-                        scc_of[w] = scc_count;
-                        if w == v {
-                            break;
-                        }
-                    }
-                    scc_count += 1;
-                }
-                if let Some(&(parent, _)) = call.last() {
-                    low[parent] = low[parent].min(low[v]);
-                }
-            }
-        }
-        // condensation: longest-path level per SCC (Tarjan pops SCCs in
-        // reverse topological order w.r.t. head->dep edges, i.e. dependents
-        // first; process in pop order to propagate levels)
-        let mut scc_level = vec![0u32; scc_count];
-        for v in 0..n {
-            // process in Tarjan pop order: scc ids increase along pops
-            let _ = v;
-        }
-        // edges between SCCs: level[scc_head] >= level[scc_dep] + 1
-        // iterate to fixpoint over condensation edges (small graphs)
-        let mut cond_edges: Vec<(usize, usize)> = Vec::new();
-        for (h, edges) in &deps {
-            if let Some(&hi) = index_of.get(*h) {
-                for (d, _) in edges {
-                    if let Some(&di) = index_of.get(*d) {
-                        if scc_of[hi] != scc_of[di] {
-                            cond_edges.push((scc_of[hi], scc_of[di]));
-                        }
-                    }
-                }
-            }
-        }
-        loop {
-            let mut changed = false;
-            for (hs, ds) in &cond_edges {
-                if scc_level[*hs] < scc_level[*ds] + 1 {
-                    scc_level[*hs] = scc_level[*ds] + 1;
-                    changed = true;
-                }
-            }
-            if !changed {
-                break;
-            }
-        }
-        let mut depth: HashMap<String, u32> = HashMap::new();
-        for (i, p) in idb_list.iter().enumerate() {
-            depth.insert(p.to_string(), scc_level[scc_of[i]]);
-        }
-
-        let mut strata: BTreeMap<u32, Vec<usize>> = BTreeMap::new();
-        for (i, c) in self.clauses.iter().enumerate() {
-            if c.is_fact {
-                continue;
-            }
-            let d = depth[&c.head.pred];
-            strata.entry(d).or_default().push(i);
-        }
-        Ok(strata.into_values().collect())
-    }
-
     // -------------------------------------------------------------- fixpoint
 
     /// Run (or incrementally re-run) the program. Returns the number of new
     /// facts derived this epoch. Pending deltas are consumed: a subsequent
     /// `run()` with no new assertions derives nothing.
     pub fn run(&mut self) -> usize {
-        let strata_pre = self.strata().ok();
+        let strata = match self.strata() {
+            Ok(s) => s,
+            Err(_) => return 0, // use check_program to surface the error
+        };
         if self.program_dirty {
-            if let Some(s) = &strata_pre {
-                self.program_recompute(s);
-            }
+            self.program_recompute(&strata);
         }
         // program-embedded facts
         let fact_clauses: Vec<Clause> =
@@ -777,10 +361,6 @@ impl Engine {
             }
         }
 
-        let strata = match self.strata() {
-            Ok(s) => s,
-            Err(_) => return 0, // use check_program to surface the error
-        };
         // main evaluation: strata in order (negated predicates are always
         // lower-stratum or EDB, so within-run negation reads are complete)
         let mut derived = 0;
@@ -835,15 +415,10 @@ impl Engine {
         for rel in self.relations.values_mut() {
             rel.pending.clear();
         }
-        self.last_run_log_len = self.change_log.len();
         self.epoch += 1;
         derived
     }
 
-    /// Scoped negative delta: after retractions, clear and re-derive only the
-    /// derived predicates that transitively read a retracted predicate.
-    /// Unaffected derived relations are left intact; seeds are the full
-    /// contents of the inputs the cleared predicates read from.
     /// Scoped negative delta, DRed-style: process dependent predicates
     /// level by level (stratum order). Clear and rebuild a dependent only
     /// if the key set of what it reads actually changed — a works_at
@@ -858,8 +433,7 @@ impl Engine {
         // direct readers: pred -> IDB preds whose rules read it (pos/neg).
         // Aggregation clauses read via their temp relation and fold:
         // body -> temp -> head.
-        let mut direct_readers: std::collections::BTreeMap<String, BTreeSet<String>> =
-            Default::default();
+        let mut direct_readers: BTreeMap<String, BTreeSet<String>> = Default::default();
         for (ci, c) in self.clauses.iter().enumerate() {
             if c.is_fact {
                 continue;
@@ -921,8 +495,7 @@ impl Engine {
         // already-processed stratum (same-depth positive dependency), which
         // demands another pass
         let mut round = 0usize;
-        let mut preexisting: std::collections::BTreeMap<String, BTreeSet<Vec<Value>>> =
-            Default::default();
+        let mut preexisting: BTreeMap<String, BTreeSet<Vec<Value>>> = Default::default();
         while !to_clear.is_empty() && round < strata.len() + 2 {
             round += 1;
             for (si, stratum) in strata.iter().enumerate() {
@@ -948,8 +521,7 @@ impl Engine {
                 }
                 to_clear = to_clear.difference(&here).cloned().collect();
                 // snapshots to detect actual change
-                let mut snapshots: std::collections::BTreeMap<String, BTreeSet<Vec<Value>>> =
-                    Default::default();
+                let mut snapshots: BTreeMap<String, BTreeSet<Vec<Value>>> = Default::default();
                 for p in &here {
                     if let Some(rel) = self.relations.get(p) {
                         snapshots
@@ -961,7 +533,7 @@ impl Engine {
                         preexisting
                             .entry(p.clone())
                             .or_insert_with(|| rel.rows.iter().map(|r| r.key.clone()).collect());
-                        if !rel.is_empty() {
+                        if !rel.is_empty() && self.record_feed {
                             self.feed.push(Change::Cleared(self.epoch, p.clone()));
                         }
                         rel.clear();
@@ -1035,7 +607,7 @@ impl Engine {
     }
 
     /// Does this clause aggregate (has Agg terms in its head)?
-    fn is_agg_clause(c: &Clause) -> bool {
+    pub(crate) fn is_agg_clause(c: &Clause) -> bool {
         c.head.args.iter().any(|t| matches!(t, Term::Agg(..)))
     }
 
@@ -1061,7 +633,7 @@ impl Engine {
         }
         Clause {
             name: c.name.clone(),
-            head: crate::ast::Atom {
+            head: Atom {
                 pred: self.agg_temp_pred(ci),
                 args,
             },
@@ -1089,7 +661,7 @@ impl Engine {
                 .iter()
                 .filter(|t| !matches!(t, Term::Agg(..)))
                 .count();
-            let mut g: std::collections::BTreeMap<Vec<Value>, Vec<Vec<Value>>> = Default::default();
+            let mut g: BTreeMap<Vec<Value>, Vec<Vec<Value>>> = Default::default();
             for row in &rel.rows {
                 let key = row.key[..group_len].to_vec();
                 g.entry(key)
@@ -1178,10 +750,12 @@ impl Engine {
                         },
                     );
                 if outcome == InsertOutcome::New {
-                    self.feed.push(Change::Added(
-                        self.epoch,
-                        (c.head.pred.clone(), out.clone()),
-                    ));
+                    if self.record_feed {
+                        self.feed.push(Change::Added(
+                            self.epoch,
+                            (c.head.pred.clone(), out.clone()),
+                        ));
+                    }
                     self.change_log
                         .push((self.epoch, (c.head.pred.clone(), out)));
                     changed += 1;
@@ -1207,7 +781,6 @@ impl Engine {
     /// Schema summary for rule authoring: each predicate with arity, row
     /// count, and up to three sample facts.
     pub fn schema_summary(&self) -> String {
-        use std::fmt::Write as _;
         let mut out = String::new();
         let mut preds: Vec<&String> = self.relations.keys().collect();
         preds.sort();
@@ -1267,7 +840,7 @@ impl Engine {
         }
         for p in &to_clear {
             if let Some(rel) = self.relations.get_mut(p) {
-                if !rel.is_empty() {
+                if !rel.is_empty() && self.record_feed {
                     self.feed.push(Change::Cleared(self.epoch, p.clone()));
                 }
                 rel.clear();
@@ -1291,14 +864,6 @@ impl Engine {
     }
 
     /// Seminaive evaluation of one stratum.
-    ///
-    /// delta_0 = every predicate's epoch-pending facts (new EDB assertions
-    /// plus lower-stratum derivations of this epoch). Each iteration fires
-    /// each rule once per positive relational atom, binding that atom's scan
-    /// to the current delta and scanning full relations for the rest. Any
-    /// new derivation contains at least one delta fact, so this is complete
-    /// for set semantics; the fixpoint terminates when an iteration derives
-    /// no new facts.
     fn eval_stratum(&mut self, clause_idx: &[usize]) -> usize {
         // aggregation clauses are lowered: the ordinary loop populates
         // their temp relation; the fold step afterwards materializes the
@@ -1382,27 +947,30 @@ impl Engine {
             Some(s) => s.iter().cloned().collect(),
             None => return,
         };
+        let mut env = Env::new();
+        let outer = env.mark();
         for k in delta_keys {
-            let ann = match self.relations.get(&atom.pred).and_then(|r| r.get(&k)) {
-                Some(f) => f.ann.clone(),
-                None => continue,
-            };
-            let mut env = Env::new();
-            env.ann = Ann::unit().join(&ann);
-            env.body_keys = vec![(atom.pred.clone(), k.clone())];
             if !self.bind_args(&atom.args, &k, &mut env) {
+                env.undo(&outer);
                 continue;
             }
+            let ann = match self.relations.get(&atom.pred).and_then(|r| r.get(&k)) {
+                Some(f) => f.ann.clone(),
+                None => {
+                    env.undo(&outer);
+                    continue;
+                }
+            };
+            env.ann = Ann::unit().join(&ann);
+            env.body_keys.push((atom.pred.clone(), k));
             self.solve_rest(clause, 0, Some(ai), &mut env, out);
+            env.undo(&outer);
         }
     }
 
     fn solve_builtin_only(&mut self, clause: &Clause) -> Option<Env> {
         let mut env = Env::new();
         let mut out = Vec::new();
-        // reuse solve_rest with skip = None; it emits heads too, so instead
-        // evaluate lits manually via a trick: solve_rest with a sentinel that
-        // never matches a body index.
         let impossible_skip = usize::MAX;
         if self.solve_all(clause, 0, impossible_skip, &mut env, &mut out) {
             let _ = out;
@@ -1452,30 +1020,28 @@ impl Engine {
                     None => Vec::new(),
                 };
                 let mut any = false;
-                let outer = env.mark();
                 for id in ids {
-                    // fetch under a fresh immutable borrow; ids stay valid
-                    // because rows are never removed mid-stratum (retraction
-                    // only happens between runs)
-                    let (k, ann) = {
-                        let rel = match self.relations.get(&atom.pred) {
-                            Some(r) => r,
-                            None => continue,
+                    let mark = env.mark();
+                    let matched = {
+                        let Some(rel) = self.relations.get(&atom.pred) else {
+                            continue;
                         };
                         let row = &rel.rows[id];
-                        (row.key.clone(), row.fact.ann.clone())
+                        if self.bind_args(&atom.args, &row.key, env) {
+                            Some((row.key.clone(), row.fact.ann.clone()))
+                        } else {
+                            None
+                        }
                     };
-                    let mark = env.mark();
-                    env.ann = env.ann.join(&ann);
-                    env.body_keys.push((atom.pred.clone(), k.clone()));
-                    if self.bind_args(&atom.args, &k, env)
-                        && self.solve_all(clause, i + 1, skip, env, out)
-                    {
-                        any = true;
+                    if let Some((k, ann)) = matched {
+                        env.ann = env.ann.join(&ann);
+                        env.body_keys.push((atom.pred.clone(), k));
+                        if self.solve_all(clause, i + 1, skip, env, out) {
+                            any = true;
+                        }
                     }
                     env.undo(&mark);
                 }
-                env.undo(&outer);
                 any
             }
             Lit::Neg(atom) => {
@@ -1545,8 +1111,10 @@ impl Engine {
                             // RHS is X + c; solvable for equality: av = X + c
                             if *op == CmpOp::Eq {
                                 if let (Some(ai), Some(v)) = (av.as_int(), var) {
-                                    env.bind(&v, Value::Int(ai - c));
-                                    return self.solve_all(clause, i + 1, skip, env, out);
+                                    if let Some(diff) = ai.checked_sub(c) {
+                                        env.bind(&v, Value::Int(diff));
+                                        return self.solve_all(clause, i + 1, skip, env, out);
+                                    }
                                 }
                             }
                         }
@@ -1582,16 +1150,18 @@ impl Engine {
             .collect()
     }
 
-    fn matches_any(&self, atom: &crate::ast::Atom, env: &Env) -> bool {
+    fn matches_any(&self, atom: &Atom, env: &mut Env) -> bool {
         let bound = self.resolve_bound(&atom.args, env);
-        let ids = match self.relations.get(&atom.pred) {
-            Some(rel) => rel.lookup(&bound),
-            None => return false,
+        let Some(rel) = self.relations.get(&atom.pred) else {
+            return false;
         };
+        let ids = rel.lookup(&bound);
+        let mark = env.mark();
         for id in ids {
-            let k = self.relations[&atom.pred].rows[id].key.clone();
-            let mut e = env.clone();
-            if self.bind_args(&atom.args, &k, &mut e) {
+            let k = &rel.rows[id].key;
+            let matched = self.bind_args(&atom.args, k, env);
+            env.undo(&mark);
+            if matched {
                 return true;
             }
         }
@@ -1664,9 +1234,8 @@ impl Engine {
             body: env.body_keys.clone(),
         };
         let rel = self.relations.entry(clause.head.pred.clone()).or_default();
-        let key = (clause.head.pred.clone(), args.clone());
         let outcome = rel.insert(
-            key.1.clone(),
+            args.clone(),
             StoredFact {
                 ann: env.ann.clone(),
                 supports: vec![support],
@@ -1674,12 +1243,18 @@ impl Engine {
         );
         match outcome {
             InsertOutcome::New => {
-                self.feed.push(Change::Added(self.epoch, key.clone()));
+                let key = (clause.head.pred.clone(), args);
+                if self.record_feed {
+                    self.feed.push(Change::Added(self.epoch, key.clone()));
+                }
                 self.change_log.push((self.epoch, key.clone()));
                 Some(Emission { key, is_new: true })
             }
             InsertOutcome::Improved => {
-                self.feed.push(Change::Updated(self.epoch, key.clone()));
+                let key = (clause.head.pred.clone(), args);
+                if self.record_feed {
+                    self.feed.push(Change::Updated(self.epoch, key.clone()));
+                }
                 Some(Emission { key, is_new: false })
             }
             InsertOutcome::Unchanged => None,
@@ -1738,7 +1313,7 @@ impl Engine {
         let head = &prog[0].head;
         // goal over an EDB predicate: no rewriting needed
         if !self.clauses.iter().any(|c| c.head.pred == head.pred) {
-            return Ok(self.ask(goal)?);
+            return Ok(self.ask_atom(head));
         }
         // goal over a materialized derived predicate: read the store
         // directly (the demand machinery is for unmaterialized predicates;
@@ -1749,17 +1324,16 @@ impl Engine {
             .map(|r| !r.is_empty())
             .unwrap_or(false)
         {
-            return Ok(self.ask(goal)?);
+            return Ok(self.ask_atom(head));
         }
-        let materialized: std::collections::BTreeSet<String> = self
+        let materialized: BTreeSet<String> = self
             .relations
             .iter()
             .filter(|(_, rel)| !rel.is_empty())
             .map(|(p, _)| p.clone())
             .collect();
         let demand = crate::magic::build(&self.clauses, head, &materialized)?;
-        let relations_before: std::collections::BTreeSet<String> =
-            self.relations.keys().cloned().collect();
+        let relations_before: BTreeSet<String> = self.relations.keys().cloned().collect();
         let saved_clauses = self.clauses.clone();
         let saved_relations = self.relations.clone();
         let saved_change_log = self.change_log.clone();
@@ -1780,42 +1354,11 @@ impl Engine {
                 .filter(|(name, _)| !relations_before.contains(*name))
                 .map(|(_, relation)| relation.len())
                 .sum();
-            let answer_pred = demand.answer_pred;
-            let vars: Vec<&String> = head
-                .args
-                .iter()
-                .filter_map(|t| match t {
-                    Term::Var(v) => Some(v),
-                    _ => None,
-                })
-                .collect();
-            let ground = head
-                .args
-                .iter()
-                .all(|term| matches!(term, Term::Sym(_) | Term::Int(_)));
-            let mut rows = Vec::new();
-            if let Some(rel) = self.relations.get(&answer_pred) {
-                for row in &rel.rows {
-                    let mut env = Env::new();
-                    if self.bind_args(&head.args, &row.key, &mut env) {
-                        let row_str: Vec<String> = vars
-                            .iter()
-                            .map(|v| {
-                                let val = env
-                                    .map
-                                    .get(*v)
-                                    .map(|x| self.interner.display(x))
-                                    .unwrap_or_else(|| "_".into());
-                                format!("{}={}", v, val)
-                            })
-                            .collect();
-                        rows.push(row_str.join(", "));
-                    }
-                }
-            }
-            if ground && !rows.is_empty() {
-                rows = vec![String::new()];
-            }
+            let answer_atom = Atom {
+                pred: demand.answer_pred,
+                args: head.args.clone(),
+            };
+            let rows = self.ask_atom(&answer_atom);
             Ok((rows, created))
         })();
 
@@ -1846,7 +1389,11 @@ impl Engine {
                 "ask: expected a single atom, got {goal:?}"
             )));
         }
-        let head = &prog[0].head;
+        Ok(self.ask_atom(&prog[0].head))
+    }
+
+    /// Evaluate a pre-parsed query atom against the materialized store without re-parsing.
+    pub fn ask_atom(&self, head: &Atom) -> Vec<String> {
         let vars: Vec<&String> = head
             .args
             .iter()
@@ -1861,16 +1408,21 @@ impl Engine {
             .all(|term| matches!(term, Term::Sym(_) | Term::Int(_)));
         let mut rows = Vec::new();
         if let Some(rel) = self.relations.get(&head.pred) {
-            let bound = self.resolve_bound(&head.args, &Env::new());
+            let env_empty = Env::new();
+            let bound = self.resolve_bound(&head.args, &env_empty);
             let ids = if bound.iter().any(|b| b.is_some()) {
                 rel.lookup(&bound)
             } else {
                 (0..rel.rows.len()).collect()
             };
+            let mut env = Env::new();
+            let mark = env.mark();
             for id in ids {
                 let k = &rel.rows[id].key;
-                let mut env = Env::new();
                 if self.bind_args(&head.args, k, &mut env) {
+                    if ground {
+                        return vec![String::new()];
+                    }
                     let row: Vec<String> = vars
                         .iter()
                         .map(|v| {
@@ -1884,12 +1436,10 @@ impl Engine {
                         .collect();
                     rows.push(row.join(", "));
                 }
+                env.undo(&mark);
             }
         }
-        if ground && !rows.is_empty() {
-            rows = vec![String::new()];
-        }
-        Ok(rows)
+        rows
     }
 
     // -------------------------------------------------------------- why
@@ -1912,7 +1462,7 @@ impl Engine {
         let pad = "  ".repeat(indent);
         let rendered = self.render_fact(pred, args);
         let f = match self.relations.get(pred).and_then(|r| r.get(args)) {
-            Some(f) => f.clone(),
+            Some(f) => f,
             None => {
                 let _ = writeln!(out, "{pad}{rendered}  [unknown fact]");
                 return;
@@ -1979,12 +1529,12 @@ fn linearize(e: &crate::ast::Expr, env: &Env) -> Option<(i64, i64, Option<String
         Expr::Add(a, b) => {
             let (c1, k1, v1) = linearize(a, env)?;
             let (c2, k2, v2) = linearize(b, env)?;
-            combine(v1, v2, c1 + c2, k1 + k2)
+            combine(v1, v2, c1.checked_add(c2)?, k1.checked_add(k2)?)
         }
         Expr::Sub(a, b) => {
             let (c1, k1, v1) = linearize(a, env)?;
             let (c2, k2, v2) = linearize(b, env)?;
-            combine(v1, v2, c1 - c2, k1 - k2)
+            combine(v1, v2, c1.checked_sub(c2)?, k1.checked_sub(k2)?)
         }
     }
 }
@@ -2001,26 +1551,6 @@ fn combine(
         (Some(_), Some(_)) => return None, // two unbound vars: not linear
     };
     Some((c, k, v))
-}
-
-/// DFS reachability over the IDB dependency graph.
-fn reaches(deps: &HashMap<&str, Vec<(&str, bool)>>, from: &str, to: &str) -> bool {
-    let mut seen = BTreeSet::new();
-    let mut stack = vec![from];
-    while let Some(n) = stack.pop() {
-        if n == to {
-            return true;
-        }
-        if !seen.insert(n) {
-            continue;
-        }
-        if let Some(edges) = deps.get(n) {
-            for (next, _) in edges {
-                stack.push(next);
-            }
-        }
-    }
-    false
 }
 
 fn cmp_holds(op: CmpOp, a: Value, b: Value) -> bool {

@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use crate::artifact::ValueType;
-use crate::guide::{brief, display_labels, render_brief, render_guide, GuideSections};
+use crate::guide::{prepare_html_guide, render_brief, GuideSections, PreparedHtmlGuide};
 use crate::projection::{GraphNodeData, GraphProjection};
 
 const TEMPLATE: &str = include_str!("html_template.html");
@@ -41,19 +41,22 @@ pub fn render_projection_html_with_context(
         });
     let (thesis, thesis_detail) = expectation_summary(expectation_count, failed);
     let summary = render_summary(projection, failed);
-    let GuideSections {
-        question,
-        observations,
-        assumptions,
-        reasoning,
-        conclusions,
-        claims,
-        stress_tests,
-        reference,
-    } = render_guide(projection, context);
+    let PreparedHtmlGuide {
+        sections:
+            GuideSections {
+                question,
+                observations,
+                assumptions,
+                reasoning,
+                conclusions,
+                claims,
+                stress_tests,
+                reference,
+            },
+        brief,
+        labels,
+    } = prepare_html_guide(projection, context);
     let relations = render_relations(projection);
-    let brief = brief(projection);
-    let labels = display_labels(projection);
     let facts = render_facts(projection, &labels);
     let graph_json = escape_json_for_script(
         &serde_json::to_string(projection).expect("graph projection is serializable"),

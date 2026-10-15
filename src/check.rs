@@ -6,9 +6,7 @@
 //! the evidence file's expectations instead. The result is one closed
 //! artifact evaluated exactly like a walk; nothing is resolved by reference.
 
-use crate::artifact::{
-    evaluate_parsed_artifact, parse_artifact, Artifact, ArtifactError, WalkReport,
-};
+use crate::artifact::{parse_artifact, walk_parsed_artifact, Artifact, ArtifactError, WalkReport};
 use crate::printer::print_artifact;
 
 /// Evaluate `checker`'s vocabulary and rules over `evidence`'s facts and
@@ -16,7 +14,15 @@ use crate::printer::print_artifact;
 pub fn check_artifact(checker: &str, evidence: &str) -> Result<WalkReport, ArtifactError> {
     let checker = parse_artifact(checker)?;
     let evidence = parse_artifact(evidence)?;
-    Ok(evaluate_parsed_artifact(bind(checker, evidence)?)?.report)
+    check_parsed_artifact(&checker, &evidence)
+}
+
+/// Evaluate a parsed `checker`'s vocabulary and rules over parsed `evidence`.
+pub fn check_parsed_artifact(
+    checker: &Artifact,
+    evidence: &Artifact,
+) -> Result<WalkReport, ArtifactError> {
+    walk_parsed_artifact(&bind(checker.clone(), evidence.clone())?)
 }
 
 /// Bind `checker` to `evidence` and print the result as a self-contained
@@ -27,13 +33,22 @@ pub fn check_artifact(checker: &str, evidence: &str) -> Result<WalkReport, Artif
 pub fn bind_artifact(checker: &str, evidence: &str) -> Result<String, ArtifactError> {
     let checker = parse_artifact(checker)?;
     let evidence = parse_artifact(evidence)?;
+    let bound = bind_parsed_artifact(&checker, &evidence)?;
+    Ok(print_artifact(&bound))
+}
+
+/// Bind a parsed `checker` to parsed `evidence` as a self-contained [`Artifact`].
+pub fn bind_parsed_artifact(
+    checker: &Artifact,
+    evidence: &Artifact,
+) -> Result<Artifact, ArtifactError> {
     let header = format!("Bound from {} over {}.", checker.name, evidence.name);
-    let mut bound = bind(checker, evidence)?;
+    let mut bound = bind(checker.clone(), evidence.clone())?;
     bound.doc = Some(match bound.doc {
         Some(doc) => format!("{header}\n\n{doc}"),
         None => header,
     });
-    Ok(print_artifact(&bound))
+    Ok(bound)
 }
 
 fn bind(checker: Artifact, evidence: Artifact) -> Result<Artifact, ArtifactError> {

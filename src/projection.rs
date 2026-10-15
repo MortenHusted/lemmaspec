@@ -7,13 +7,13 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use crate::artifact::{
-    evaluate_artifact, ArtifactError, EvidenceBasis, EvidenceKind, FactValue, MutationOperator,
-    ValueType,
+    evaluate_parsed_for_projection, parse_artifact, Artifact, ArtifactError, EvidenceBasis,
+    EvidenceKind, FactValue, MutationOperator, ValueType,
 };
 use crate::ast::{Atom, Expr, Lit};
 use crate::eval::Support;
 use crate::narrative::read_fact;
-use crate::{parse_program, Interner, Term, Value};
+use crate::{Interner, Term, Value};
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct GraphProjection {
@@ -320,10 +320,18 @@ impl ProjectionBuilder {
 }
 
 pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> {
-    let evaluation = evaluate_artifact(source)?;
+    let artifact = parse_artifact(source)?;
+    project_parsed_artifact(&artifact)
+}
+
+pub fn project_parsed_artifact(artifact: &Artifact) -> Result<GraphProjection, ArtifactError> {
+    let evaluation = evaluate_parsed_for_projection(artifact.clone())?;
     let artifact = evaluation.artifact;
     let engine = evaluation.engine;
-    let report = evaluation.report;
+    let status = evaluation.status;
+    let expectations = evaluation.expectations;
+    let compiled_rules = evaluation.compiled_rules;
+    let compiled_expectations = evaluation.compiled_expectations;
     let mut builder = ProjectionBuilder::new(&artifact.name);
     let declarations_by_fact = artifact.facts.iter().fold(
         BTreeMap::<(String, Vec<FactValue>), Vec<String>>::new(),
@@ -345,8 +353,7 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
         .iter()
         .filter_map(|fact| Some((fact.id.as_str(), fact.doc.as_deref()?)))
         .collect();
-    let walked_expectations: BTreeMap<_, _> = report
-        .expectations
+    let walked_expectations: BTreeMap<_, _> = expectations
         .iter()
         .map(|expectation| (expectation.id.as_str(), expectation))
         .collect();
@@ -355,7 +362,7 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
         readable_id(&artifact.name, "spec", &artifact.name),
         GraphNodeData::Spec {
             name: artifact.name.clone(),
-            status: report.status.clone(),
+            status: status.clone(),
             doc: artifact.doc.clone(),
             notes: artifact.notes.clone(),
         },
@@ -567,8 +574,8 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
         }
     }
 
-    for rule in &artifact.rules {
-        let clause = parse_rule(rule)?;
+    for rule in &compiled_rules {
+        let clause = &rule.clause;
         let rule_id = &rule_ids[rule.id.as_str()];
         let relation_id = &relation_ids[clause.head.pred.as_str()];
         builder.edge(
@@ -637,7 +644,7 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
             };
             if !projected_rules.insert(rule.as_str()) {
                 continue;
-            }
+            };
             let Some(rule_id) = rule_ids.get(rule.as_str()) else {
                 continue;
             };
@@ -678,11 +685,8 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
         }
     }
 
-    for expectation in &artifact.expectations {
-        let clauses = parse_program(&format!("{}.", expectation.query)).map_err(|error| {
-            ArtifactError::new(format!("project expect `{}`: {error}", expectation.id))
-        })?;
-        let atom = &clauses[0].head;
+    for expectation in &compiled_expectations {
+        let atom = &expectation.atom;
         let expectation_id = &expectation_ids[expectation.id.as_str()];
         builder.edge(
             expectation_id,
@@ -728,21 +732,11 @@ pub fn project_artifact(source: &str) -> Result<GraphProjection, ArtifactError> 
             }
         }
     }
-    let projection = builder.finish(report.status);
+    let projection = builder.finish(status);
     projection
         .validate_closed()
         .map_err(|error| ArtifactError::new(format!("project graph: {error}")))?;
     Ok(projection)
-}
-
-fn parse_rule(rule: &crate::artifact::RuleDecl) -> Result<crate::ast::Clause, ArtifactError> {
-    let source = format!("{}: {} :- {}.", rule.id, rule.derive, rule.when.join(", "));
-    let clauses = parse_program(&source)
-        .map_err(|error| ArtifactError::new(format!("project rule `{}`: {error}", rule.id)))?;
-    clauses
-        .into_iter()
-        .next()
-        .ok_or_else(|| ArtifactError::new(format!("project rule `{}` produced no clause", rule.id)))
 }
 
 fn add_fact_symbol_references(builder: &mut ProjectionBuilder, from: &str, args: &[FactValue]) {
