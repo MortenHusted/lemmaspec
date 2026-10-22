@@ -304,6 +304,50 @@ fn a_failing_run_recorded_since_the_base_is_listed_with_the_diff_of_its_break() 
 }
 
 #[test]
+fn a_source_edit_after_the_green_run_leaves_every_statement_unverified() {
+    let project = verified("stale-green");
+    let green = project.record_green("green.intent");
+    project.edit("src/lib.rs", "    1", "    0");
+    let report = project.report(&[green], None);
+    assert!(!report.pending, "{}", report.markdown);
+    assert_eq!(
+        report.standings,
+        standings(&[
+            ("library_returns_report", "unverified"),
+            ("results_are_honest", "unverified"),
+            ("walk_exit_status", "unverified"),
+        ])
+    );
+    let statements = section(&report.markdown, "Statements");
+    assert!(
+        statements.contains(
+            "- Reason: an example does not pass cleanly at the target on this channel (`cli`)"
+        ),
+        "{statements}"
+    );
+}
+
+#[test]
+fn editing_an_approved_example_awaits_approval_and_drops_its_red_run() {
+    let project = verified("edited-example");
+    project.edit(
+        "tests/walk.rs",
+        "fn open_expectation_exits_one() {}",
+        "fn open_expectation_exits_one() {\n    assert!(true);\n}",
+    );
+    let report = project.report(&[project.record_green("green.intent")], None);
+    assert!(report.pending, "{}", report.markdown);
+    assert_eq!(report.standings["walk_exit_status"], "unverified");
+    assert_eq!(report.standings["results_are_honest"], "unverified");
+    assert_eq!(report.standings["library_returns_report"], "verified");
+    let awaiting = section(&report.markdown, "Awaiting approval");
+    assert!(
+        awaiting.contains("`open_exits_one` (example)"),
+        "{awaiting}"
+    );
+}
+
+#[test]
 fn a_decoy_test_in_place_of_a_compiled_out_example_does_not_keep_it_verified() {
     let project = verified("decoy");
     project.write(
