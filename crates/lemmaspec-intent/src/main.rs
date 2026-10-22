@@ -127,13 +127,13 @@ impl Args {
 }
 
 fn run() -> Result<ExitCode, String> {
-    let mut args = env::args().skip(1);
-    let command = args.next().ok_or(USAGE)?;
-    if command == "--help" || command == "-h" {
+    let args: Vec<String> = env::args().skip(1).collect();
+    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
         println!("{USAGE}");
         return Ok(ExitCode::SUCCESS);
     }
-    let args = Args::parse(&command, args)?;
+    let (command, rest) = args.split_first().ok_or(USAGE)?;
+    let args = Args::parse(command, rest.iter().cloned())?;
     let dir = args.path("--dir", "intent");
     let tests = args.path("--tests", "tests");
     match command.as_str() {

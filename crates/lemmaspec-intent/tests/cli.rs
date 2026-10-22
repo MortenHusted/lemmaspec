@@ -275,6 +275,9 @@ fn checker_prints_the_bundled_checker_and_help_prints_the_usage() {
     let help = intent(&["--help"]);
     assert!(help.status.success());
     assert!(stdout(&help).starts_with("usage: lemmaspec-intent"));
+    let command_help = intent(&["record", "--help"]);
+    assert!(command_help.status.success(), "{}", stderr(&command_help));
+    assert_eq!(stdout(&command_help), stdout(&help));
     for command in [
         "check",
         "approve",
