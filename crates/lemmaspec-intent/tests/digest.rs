@@ -328,7 +328,7 @@ fn open_exits_one() -> Result<(), String> {
 fn the_token_serialization_of_a_fixed_test_equals_the_stored_string() {
     let item: syn::ItemFn = syn::parse_str(FIXED_TEST).unwrap();
     assert_eq!(
-        canonical_example(&item),
+        canonical_example(&[], &item),
         concat!(
             "intent-digest/1\n",
             r#"# [ doc = " Walk exits 1 when an \"expectation\" isn't met." ] "#,
@@ -339,7 +339,37 @@ fn the_token_serialization_of_a_fixed_test_equals_the_stored_string() {
         )
     );
     assert_eq!(
-        example_digest(&item),
+        example_digest(&[], &item),
         "sha256:6130f956143f9bd53eba46651e9db21b98fb7366ae851ec7c190bd7963da7362"
+    );
+}
+
+#[test]
+fn the_attributes_around_a_test_lead_its_token_serialization() {
+    let file: syn::File = syn::parse_str(&format!(
+        "#![cfg(unix)]\n#[cfg(any())]\nmod checks {{\n{FIXED_TEST}}}\n"
+    ))
+    .unwrap();
+    let syn::Item::Mod(module) = &file.items[0] else {
+        panic!("expected a module");
+    };
+    let syn::Item::Fn(item) = &module.content.as_ref().unwrap().1[0] else {
+        panic!("expected a function");
+    };
+    let context: Vec<&syn::Attribute> = file.attrs.iter().chain(&module.attrs).collect();
+    let serialized = canonical_example(&context, item);
+    assert_eq!(
+        serialized.lines().take(2).collect::<Vec<_>>(),
+        [
+            "intent-digest/1",
+            "context: # ! [ cfg ( unix ) ] # [ cfg ( any ( ) ) ]"
+        ]
+    );
+    assert_eq!(
+        serialized.lines().skip(2).collect::<Vec<_>>(),
+        canonical_example(&[], item)
+            .lines()
+            .skip(1)
+            .collect::<Vec<_>>()
     );
 }

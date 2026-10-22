@@ -45,6 +45,14 @@ struct Found {
     digest: String,
 }
 
+/// What one file holds: its tagged tests, and how many `#[test]` fns, tagged
+/// or not, have each `module::function` path.
+#[derive(Default)]
+struct Collected {
+    tagged: Vec<Found>,
+    paths: BTreeMap<String, usize>,
+}
+
 /// Scan the `*.rs` files directly inside `dir`, in file name order. A missing
 /// `dir` has no examples. Tag problems become issues; an unreadable file, a
 /// parse error or two tags claiming one example ID fail, with locations given
@@ -63,7 +71,7 @@ pub fn scan(dir: &Path, catalog: &Catalog) -> Result<Scan, String> {
         }
     }
     paths.sort();
-    let mut found = Vec::new();
+    let mut files = Vec::new();
     for path in paths {
         let stem = path.file_stem().unwrap_or_default().to_string_lossy();
         let source = fs::read_to_string(&path)
@@ -71,11 +79,18 @@ pub fn scan(dir: &Path, catalog: &Catalog) -> Result<Scan, String> {
             .replace("\r\n", "\n");
         let file = syn::parse_file(&source)
             .map_err(|e| format!("{stem}.rs:{}: {e}", e.span().start().line))?;
-        collect(&file.items, &stem, "", &mut found);
+        let mut collected = Collected::default();
+        let context: Vec<&Attribute> = file.attrs.iter().collect();
+        collect(&file.items, &stem, "", &context, &mut collected);
+        files.push(collected);
     }
     let mut scan = Scan::default();
     let mut claimed = BTreeMap::new();
-    for found in found {
+    for (found, paths) in files.into_iter().flat_map(|file| {
+        file.tagged
+            .into_iter()
+            .map(move |found| (found, file.paths.clone()))
+    }) {
         let location = format!("{}.rs:{}", found.file, found.line);
         let issue = |example: Option<&str>, reason: String| ExampleIssue {
             example: example.map(Into::into),
@@ -94,6 +109,14 @@ pub fn scan(dir: &Path, catalog: &Catalog) -> Result<Scan, String> {
                 "duplicate example id {id} in {other} and {location}"
             ));
         }
+        if paths[&found.test] > 1 {
+            let reason = format!(
+                "another test in {}.rs has the path {}, so cargo test --exact cannot tell them apart",
+                found.file, found.test
+            );
+            scan.issues.push(issue(Some(&id), reason));
+            continue;
+        }
         if let Some(reason) = cannot_exemplify(catalog, &statement, &channels) {
             scan.issues.push(issue(Some(&id), reason));
             continue;
@@ -111,10 +134,21 @@ pub fn scan(dir: &Path, catalog: &Catalog) -> Result<Scan, String> {
     Ok(scan)
 }
 
-fn collect(items: &[Item], file: &str, module: &str, found: &mut Vec<Found>) {
+/// `context` holds the attributes of the file and of every module around
+/// `items`, outermost first: a `#[cfg]` there decides whether a test is
+/// compiled at all, so it counts toward each example's digest.
+fn collect(
+    items: &[Item],
+    file: &str,
+    module: &str,
+    context: &[&Attribute],
+    collected: &mut Collected,
+) {
     for item in items {
         match item {
             Item::Fn(function) if is_test(function) => {
+                let test = format!("{module}{}", function.sig.ident);
+                *collected.paths.entry(test.clone()).or_default() += 1;
                 let tags: Vec<_> = doc_lines(&function.attrs)
                     .into_iter()
                     .filter(|(_, text)| text.starts_with("intent:"))
@@ -122,11 +156,11 @@ fn collect(items: &[Item], file: &str, module: &str, found: &mut Vec<Found>) {
                 if tags.is_empty() {
                     continue;
                 }
-                let digest = example_digest(function);
+                let digest = example_digest(context, function);
                 for (line, tag) in tags {
-                    found.push(Found {
+                    collected.tagged.push(Found {
                         file: file.into(),
-                        test: format!("{module}{}", function.sig.ident),
+                        test: test.clone(),
                         line,
                         tag,
                         digest: digest.clone(),
@@ -134,10 +168,20 @@ fn collect(items: &[Item], file: &str, module: &str, found: &mut Vec<Found>) {
                 }
             }
             Item::Mod(ItemMod {
+                attrs,
                 ident,
                 content: Some((_, items)),
                 ..
-            }) => collect(items, file, &format!("{module}{ident}::"), found),
+            }) => {
+                let context: Vec<&Attribute> = context.iter().copied().chain(attrs).collect();
+                collect(
+                    items,
+                    file,
+                    &format!("{module}{ident}::"),
+                    &context,
+                    collected,
+                );
+            }
             _ => {}
         }
     }

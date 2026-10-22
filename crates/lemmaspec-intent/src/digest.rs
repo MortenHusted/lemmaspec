@@ -1,7 +1,7 @@
 use proc_macro2::{Delimiter, Group, Spacing, TokenStream, TokenTree};
 use quote::ToTokens;
 use sha2::{Digest, Sha256};
-use syn::{ItemFn, Lit};
+use syn::{Attribute, ItemFn, Lit};
 
 use crate::{Statement, StatementKind};
 
@@ -50,15 +50,29 @@ pub fn statement_digest(statement: &Statement) -> String {
 /// when joined to the next token, a literal its source text, and a group its
 /// tokens between its delimiters. Doc comment text is quoted here rather than
 /// by proc-macro2, which synthesizes those literals. Comments and formatting
-/// are not tokens, so they do not count.
-pub fn canonical_example(item: &ItemFn) -> String {
+/// are not tokens, so they do not count. The attributes of the file and of
+/// the modules around the function, when there are any, come first on a
+/// `context:` line.
+pub fn canonical_example(context: &[&Attribute], item: &ItemFn) -> String {
+    let mut context_tokens = Vec::new();
+    for attribute in context {
+        render(attribute.to_token_stream(), &mut context_tokens);
+    }
+    let context = if context_tokens.is_empty() {
+        String::new()
+    } else {
+        format!("context: {}\n", context_tokens.join(" "))
+    };
     let mut tokens = Vec::new();
     render(item.to_token_stream(), &mut tokens);
-    format!("intent-digest/{DIGEST_VERSION}\n{}", tokens.join(" "))
+    format!(
+        "intent-digest/{DIGEST_VERSION}\n{context}{}",
+        tokens.join(" ")
+    )
 }
 
-pub fn example_digest(item: &ItemFn) -> String {
-    sha256(&canonical_example(item))
+pub fn example_digest(context: &[&Attribute], item: &ItemFn) -> String {
+    sha256(&canonical_example(context, item))
 }
 
 pub fn sha256(text: &str) -> String {

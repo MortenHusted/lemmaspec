@@ -314,6 +314,11 @@ fn an_example_digest_changes_with_its_body_tag_or_ignore_attribute() {
         ),
         ("tag", EXAMPLE.replace("on cli", "on cli, library")),
         ("ignore", EXAMPLE.replace("#[test]", "#[test]\n#[ignore]")),
+        ("file attribute", format!("#![cfg(any())]\n{EXAMPLE}")),
+        (
+            "module attribute",
+            format!("#[cfg(any())]\nmod m {{\n{EXAMPLE}}}\n"),
+        ),
     ] {
         assert_ne!(digest(label, &changed), original, "{label}");
     }
@@ -334,7 +339,40 @@ fn lf_and_crlf_copies_of_a_multiline_raw_string_get_the_same_digest() {
     let crlf = RAW_STRING.replace('\n', "\r\n");
     let lf = digest("lf", RAW_STRING);
     assert_eq!(digest("crlf", &crlf), lf);
-    assert_eq!(lf, example_digest(&syn::parse_str(RAW_STRING).unwrap()));
+    assert_eq!(
+        lf,
+        example_digest(&[], &syn::parse_str(RAW_STRING).unwrap())
+    );
+}
+
+#[test]
+fn an_example_in_a_plain_module_keeps_its_digest() {
+    assert_eq!(
+        digest("plain module", &format!("mod m {{\n{EXAMPLE}}}\n")),
+        digest("top level", EXAMPLE)
+    );
+}
+
+// A decoy compiled in place of a cfg'd-out example would run under the
+// example's `--exact` path.
+#[test]
+fn a_tagged_test_sharing_its_path_with_another_test_is_an_example_issue() {
+    let decoy = format!(
+        "#[cfg(any())]\nmod m {{\n{EXAMPLE}}}\nmod m {{\n    #[test]\n    fn open_exits_one() {{}}\n}}\n"
+    );
+    assert_eq!(
+        scan_source("decoy", &decoy),
+        Scan {
+            examples: vec![],
+            issues: vec![ExampleIssue {
+                example: Some("open_exits_one".into()),
+                file: "example".into(),
+                test: "m::open_exits_one".into(),
+                line: 3,
+                reason: "another test in example.rs has the path m::open_exits_one, so cargo test --exact cannot tell them apart".into(),
+            }],
+        }
+    );
 }
 
 #[test]

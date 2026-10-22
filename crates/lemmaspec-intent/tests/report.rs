@@ -2,7 +2,7 @@ mod common;
 
 use std::collections::BTreeMap;
 
-use common::{cited, root_catalog, Project, STATEMENTS};
+use common::{cited, root_catalog, Project, EXAMPLES, STATEMENTS};
 use lemmaspec::{parse_artifact, print_artifact, EvidenceKind, FactValue};
 use lemmaspec_intent::{
     digest::DIGEST_VERSION,
@@ -280,6 +280,25 @@ fn a_failing_run_recorded_since_the_base_is_listed_with_the_diff_of_its_break() 
             "`open_exits_one` failed on `cli` at source `{scratch}`, based on `0000000`:\n\n```diff\n{diff}```\n"
         )),
         "{since}"
+    );
+}
+
+#[test]
+fn a_decoy_test_in_place_of_a_compiled_out_example_does_not_keep_it_verified() {
+    let project = verified("decoy");
+    project.write(
+        "tests/walk.rs",
+        &format!(
+            "#[cfg(any())]\nmod m {{\n{EXAMPLES}}}\nmod m {{\n    #[test]\n    fn open_expectation_exits_one() {{}}\n}}\n"
+        ),
+    );
+    let report = project.report(&[project.record_green("green.intent")], None);
+    assert!(report.pending, "{}", report.markdown);
+    assert_eq!(report.standings["walk_exit_status"], "unverified");
+    let ignored = section(&report.markdown, "Ignored examples");
+    assert!(
+        ignored.contains("another test in walk.rs has the path m::open_expectation_exits_one"),
+        "{ignored}"
     );
 }
 
