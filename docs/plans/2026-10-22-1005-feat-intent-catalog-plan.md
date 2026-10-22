@@ -12,8 +12,8 @@ execution: code
 
 ## Goal Capsule
 
-- **Objective:** A developer working with coding agents can tell, for any commit, which human-approved intents, domain definitions and exceptions are proven by examples that failed before they passed on every channel they apply to, and which are unapproved, stale or unverified.
-- **Product authority:** The repository owner approves statements and examples. This plan covers the intent model and its verified-statement report. Execution binding across test frameworks, toolset packaging, code tie-in and an approval UI are not active scope.
+- **Objective:** A developer working with coding agents can tell, for any commit, which human-approved intents, domain definitions and exceptions are proven by examples that have been seen failing and that pass on every channel they apply to, and which are unapproved, stale or unverified.
+- **Product authority:** The repository owner approves statements and examples. This plan covers the intent model, its verified-statement report, and run recording for one test framework. Execution binding beyond that framework, toolset packaging, code tie-in and an approval UI are not active scope.
 - **Open blockers:** None.
 
 ---
@@ -37,13 +37,16 @@ The existing tools each cover part of this. LemmaSpec evaluates evidence determi
 ### Key Decisions
 
 - **The scope is the intent model.** Execution binding and toolset packaging follow as separate plans that reuse its vocabulary. (session-settled: user-approved — chosen over starting with execution binding or toolset shape: both depend on the intent model's terms.)
-- **Domain definitions are a human-approved layer between intent and code.** A change of meaning needs sign-off; a change of code behind an unchanged definition does not. Governs R2, R18. (session-settled: user-approved — chosen over rewriting the intent on every meaning change, or leaving definitions to agents: the follow-up case changed meaning without changing intent.)
+- **Domain definitions are a human-approved layer between intent and code.** A change of meaning needs sign-off; a change of code behind an unchanged definition does not. Governs R2, R21. (session-settled: user-approved — chosen over rewriting the intent on every meaning change, or leaving definitions to agents: the follow-up case changed meaning without changing intent.)
 - **A definition holds on every channel unless an approved exception scopes it out.** Governs R3, R4. (session-settled: user-approved — chosen over per-channel opt-in, or keeping channels out of intent: a new channel must not silently skip an intent.)
-- **The first deliverable is the verified-statement report.** Governs R16, R17, R18, R19, R20, R21. (session-settled: user-approved — chosen over change impact, orphan detection and a channel coverage view: it needs no code facts.)
+- **The first deliverable is the verified-statement report.** Governs R17, R18, R19, R20, R21, R22, R23, R24. (session-settled: user-approved — chosen over change impact, orphan detection and a channel coverage view: it needs no code facts.)
 - **The catalog is a typed, linked format, not Markdown, and examples are the project's own tagged tests.** Typed links let a change be traced to everything that depends on it. Governs R5, R6, R7, R8, R9. (session-settled: user-directed — chosen over a Markdown catalog: references must be checkable so dependent changes can be tracked.)
 - **Exceptions narrow definitions, never intents.** An intent that needs an exception is stated at the mechanism level, as "authenticated by a browser session" was. Governs R3.
-- **Agents draft; only humans approve.** The catalog must stay agent-driven without letting an agent's edit count as approved. Governs R11, R12, R13, R14, R15.
-- **The catalog is an optional companion to LemmaSpec.** A project adopts it one statement at a time, and LemmaSpec without the catalog is unchanged. Governs R22, R23.
+- **Exceptions come in two kinds.** One states that a definition does not apply on a channel; the other states what holds there instead and carries its own examples. Governs R3, R18, R19, R21. (session-settled: user-approved — chosen over requiring a tested exception for every channel a definition does not concern: each new channel would force placeholder examples onto unrelated definitions.)
+- **Run recording for one test framework is in scope.** Without it the plan could be finished on fixture runs while no real project ever gets a report. Governs R11. (session-settled: user-approved — chosen over narrowing the objective to fixture-only runs: the objective is a report for any real commit.)
+- **A failing run may come from a deliberately broken scratch commit.** Behavior that already works has no natural failing run, so requiring red on an earlier commit would leave it unverified forever. Governs R20. (session-settled: user-approved — chosen over requiring red on an earlier commit or a killed mutant: old commits may no longer build, and mutation testing stays deferred.)
+- **Agents draft; only humans approve.** The catalog must stay agent-driven without letting an agent's edit count as approved. Governs R12, R13, R14, R15, R16.
+- **The catalog is an optional companion to LemmaSpec.** A project adopts it one statement at a time, and LemmaSpec without the catalog is unchanged. Governs R25, R26.
 
 ### Requirements
 
@@ -64,7 +67,7 @@ flowchart TB
 
 - R1. The catalog declares four kinds of statement: intent, domain definition, exception and channel. Each statement has required prose text and a stable ID that is unique across every file of the catalog.
 - R2. A domain definition refines one intent and states what a domain term means for the system, such as "a process's next follow-up is the due date of its earliest open task".
-- R3. An exception narrows one definition for named channels.
+- R3. An exception narrows one definition for named channels, either by stating that the definition does not apply there or by stating what holds there instead.
 - R4. A definition applies on every declared channel except the channels named by its approved exceptions.
 
 **Links and files**
@@ -78,68 +81,80 @@ flowchart TB
 
 - R9. An example is an acceptance test in the project's own test code that names the definition or exception it exemplifies and the channels it runs on.
 - R10. The report reads recorded runs, each naming the example, the example's digest at run time, the channel, the commit and the outcome, and failing runs are kept as evidence.
+- R11. The first version reads tagged examples from one test framework, chosen by the first project to adopt the catalog, computes each example's digest, and records every run with its outcome, failures included.
 
 **Approval**
 
-- R11. Agents may draft and change statements and examples, and approval is a separate, explicit step that records the approver, the digest of the approved text, and the digest of each statement the item links to.
-- R12. A statement or example whose current text differs from its approved digest is unapproved.
-- R13. An item is stale when a statement it links to no longer has the digest recorded at the item's last approval or re-confirmation, and it stays stale until a human re-confirms it.
-- R14. Removing an approved statement or example is a change that needs approval, and until it is approved the report treats the item as present with no passing run and names the removal as the reason.
-- R15. Approvals and recorded runs count only when they come from a declared source that the project's agents cannot write to under the owner's identity, and the report treats anything else as missing and says why.
+- R12. Agents may draft and change statements and examples, and approval is a separate, explicit step that records the approver, the digest of the approved text, and the digest of each statement the item links to.
+- R13. A statement or example whose current text differs from its approved digest is unapproved.
+- R14. An item is stale when a statement it links to no longer has the digest recorded at the item's last approval or re-confirmation, and it stays stale until a human re-confirms it.
+- R15. Removing an approved statement or example is a change that needs approval, and until it is approved the report treats the item as present with no passing run and names the removal as the reason.
+- R16. Approvals and recorded runs count only when they come from a declared source that the project's agents cannot write to under the owner's identity, and the report treats anything else as missing and says why.
 
 **Verified-statement report**
 
-- R16. For a given commit, the report gives every intent, definition and exception exactly one standing: verified, unverified, unapproved or stale.
-- R17. A definition or exception is verified when it and its examples are approved as they read now and none is stale, each channel it applies to has at least one example, and every one of those examples failed with its current text and passes at the commit.
-- R18. An intent is verified when it is approved and every definition refining it is verified, and an intent with no definitions is unverified.
-- R19. Every standing other than verified states its reason, such as a missing approval, example, channel or failing run, traced back to the facts it rests on.
-- R20. The same catalog, recorded runs and commit always produce the same report.
-- R21. The report renders for a human reader, showing each statement's prose, links and standing.
+- R17. For a given commit, the report gives every intent, definition and exception exactly one standing: verified, unverified, unapproved or stale.
+- R18. A definition, or an exception that states what holds instead, is verified when it and its examples are approved as they read now and none is stale, each channel it applies to has at least one example, and every one of those examples has failed with its current text and passes at the commit.
+- R19. An exception that states only that a definition does not apply is verified when it is approved and not stale.
+- R20. The failing run that R18 requires may come from any commit, including a scratch commit that deliberately breaks the behavior, and need not come before the passing run.
+- R21. An intent is verified when it is approved and every definition refining it, and every exception narrowing those definitions, is verified, and an intent with no definitions is unverified.
+- R22. Every standing other than verified states its reason, such as a missing approval, example, channel or failing run, traced back to the facts it rests on.
+- R23. The same catalog, recorded runs and commit always produce the same report.
+- R24. The report renders for a human reader, showing each statement's prose, links and standing.
 
 **Adoption**
 
-- R22. A catalog with a single statement produces a useful report, and statements without examples show as unverified without blocking the rest.
-- R23. LemmaSpec stays usable without the catalog, and its core gains no dependency on it.
+- R25. A catalog with a single statement produces a useful report, and statements without examples show as unverified without blocking the rest.
+- R26. LemmaSpec stays usable without the catalog, and its core gains no dependency on it.
 
 ### Acceptance Examples
 
-- AE1. **Covers R17.**
+- AE1. **Covers R18.**
   - **Given:** the definition "next follow-up is the due date of the earliest open task" and its example are approved; the example failed with its current text and passes at the commit on the browser and MCP channels; no exception applies.
   - **When:** the report runs.
   - **Then:** the definition is verified.
-- AE2. **Covers R12, R17.**
+- AE2. **Covers R13, R18.**
   - **Given:** AE1, except that an agent edited the example after its failing run, and the edited example passes.
   - **When:** the report runs.
   - **Then:** the example is unapproved and the definition is not verified.
-- AE3. **Covers R12, R13.**
+- AE3. **Covers R13, R14.**
   - **Given:** the follow-up definition changes from "the next-touch date the consultant sets" to "the due date of the earliest open task".
   - **When:** the report runs.
   - **Then:** the definition is unapproved, and its examples and the exception narrowing it are stale. After a human approves the new definition text, they stay stale until a human re-confirms each.
-- AE4. **Covers R4, R17.**
+- AE4. **Covers R4, R18.**
   - **Given:** an MCP channel is added to the catalog and approved.
   - **When:** the report runs.
-  - **Then:** every definition without an exception for MCP becomes unverified, with the missing MCP example as its reason, until it has an MCP example that failed and then passed.
-- AE5. **Covers R3, R4.**
-  - **Given:** an approved exception "public pages need no principal" narrows the private-data definition for the public channel and has its own approved example that failed and then passed.
+  - **Then:** every definition without an exception for MCP becomes unverified, with the missing MCP example as its reason, until it has an MCP example that has failed and passes.
+- AE5. **Covers R3, R4, R18.**
+  - **Given:** an approved exception "public pages need no principal and show no private data" narrows the private-data definition for the public channel and has its own approved example that has failed and passes.
   - **When:** the report runs.
   - **Then:** the private-data definition needs no example on the public channel, and the exception is verified.
 - AE6. **Covers R7.**
   - **Given:** an exception links to a definition ID that does not exist.
   - **When:** the catalog is checked.
   - **Then:** the check fails with an error naming the unknown reference.
-- AE7. **Covers R18, R22.**
+- AE7. **Covers R21, R25.**
   - **Given:** a catalog holding one approved intent and nothing else.
   - **When:** the report runs.
   - **Then:** the report completes and shows the intent as unverified because no definition refines it.
-- AE8. **Covers R14, R17.**
+- AE8. **Covers R15, R18.**
   - **Given:** the private-data definition has two approved browser examples, one passing and one failing, and an agent deletes the failing one without an approved removal.
   - **When:** the report runs.
   - **Then:** the definition is unverified, and the reason names the removed example.
+- AE9. **Covers R19, R4.**
+  - **Given:** an approved exception states that the follow-up definition does not apply on the public channel, and no public example exists.
+  - **When:** the report runs.
+  - **Then:** the exception is verified by its approval, and the follow-up definition needs no example on the public channel.
+- AE10. **Covers R20.**
+  - **Given:** an MCP tool already returns the next follow-up correctly, and its new approved example passes at every real commit but failed at a scratch commit where that tool was deliberately broken.
+  - **When:** the report runs.
+  - **Then:** the follow-up definition is verified on the MCP channel.
 
 ### Success Criteria
 
-- AE1 through AE8 run as the catalog checker's own fixture and produce the stated standings.
+- AE1 through AE10 run as the catalog checker's own fixture and produce the stated standings.
 - The checker's mutation policies leave no surviving mutants, so every rule and condition is load-bearing for that fixture.
+- On the first project to adopt the catalog, the report at a real commit shows at least one definition verified from that project's own tagged tests and recorded runs, and editing one of those tests turns it unapproved.
 
 ### Scope Boundaries
 
@@ -162,9 +177,9 @@ flowchart TB
 
 ### Dependencies / Assumptions
 
-- The first version needs a run-recording path that keeps failing runs. The existing status producer turns only passing gates into `observed` facts.
+- The existing status producer turns only passing gates into `observed` facts, so the recorder in R11 (one-framework run recording) is new work.
 - The repository owner is the only approver at first.
-- Agents commit under the owner's identity, so the source R15 (trusted approvals and runs) declares must be a step they cannot take, such as CI on a protected branch or a protected path. The owner's commits alone do not qualify. LemmaSpec's basis metadata likewise does not authenticate authorship.
+- Agents commit under the owner's identity, so the source R16 (trusted approvals and runs) declares must be a step they cannot take, such as CI on a protected branch or a protected path. The owner's commits alone do not qualify. LemmaSpec's basis metadata likewise does not authenticate authorship.
 - Test code an example calls outside its digest, such as shared steps, helpers, fixtures and channel drivers, is not protected by approval until the example-digest question below is settled.
 - Cross-file references follow memspec's import model: `use "<path>" as <alias>`, qualified IDs, cycles rejected, and a file imported along two paths loaded once. `alias.id` is only how one catalog file refers into another; artifacts outside the catalog cite the bare ID.
 
@@ -182,9 +197,9 @@ flowchart TB
 <!-- ce-section: work-relationships -->
 ### How This Work Fits Together
 
-This plan covers the intent model and its verified-statement report. The areas below are the current understanding, not a committed roadmap.
+This plan covers the intent model, its verified-statement report, and run recording for one test framework. The areas below are the current understanding, not a committed roadmap.
 
-- **Execution binding:** Depends on this plan's statement and example IDs. It supplies recorded runs, including failures, per test framework and channel.
+- **Execution binding:** Depends on this plan's statement and example IDs and its first-framework recorder. It extends run recording to further test frameworks and channels.
 - **Toolset shape:** Can proceed independently of execution binding. Still to decide: whether the catalog tool lives with LemmaSpec, with the code-fact extractor, or in a merged toolset.
 - **Code tie-in** (change impact, unreached code, channel coverage): Depends on this plan and on code facts. Shares this plan's link direction, with code-level facts pointing up at statements.
 - **Approval UI:** Depends on this plan's approval step and its unapproved and stale standings.
