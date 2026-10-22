@@ -336,3 +336,8 @@ fn lf_and_crlf_copies_of_a_multiline_raw_string_get_the_same_digest() {
     assert_eq!(digest("crlf", &crlf), lf);
     assert_eq!(lf, example_digest(&syn::parse_str(RAW_STRING).unwrap()));
 }
+
+#[test]
+fn a_missing_tests_directory_has_no_examples() {
+    assert_eq!(fixture("no_such_directory"), Ok(Scan::default()));
+}

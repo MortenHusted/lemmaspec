@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fs, path::Path};
+use std::{collections::BTreeMap, fs, io, path::Path};
 
 use syn::{Attribute, Expr, ExprLit, Item, ItemFn, ItemMod, Lit, Meta};
 
@@ -45,13 +45,18 @@ struct Found {
     digest: String,
 }
 
-/// Scan the `*.rs` files directly inside `dir`, in file name order. Tag
-/// problems become issues; an unreadable file, a parse error or two tags
-/// claiming one example ID fail, with locations given as `<file>.rs:<line>`.
+/// Scan the `*.rs` files directly inside `dir`, in file name order. A missing
+/// `dir` has no examples. Tag problems become issues; an unreadable file, a
+/// parse error or two tags claiming one example ID fail, with locations given
+/// as `<file>.rs:<line>`.
 pub fn scan(dir: &Path, catalog: &Catalog) -> Result<Scan, String> {
     let unreadable = |e| format!("cannot read {}: {e}", dir.display());
+    let entries = match fs::read_dir(dir) {
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Scan::default()),
+        entries => entries.map_err(unreadable)?,
+    };
     let mut paths = Vec::new();
-    for entry in fs::read_dir(dir).map_err(unreadable)? {
+    for entry in entries {
         let path = entry.map_err(unreadable)?.path();
         if path.is_file() && path.extension().is_some_and(|extension| extension == "rs") {
             paths.push(path);
