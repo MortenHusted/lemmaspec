@@ -2,6 +2,8 @@
 
 use std::collections::BTreeMap;
 
+pub mod digest;
+pub mod examples;
 pub mod loader;
 pub mod syntax;
 

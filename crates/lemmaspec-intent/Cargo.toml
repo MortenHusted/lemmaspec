@@ -8,6 +8,10 @@ repository = "https://github.com/MortenHusted/lemmaspec"
 
 [dependencies]
 lemmaspec = { path = "../..", version = "0.4.0" }
+proc-macro2 = { version = "1", default-features = false, features = ["span-locations"] }
+quote = { version = "1", default-features = false }
+sha2 = "0.10"
+syn = { version = "3", default-features = false, features = ["full", "parsing", "printing"] }
 
 [package.metadata.dist]
 dist = false
