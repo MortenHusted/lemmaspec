@@ -1,8 +1,3 @@
-//! Finds tagged examples among a project's `cargo test` integration tests.
-//!
-//! An example is a `#[test]` function whose doc comment has the line
-//! `intent: example <id> exemplifies <statement> on <channel>, <channel>`.
-
 use std::{collections::BTreeMap, fs, path::Path};
 
 use syn::{Attribute, Expr, ExprLit, Item, ItemFn, ItemMod, Lit, Meta};
@@ -26,7 +21,6 @@ pub struct Example {
     pub digest: String,
 }
 
-/// A tag that does not make its test an example, and why.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExampleIssue {
     /// `None` when the tag is too malformed to name one.
@@ -43,7 +37,6 @@ pub struct Scan {
     pub issues: Vec<ExampleIssue>,
 }
 
-/// A tag line found on a `#[test]` function.
 struct Found {
     file: String,
     test: String,
@@ -152,7 +145,6 @@ fn is_test(function: &ItemFn) -> bool {
         .any(|attribute| attribute.path().is_ident("test"))
 }
 
-/// Each trimmed doc comment line with its line number.
 fn doc_lines(attributes: &[Attribute]) -> Vec<(usize, String)> {
     let mut lines = Vec::new();
     for attribute in attributes {
@@ -203,9 +195,6 @@ fn is_identifier(word: &str) -> bool {
         && word.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
-/// Why the tag cannot count (R28): its statement is not one an example can
-/// exemplify, or one of its channels is not a channel that statement can
-/// apply on.
 fn cannot_exemplify(catalog: &Catalog, statement: &str, channels: &[String]) -> Option<String> {
     let kind = |id: &str| catalog.statements.get(id).map(|found| &found.kind);
     let scope = match kind(statement) {
@@ -236,15 +225,11 @@ fn cannot_exemplify(catalog: &Catalog, statement: &str, channels: &[String]) -> 
     })
 }
 
-fn described(kind: &StatementKind) -> &'static str {
+fn described(kind: &StatementKind) -> String {
     match kind {
-        StatementKind::Intent => "an intent",
-        StatementKind::Definition { .. } => "a definition",
-        StatementKind::Exception {
-            kind: ExceptionKind::DoesNotApply,
-            ..
-        } => "a does_not_apply exception",
-        StatementKind::Exception { .. } => "a holds_instead exception",
-        StatementKind::Channel => "a channel",
+        StatementKind::Intent => "an intent".into(),
+        StatementKind::Definition { .. } => "a definition".into(),
+        StatementKind::Exception { kind, .. } => format!("a {} exception", kind.as_str()),
+        StatementKind::Channel => "a channel".into(),
     }
 }

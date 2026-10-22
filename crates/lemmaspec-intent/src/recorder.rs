@@ -8,6 +8,7 @@ use std::{
 };
 
 use crate::{
+    digest::DIGEST_VERSION,
     examples::Example,
     identity::Repo,
     runs::{self, Outcome, Run},
@@ -16,7 +17,6 @@ use crate::{
 /// The environment variable that tells an example which channel it runs on.
 pub const CHANNEL_VAR: &str = "LEMMASPEC_INTENT_CHANNEL";
 
-/// Whether a test run exited successfully, and what it printed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunOutput {
     pub success: bool,
@@ -24,20 +24,17 @@ pub struct RunOutput {
     pub output: String,
 }
 
-/// Runs one test of one integration test file on one channel.
 pub trait Runner {
     /// `file` is the test file's stem and `test` its `module::function` path.
     fn run(&mut self, file: &str, test: &str, channel: &str) -> Result<RunOutput, String>;
 }
 
-/// Runs examples with `cargo test` in a package directory.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CargoTest {
     pub dir: PathBuf,
 }
 
 impl CargoTest {
-    /// `cargo test --locked --test <file> -- --exact <test>` with the channel set.
     pub fn command(&self, file: &str, test: &str, channel: &str) -> Command {
         let mut command = Command::new("cargo");
         command
@@ -66,13 +63,9 @@ impl Runner for CargoTest {
     }
 }
 
-/// The source a recording runs against.
 pub trait Source {
-    /// The source identity of the code the examples run on.
     fn identity(&self) -> Result<String, String>;
-    /// The commit the source is based on.
     fn base(&self) -> Result<String, String>;
-    /// The tracked-file diff against `base`, stored with failing runs.
     fn diff_against(&self, base: &str) -> Result<String, String>;
 }
 
@@ -130,7 +123,7 @@ pub fn record(
         recorded.push(Run {
             example: example.id.clone(),
             digest: example.digest.clone(),
-            digest_version: crate::digest::DIGEST_VERSION,
+            digest_version: DIGEST_VERSION,
             channel: channel.clone(),
             source: identity.clone(),
             base: base.clone(),

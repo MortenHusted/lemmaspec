@@ -1,8 +1,3 @@
-//! Versioned SHA-256 digests of statements and examples (`intent-digest/1`).
-//!
-//! Approvals and runs store [`DIGEST_VERSION`] next to every digest, so a
-//! change to either rendering below must bump it.
-
 use proc_macro2::{Delimiter, Group, Spacing, TokenStream, TokenTree};
 use quote::ToTokens;
 use sha2::{Digest, Sha256};
@@ -97,7 +92,6 @@ fn render(stream: TokenStream, tokens: &mut Vec<String>) {
     }
 }
 
-/// The text of a `[doc = "..."]` attribute body.
 fn doc_text(group: &Group) -> Option<String> {
     if group.delimiter() != Delimiter::Bracket {
         return None;

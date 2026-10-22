@@ -18,21 +18,14 @@ use crate::{
     loader::{APPROVALS_FILE, RUNS_FILE},
 };
 
-/// The git work tree a catalog directory lives in.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Repo {
-    /// The work tree's top-level directory.
     pub root: PathBuf,
-    /// The catalog directory relative to `root`, with `/` separators and a
-    /// trailing `/` unless it is `root` itself.
-    catalog: String,
-    /// The catalog's run ledger and approval log, relative to `root` with `/`
-    /// separators.
-    excluded: [String; 2],
+    catalog_prefix: String,
+    ledger_and_log_paths: [String; 2],
 }
 
 impl Repo {
-    /// The work tree holding the catalog directory `catalog`.
     pub fn of_catalog(catalog: &Path) -> Result<Repo, String> {
         let output = git(catalog, &["rev-parse", "--show-toplevel", "--show-prefix"])?;
         let mut lines = output.lines();
@@ -40,15 +33,15 @@ impl Repo {
         let prefix = lines.next().unwrap_or_default();
         Ok(Repo {
             root: root.into(),
-            catalog: prefix.into(),
-            excluded: [RUNS_FILE, APPROVALS_FILE].map(|file| format!("{prefix}{file}")),
+            catalog_prefix: prefix.into(),
+            ledger_and_log_paths: [RUNS_FILE, APPROVALS_FILE].map(|file| format!("{prefix}{file}")),
         })
     }
 
     /// The catalog file `name`, such as its approval log, as `commit` has it;
     /// `None` when that commit has no such file.
     pub fn catalog_file_at(&self, commit: &str, name: &str) -> Result<Option<String>, String> {
-        let path = format!("{}{name}", self.catalog);
+        let path = format!("{}{name}", self.catalog_prefix);
         let listed = git(&self.root, &["ls-tree", "--name-only", commit, "--", &path])?;
         if listed.is_empty() {
             return Ok(None);
@@ -105,7 +98,6 @@ impl Repo {
         ))
     }
 
-    /// The identity of `commit`'s tree.
     pub fn commit_identity(&self, commit: &str) -> Result<String, String> {
         let listing = git(&self.root, &["ls-tree", "-r", "-z", commit])?;
         let mut entries = Vec::new();
@@ -124,14 +116,12 @@ impl Repo {
         Ok(identity(entries))
     }
 
-    /// The full ID of the commit HEAD points to.
     pub fn head(&self) -> Result<String, String> {
         Ok(git(&self.root, &["rev-parse", "--verify", "HEAD"])?
             .trim()
             .to_string())
     }
 
-    /// Whether the working tree has exactly HEAD's identity.
     pub fn matches_head(&self) -> Result<bool, String> {
         Ok(self.working_tree_identity()? == self.commit_identity("HEAD")?)
     }
@@ -140,7 +130,7 @@ impl Repo {
     /// without the run ledger and the approval log.
     pub fn diff(&self, base: &str) -> Result<String, String> {
         let excluded = self
-            .excluded
+            .ledger_and_log_paths
             .each_ref()
             .map(|path| format!(":(exclude){path}"));
         let mut args = vec!["diff", "--no-color", "--no-ext-diff", base, "--", "."];
@@ -149,7 +139,9 @@ impl Repo {
     }
 
     fn is_excluded(&self, path: &str) -> bool {
-        self.excluded.iter().any(|excluded| excluded == path)
+        self.ledger_and_log_paths
+            .iter()
+            .any(|excluded| excluded == path)
     }
 
     /// The blob ID of a symlink's own text, which `git hash-object <path>`
@@ -169,7 +161,6 @@ impl Repo {
     }
 }
 
-/// One `<mode> <blob> <path>` line per file in path order, hashed.
 fn identity<'a>(entries: impl IntoIterator<Item = (&'a str, &'a str, &'a str)>) -> String {
     let lines: BTreeMap<&str, String> = entries
         .into_iter()

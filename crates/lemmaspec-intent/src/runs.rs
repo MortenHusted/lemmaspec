@@ -1,8 +1,4 @@
-//! The run ledger: `run { ... }` blocks in `.intent` syntax, read by fixed
-//! path and only ever appended to.
-
 use std::{
-    collections::BTreeMap,
     fs::OpenOptions,
     io::{self, Read, Seek, SeekFrom, Write},
     path::Path,
@@ -10,7 +6,7 @@ use std::{
 
 use crate::{
     loader::{Reader, RUNS_FILE},
-    syntax::{parse as parse_file, Field, Value},
+    syntax::{parse as parse_file, quote, Field, Value},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,9 +26,18 @@ impl Outcome {
             Outcome::Skip => "skip",
         }
     }
+
+    pub fn parse(text: &str) -> Option<Outcome> {
+        match text {
+            "pass" => Some(Outcome::Pass),
+            "fail" => Some(Outcome::Fail),
+            "error" => Some(Outcome::Error),
+            "skip" => Some(Outcome::Skip),
+            _ => None,
+        }
+    }
 }
 
-/// One recorded run of an example on a channel.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Run {
     pub example: String,
@@ -40,7 +45,6 @@ pub struct Run {
     pub digest: String,
     pub digest_version: u64,
     pub channel: String,
-    /// The source identity the example ran against.
     pub source: String,
     /// The commit HEAD pointed to, abbreviated or full.
     pub base: String,
@@ -76,23 +80,8 @@ pub fn parse(source: &str, path: &str) -> Result<Vec<Run>, String> {
         if block.name.is_some() {
             return Err(format!("{at}: a run block takes no name"));
         }
-        let mut fields = BTreeMap::new();
-        for field in &block.fields {
-            let at = format!("{path}:{}", field.line);
-            if !FIELDS.contains(&field.name.as_str()) {
-                return Err(format!("{at}: run has no field {}", field.name));
-            }
-            if fields.insert(field.name.as_str(), field).is_some() {
-                return Err(format!("{at}: duplicate field {} in run", field.name));
-            }
-        }
-        let required = |name: &str| {
-            fields
-                .get(name)
-                .copied()
-                .ok_or_else(|| format!("{at}: run needs {name}"))
-        };
-        let identifier = |name: &str| match required(name)? {
+        let fields = block.fields_by_name(path, &FIELDS, "run", "run")?;
+        let identifier = |name: &str| match fields.required(name)? {
             Field {
                 value: Value::Ident(value),
                 ..
@@ -109,19 +98,17 @@ pub fn parse(source: &str, path: &str) -> Result<Vec<Run>, String> {
                 field.line, field.name
             )),
         };
-        let outcome_field = required("outcome")?;
-        let outcome = match &outcome_field.value {
-            Value::Ident(name) if name == "pass" => Outcome::Pass,
-            Value::Ident(name) if name == "fail" => Outcome::Fail,
-            Value::Ident(name) if name == "error" => Outcome::Error,
-            Value::Ident(name) if name == "skip" => Outcome::Skip,
-            other => {
-                return Err(format!(
-                    "{path}:{}: unknown outcome {other}; expected pass, fail, error or skip",
-                    outcome_field.line
-                ))
-            }
-        };
+        let outcome_field = fields.required("outcome")?;
+        let outcome = outcome_field
+            .value
+            .as_ident()
+            .and_then(Outcome::parse)
+            .ok_or_else(|| {
+                format!(
+                    "{path}:{}: unknown outcome {}; expected pass, fail, error or skip",
+                    outcome_field.line, outcome_field.value
+                )
+            })?;
         let diff = match (fields.get("diff"), outcome) {
             (Some(field), Outcome::Fail) => Some(string(field)?),
             (None, Outcome::Fail) => return Err(format!("{at}: a failing run needs diff")),
@@ -133,7 +120,7 @@ pub fn parse(source: &str, path: &str) -> Result<Vec<Run>, String> {
             }
             (None, _) => None,
         };
-        let version = required("digest_version")?;
+        let version = fields.required("digest_version")?;
         let Value::Int(digest_version) = version.value else {
             return Err(format!(
                 "{path}:{}: digest_version must be an integer",
@@ -142,11 +129,11 @@ pub fn parse(source: &str, path: &str) -> Result<Vec<Run>, String> {
         };
         runs.push(Run {
             example: identifier("example")?,
-            digest: string(required("digest")?)?,
+            digest: string(fields.required("digest")?)?,
             digest_version,
             channel: identifier("channel")?,
-            source: string(required("source")?)?,
-            base: string(required("base")?)?,
+            source: string(fields.required("source")?)?,
+            base: string(fields.required("base")?)?,
             outcome,
             diff,
         });
@@ -156,11 +143,7 @@ pub fn parse(source: &str, path: &str) -> Result<Vec<Run>, String> {
 
 /// The catalog's own ledger, [`RUNS_FILE`]; a missing ledger holds no runs.
 pub fn read(reader: &dyn Reader) -> Result<Vec<Run>, String> {
-    match reader.read(RUNS_FILE) {
-        Ok(source) => parse(&source, RUNS_FILE),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Vec::new()),
-        Err(e) => Err(format!("{RUNS_FILE}: {e}")),
-    }
+    parse(&reader.read_or_empty(RUNS_FILE)?, RUNS_FILE)
 }
 
 /// Append `runs` to the ledger at `path`, creating it if needed. The existing
@@ -204,21 +187,4 @@ fn render(run: &Run) -> String {
     }
     text.push_str("}\n");
     text
-}
-
-/// A string literal using only the escapes the `.intent` lexer reads.
-fn quote(text: &str) -> String {
-    let mut quoted = String::from('"');
-    for c in text.chars() {
-        match c {
-            '"' => quoted.push_str("\\\""),
-            '\\' => quoted.push_str("\\\\"),
-            '\n' => quoted.push_str("\\n"),
-            '\r' => quoted.push_str("\\r"),
-            '\t' => quoted.push_str("\\t"),
-            c => quoted.push(c),
-        }
-    }
-    quoted.push('"');
-    quoted
 }

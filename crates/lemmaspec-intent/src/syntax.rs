@@ -1,9 +1,4 @@
-//! Hand-written recursive-descent parser for `.intent` files.
-//!
-//! A catalog file is `catalog NAME { use* block* }`; any other file is a
-//! sequence of top-level blocks, such as `approval { ... }` and `run { ... }`.
-
-use std::fmt;
+use std::{collections::BTreeMap, fmt};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct File {
@@ -29,6 +24,56 @@ pub struct Block {
     pub line: usize,
 }
 
+impl Block {
+    /// The block's fields by name. An unknown field fails as
+    /// `path:line: <subject> has no field <name>`, a repeated one as
+    /// `path:line: duplicate field <name> in <duplicate_in>`.
+    pub(crate) fn fields_by_name(
+        &self,
+        path: &str,
+        allowed: &[&str],
+        subject: &str,
+        duplicate_in: &str,
+    ) -> Result<Fields<'_>, String> {
+        let mut by_name = BTreeMap::new();
+        for field in &self.fields {
+            let at = format!("{path}:{}", field.line);
+            if !allowed.contains(&field.name.as_str()) {
+                return Err(format!("{at}: {subject} has no field {}", field.name));
+            }
+            if by_name.insert(field.name.as_str(), field).is_some() {
+                return Err(format!(
+                    "{at}: duplicate field {} in {duplicate_in}",
+                    field.name
+                ));
+            }
+        }
+        Ok(Fields {
+            by_name,
+            at: format!("{path}:{}", self.line),
+            subject: subject.into(),
+        })
+    }
+}
+
+pub(crate) struct Fields<'a> {
+    by_name: BTreeMap<&'a str, &'a Field>,
+    at: String,
+    subject: String,
+}
+
+impl<'a> Fields<'a> {
+    pub(crate) fn get(&self, name: &str) -> Option<&'a Field> {
+        self.by_name.get(name).copied()
+    }
+
+    /// Fails as `path:line: <subject> needs <name>`, at the block's line.
+    pub(crate) fn required(&self, name: &str) -> Result<&'a Field, String> {
+        self.get(name)
+            .ok_or_else(|| format!("{}: {} needs {name}", self.at, self.subject))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Field {
     pub name: String,
@@ -44,8 +89,16 @@ pub enum Value {
     Str(String),
     Int(u64),
     List(Vec<Value>),
-    /// `key: value`, only inside lists.
     Entry(String, Box<Value>),
+}
+
+impl Value {
+    pub(crate) fn as_ident(&self) -> Option<&str> {
+        match self {
+            Value::Ident(word) => Some(word),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for Value {
@@ -92,20 +145,20 @@ pub fn parse(source: &str, path: &str) -> Result<File, String> {
         blocks: Vec::new(),
     };
     if parser.at_word("catalog") {
-        parser.position += 1;
+        parser.advance();
         file.catalog = Some(parser.name("catalog name")?);
         parser.expect('{')?;
         while parser.at_word("use") {
             let line = parser.line();
-            parser.position += 1;
+            parser.advance();
             let Some(Token::Str(path)) = parser.peek().cloned() else {
                 return Err(parser.unexpected("import path string"));
             };
-            parser.position += 1;
+            parser.advance();
             if !parser.at_word("as") {
                 return Err(parser.unexpected("as"));
             }
-            parser.position += 1;
+            parser.advance();
             let alias = parser.name("import alias")?;
             file.imports.push(Import { path, alias, line });
         }
@@ -136,6 +189,10 @@ struct Parser<'a> {
 impl Parser<'_> {
     fn peek(&self) -> Option<&Token> {
         self.tokens.get(self.position).map(|(token, _)| token)
+    }
+
+    fn advance(&mut self) {
+        self.position += 1;
     }
 
     fn line(&self) -> usize {
@@ -172,7 +229,7 @@ impl Parser<'_> {
         if !self.at(punct) {
             return Err(self.unexpected(&format!("'{punct}'")));
         }
-        self.position += 1;
+        self.advance();
         Ok(())
     }
 
@@ -180,7 +237,7 @@ impl Parser<'_> {
         match self.peek() {
             Some(Token::Word(word)) if !word.contains('.') => {
                 let word = word.clone();
-                self.position += 1;
+                self.advance();
                 Ok(word)
             }
             _ => Err(self.unexpected(what)),
@@ -215,7 +272,7 @@ impl Parser<'_> {
 
     fn value(&mut self) -> Result<Value, String> {
         if self.at('[') {
-            self.position += 1;
+            self.advance();
             let mut items = Vec::new();
             while !self.at(']') {
                 let item = self.value()?;
@@ -223,7 +280,7 @@ impl Parser<'_> {
                     let Value::Ident(key) = item else {
                         return Err(self.error("a list entry key must be an identifier"));
                     };
-                    self.position += 1;
+                    self.advance();
                     items.push(Value::Entry(key, Box::new(self.value()?)));
                 } else {
                     items.push(item);
@@ -231,7 +288,7 @@ impl Parser<'_> {
                 if !self.at(',') {
                     break;
                 }
-                self.position += 1;
+                self.advance();
             }
             self.expect(']')?;
             return Ok(Value::List(items));
@@ -245,7 +302,7 @@ impl Parser<'_> {
             },
             _ => return Err(self.unexpected("a value")),
         };
-        self.position += 1;
+        self.advance();
         Ok(value)
     }
 }
@@ -295,6 +352,22 @@ fn lex(source: &str, path: &str) -> Result<Vec<(Token, usize)>, String> {
         }
     }
     Ok(tokens)
+}
+
+pub(crate) fn quote(text: &str) -> String {
+    let mut quoted = String::from('"');
+    for c in text.chars() {
+        match c {
+            '"' => quoted.push_str("\\\""),
+            '\\' => quoted.push_str("\\\\"),
+            '\n' => quoted.push_str("\\n"),
+            '\r' => quoted.push_str("\\r"),
+            '\t' => quoted.push_str("\\t"),
+            c => quoted.push(c),
+        }
+    }
+    quoted.push('"');
+    quoted
 }
 
 fn word_token(word: String) -> Result<Token, String> {

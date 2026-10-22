@@ -1,11 +1,3 @@
-//! Projects a catalog, its examples, approval log and run ledgers into
-//! LemmaSpec evidence for the bundled checker (KTD9, KTD10).
-//!
-//! Every fact is a snapshot of the file it comes from, identified by the
-//! digest of that file, and fact IDs are `<relation>_<n>` in sorted order, so
-//! the same inputs always give the same evidence. Approvals and runs recorded
-//! under another digest version are left out.
-
 use std::{
     collections::BTreeMap,
     fs, io,
@@ -17,33 +9,38 @@ use lemmaspec::{
 };
 
 use crate::{
-    approvals::{Entry, ItemKind, Log},
+    approvals::{Entry, Log},
     digest::{sha256, statement_digest, DIGEST_VERSION},
     examples::{scan, Scan},
     loader::{load, DirReader, APPROVALS_FILE, RUNS_FILE},
     runs::{self, Run},
-    Catalog, StatementKind,
+    Catalog, ItemKind, StatementKind,
 };
 
-/// A run ledger and the path its facts cite.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ledger {
     pub path: String,
     pub runs: Vec<Run>,
 }
 
-/// Everything the evidence is projected from.
+impl Ledger {
+    pub fn evaluated_runs(&self) -> impl Iterator<Item = &Run> {
+        self.runs
+            .iter()
+            .filter(|run| run.digest_version == DIGEST_VERSION)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Inputs {
     pub catalog: Catalog,
     pub examples: Scan,
     pub log: Log,
-    /// The catalog ledger first, then each extra ledger.
-    pub ledgers: Vec<Ledger>,
-    dir: PathBuf,
+    pub catalog_ledger: Ledger,
+    pub extra_ledgers: Vec<Ledger>,
+    pub(crate) dir: PathBuf,
     tests: PathBuf,
-    /// Each cited file with the digest of its contents.
-    digests: BTreeMap<String, String>,
+    digest_by_cited_path: BTreeMap<String, String>,
 }
 
 impl Inputs {
@@ -55,12 +52,13 @@ impl Inputs {
         let catalog = load(&reader)?;
         let examples = scan(tests, &catalog)?;
         let log = Log::read(&reader)?;
-        let mut all = vec![Ledger {
+        let catalog_ledger = Ledger {
             path: cited(&dir.join(RUNS_FILE)),
             runs: runs::read(&reader)?,
-        }];
+        };
+        let mut extra_ledgers = Vec::new();
         for path in ledgers {
-            all.push(Ledger {
+            extra_ledgers.push(Ledger {
                 path: cited(path),
                 runs: runs::parse(&read_or_empty(path)?, &cited(path))?,
             });
@@ -69,10 +67,11 @@ impl Inputs {
             catalog,
             examples,
             log,
-            ledgers: all,
+            catalog_ledger,
+            extra_ledgers,
             dir: dir.into(),
             tests: tests.into(),
-            digests: BTreeMap::new(),
+            digest_by_cited_path: BTreeMap::new(),
         };
         let mut files: Vec<PathBuf> = inputs
             .catalog
@@ -94,7 +93,9 @@ impl Inputs {
         for file in files {
             match fs::read_to_string(&file) {
                 Ok(text) => {
-                    inputs.digests.insert(cited(&file), sha256(&text));
+                    inputs
+                        .digest_by_cited_path
+                        .insert(cited(&file), sha256(&text));
                 }
                 Err(e) if e.kind() == io::ErrorKind::NotFound => {}
                 Err(e) => return Err(format!("{}: {e}", file.display())),
@@ -124,14 +125,17 @@ impl Inputs {
             .filter(|(_, entry)| entry.digest_version == DIGEST_VERSION)
     }
 
-    /// A snapshot of the cited file, identified by the digest of its contents.
+    /// The catalog ledger, then each extra ledger in the order given.
+    pub fn ledgers(&self) -> impl Iterator<Item = &Ledger> {
+        std::iter::once(&self.catalog_ledger).chain(&self.extra_ledgers)
+    }
+
     fn snapshot(&self, path: String) -> EvidenceBasis {
-        let digest = self.digests[&path].clone();
+        let digest = self.digest_by_cited_path[&path].clone();
         snapshot(path, digest)
     }
 }
 
-/// A file's text; a missing file reads as empty.
 pub(crate) fn read_or_empty(path: &Path) -> Result<String, String> {
     match fs::read_to_string(path) {
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(String::new()),
@@ -143,7 +147,6 @@ fn test_path(tests: &Path, stem: &str) -> PathBuf {
     tests.join(format!("{stem}.rs"))
 }
 
-/// A path as evidence and reports cite it, with `/` separators.
 fn cited(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
@@ -156,7 +159,6 @@ fn snapshot(source: String, identity: String) -> EvidenceBasis {
     }
 }
 
-/// What the target identity fact cites: the tracked files as they are now.
 const WORKING_TREE: &str = "working tree";
 
 /// The evidence for `inputs` evaluated at the source identity `target`, with
@@ -210,7 +212,7 @@ pub fn project(inputs: &Inputs, target: &str) -> Artifact {
             source: Some(basis.source.clone()),
             doc: None,
         });
-        facts.add(&basis, "item", &[id, "example"]);
+        facts.add(&basis, "item", &[id, ItemKind::Example.as_str()]);
         facts.add(&basis, "current_digest", &[id, &example.digest]);
         facts.add(&basis, "exemplifies", &[id, &example.statement]);
         for channel in &example.channels {
@@ -265,12 +267,8 @@ pub fn project(inputs: &Inputs, target: &str) -> Artifact {
         }
         judged.push(entry.item.clone());
     }
-    for ledger in &inputs.ledgers {
-        let runs: Vec<&Run> = ledger
-            .runs
-            .iter()
-            .filter(|run| run.digest_version == DIGEST_VERSION)
-            .collect();
+    for ledger in inputs.ledgers() {
+        let runs: Vec<&Run> = ledger.evaluated_runs().collect();
         if runs.is_empty() {
             continue;
         }
@@ -325,9 +323,15 @@ fn symbol(value: &str) -> FactValue {
     FactValue::Symbol(value.into())
 }
 
-/// Facts as `(relation, args, basis)`, numbered once sorted.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct Fact {
+    relation: String,
+    args: Vec<FactValue>,
+    basis: EvidenceBasis,
+}
+
 #[derive(Default)]
-struct Facts(Vec<(String, Vec<FactValue>, EvidenceBasis)>);
+struct Facts(Vec<Fact>);
 
 impl Facts {
     fn add(&mut self, basis: &EvidenceBasis, relation: &str, args: &[&str]) {
@@ -336,30 +340,39 @@ impl Facts {
     }
 
     fn push(&mut self, basis: &EvidenceBasis, relation: &str, args: Vec<FactValue>) {
-        self.0.push((relation.into(), args, basis.clone()));
+        self.0.push(Fact {
+            relation: relation.into(),
+            args,
+            basis: basis.clone(),
+        });
     }
 
-    /// Each fact once, as `<relation>_<n>` in sorted order.
     fn declarations(mut self) -> Vec<FactDecl> {
         self.0.sort();
         self.0.dedup();
         let mut counts: BTreeMap<String, usize> = BTreeMap::new();
         self.0
             .into_iter()
-            .map(|(relation, args, basis)| {
-                let count = counts.entry(relation.clone()).or_default();
-                let id = format!("{relation}_{count}");
-                *count += 1;
-                FactDecl {
-                    id,
-                    relation,
-                    args,
-                    confidence: 1.0,
-                    provenance: vec![basis.source.clone()],
-                    basis: Some(basis),
-                    doc: None,
-                }
-            })
+            .map(
+                |Fact {
+                     relation,
+                     args,
+                     basis,
+                 }| {
+                    let count = counts.entry(relation.clone()).or_default();
+                    let id = format!("{relation}_{count}");
+                    *count += 1;
+                    FactDecl {
+                        id,
+                        relation,
+                        args,
+                        confidence: 1.0,
+                        provenance: vec![basis.source.clone()],
+                        basis: Some(basis),
+                        doc: None,
+                    }
+                },
+            )
             .collect()
     }
 }

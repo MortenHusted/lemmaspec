@@ -1,11 +1,6 @@
-//! The verified-statement report: projected evidence bound to the bundled
-//! checker, read back as standings, reasons and changes awaiting approval,
-//! and rendered for a reader. Only files and git objects are read; no
-//! project code runs (KTD11).
-
 use std::{
     collections::{BTreeMap, BTreeSet},
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 use lemmaspec::{
@@ -20,13 +15,11 @@ use crate::{
     loader::{APPROVALS_FILE, RUNS_FILE},
     project::{project, read_or_empty, Inputs},
     runs::{self, Outcome},
-    StatementKind, CHECKER,
+    ItemKind, StatementKind, CHECKER,
 };
 
 pub struct Options {
-    /// The catalog directory.
     pub dir: PathBuf,
-    /// The directory of tagged integration tests.
     pub tests: PathBuf,
     /// Run ledgers read in addition to the catalog ledger.
     pub ledgers: Vec<PathBuf>,
@@ -42,7 +35,6 @@ pub struct Report {
     /// Whether an expectation of the bound evidence is open, as one is while
     /// anything awaits approval.
     pub pending: bool,
-    /// Each intent, definition and exception with its standing.
     pub standings: BTreeMap<String, String>,
     /// The evaluated source identity: the working tree's.
     pub target: String,
@@ -53,10 +45,11 @@ pub fn report(options: &Options) -> Result<Report, String> {
     let repo = Repo::of_catalog(&options.dir)?;
     let target = repo.working_tree_identity()?;
     let head = repo.head()?;
-    let since = match &options.base {
-        Some(base) => Some(since(&repo, base, &options.dir, &inputs)?),
-        None => None,
-    };
+    let since = options
+        .base
+        .as_deref()
+        .map(|base| since(&repo, base, &inputs))
+        .transpose()?;
     let header = if repo.commit_identity(&head)? == target {
         format!("Source identity `{target}` matches the tree of HEAD commit `{head}`.")
     } else {
@@ -86,8 +79,6 @@ pub fn report(options: &Options) -> Result<Report, String> {
 }
 
 impl Report {
-    /// The bound evidence rendered by LemmaSpec's HTML renderer for the
-    /// evaluated source identity.
     pub fn html(&self, context: Option<&SourceContext>) -> Result<String, String> {
         let projection = project_parsed_artifact(&self.bound).map_err(|e| e.to_string())?;
         Ok(render_projection_html_with_context(
@@ -99,16 +90,17 @@ impl Report {
     }
 }
 
-/// What the walk of the bound evidence derived, with the checker's labels
-/// for its reasons.
+struct Reason {
+    reason: String,
+    subject: String,
+}
+
 #[derive(Default)]
 struct Found {
     standings: BTreeMap<String, String>,
     kinds: BTreeMap<String, String>,
-    /// Each judged item's `(reason, subject)` pairs.
-    reasons: BTreeMap<String, Vec<(String, String)>>,
-    /// Each item awaiting approval with its `(reason, subject)` pairs.
-    awaiting: BTreeMap<String, Vec<(String, String)>>,
+    reasons: BTreeMap<String, Vec<Reason>>,
+    awaiting: BTreeMap<String, Vec<Reason>>,
     labels: BTreeMap<String, String>,
 }
 
@@ -123,7 +115,7 @@ impl Found {
             ..Found::default()
         };
         let mut awaiting = BTreeSet::new();
-        let mut why: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
+        let mut why: BTreeMap<String, Vec<Reason>> = BTreeMap::new();
         for fact in &walk.facts {
             match (fact.relation.as_str(), fact.args.as_slice()) {
                 ("standing", [item, standing]) => {
@@ -132,22 +124,27 @@ impl Found {
                 ("present", [item, kind]) => {
                     found.kinds.insert(item.clone(), kind.clone());
                 }
-                ("reason", [item, reason, subject]) => found
-                    .reasons
-                    .entry(item.clone())
-                    .or_default()
-                    .push((reason.clone(), subject.clone())),
+                ("reason", [item, reason, subject]) => {
+                    found.reasons.entry(item.clone()).or_default().push(Reason {
+                        reason: reason.clone(),
+                        subject: subject.clone(),
+                    })
+                }
                 ("awaiting_approval", [item]) => {
                     awaiting.insert(item.clone());
                 }
-                ("approval_reason", [item, reason, subject]) => why
-                    .entry(item.clone())
-                    .or_default()
-                    .push((reason.clone(), subject.clone())),
-                ("stale_link", [item, target]) => why
-                    .entry(item.clone())
-                    .or_default()
-                    .push(("linked_statement_changed".into(), target.clone())),
+                ("approval_reason", [item, reason, subject]) => {
+                    why.entry(item.clone()).or_default().push(Reason {
+                        reason: reason.clone(),
+                        subject: subject.clone(),
+                    })
+                }
+                ("stale_link", [item, target]) => {
+                    why.entry(item.clone()).or_default().push(Reason {
+                        reason: "linked_statement_changed".into(),
+                        subject: target.clone(),
+                    })
+                }
                 _ => {}
             }
         }
@@ -165,19 +162,19 @@ impl Found {
         self.kinds.get(item).map_or("item", String::as_str)
     }
 
-    /// A reason in the checker's words, naming its subject unless that is
-    /// the item itself.
-    fn describe(&self, item: &str, reason: &str, subject: &str) -> String {
-        let label = self.labels.get(reason).map_or(reason, String::as_str);
-        if subject == item {
+    fn describe(&self, item: &str, reason: &Reason) -> String {
+        let label = self
+            .labels
+            .get(&reason.reason)
+            .map_or(reason.reason.as_str(), String::as_str);
+        if reason.subject == item {
             label.to_string()
         } else {
-            format!("{label} (`{subject}`)")
+            format!("{label} (`{}`)", reason.subject)
         }
     }
 }
 
-/// Every change awaiting approval (R16).
 fn awaiting(found: &Found) -> String {
     let mut out = String::from("## Awaiting approval\n\n");
     if found.awaiting.is_empty() {
@@ -186,7 +183,7 @@ fn awaiting(found: &Found) -> String {
     for (item, reasons) in &found.awaiting {
         let reasons: Vec<String> = reasons
             .iter()
-            .map(|(reason, subject)| found.describe(item, reason, subject))
+            .map(|reason| found.describe(item, reason))
             .collect();
         out.push_str(&format!(
             "- `{item}` ({}): {}\n",
@@ -197,8 +194,6 @@ fn awaiting(found: &Found) -> String {
     out
 }
 
-/// Every intent, definition and exception with its prose, links, standing
-/// and reasons (R17, R22, R24), in ID order.
 fn statements(inputs: &Inputs, found: &Found) -> String {
     let mut blocks = vec![String::from("## Statements\n")];
     if found.standings.is_empty() {
@@ -240,13 +235,15 @@ fn statements(inputs: &Inputs, found: &Found) -> String {
                     block.push_str(&quote(text));
                 }
                 block.push_str("- File: removed from the catalog; its approval stands until a removal is approved\n");
-                let link = if kind == "definition" {
-                    "Refines"
-                } else {
-                    "Narrows"
-                };
-                for target in entry.into_iter().flat_map(|entry| entry.links.keys()) {
-                    block.push_str(&format!("- {link}: `{target}`\n"));
+                if let Some(entry) = entry {
+                    let link = if entry.kind == ItemKind::Definition {
+                        "Refines"
+                    } else {
+                        "Narrows"
+                    };
+                    for target in entry.links.keys() {
+                        block.push_str(&format!("- {link}: `{target}`\n"));
+                    }
                 }
             }
         }
@@ -260,18 +257,14 @@ fn statements(inputs: &Inputs, found: &Found) -> String {
         if !examples.is_empty() {
             block.push_str(&format!("- Examples: {}\n", examples.join("; ")));
         }
-        for (reason, subject) in found.reasons.get(id).into_iter().flatten() {
-            block.push_str(&format!(
-                "- Reason: {}\n",
-                found.describe(id, reason, subject)
-            ));
+        for reason in found.reasons.get(id).into_iter().flatten() {
+            block.push_str(&format!("- Reason: {}\n", found.describe(id, reason)));
         }
         blocks.push(block);
     }
     blocks.join("\n")
 }
 
-/// Tagged tests that do not count as examples, with why (R28).
 fn ignored(inputs: &Inputs) -> Option<String> {
     if inputs.examples.issues.is_empty() {
         return None;
@@ -291,8 +284,6 @@ fn ignored(inputs: &Inputs) -> Option<String> {
     Some(out)
 }
 
-/// Approvals and runs recorded under another digest version, which the
-/// evidence leaves out (KTD4).
 fn not_evaluated(inputs: &Inputs) -> Option<String> {
     let mut lines = Vec::new();
     for (index, entry) in inputs.log.entries.iter().enumerate() {
@@ -306,7 +297,7 @@ fn not_evaluated(inputs: &Inputs) -> Option<String> {
             ));
         }
     }
-    for ledger in &inputs.ledgers {
+    for ledger in inputs.ledgers() {
         for run in &ledger.runs {
             if run.digest_version != DIGEST_VERSION {
                 lines.push(format!(
@@ -319,11 +310,7 @@ fn not_evaluated(inputs: &Inputs) -> Option<String> {
     (!lines.is_empty()).then(|| format!("## Not evaluated\n\n{}", lines.concat()))
 }
 
-/// The approvals and failing runs recorded in the catalog since `base`
-/// (R27): whatever the catalog files hold beyond their content at `base`, or
-/// a note that a file was altered when that content is not a byte prefix of
-/// the current one.
-fn since(repo: &Repo, base: &str, dir: &Path, inputs: &Inputs) -> Result<String, String> {
+fn since(repo: &Repo, base: &str, inputs: &Inputs) -> Result<String, String> {
     let at_base = |name: &str| -> Result<String, String> {
         Ok(repo.catalog_file_at(base, name)?.unwrap_or_default())
     };
@@ -332,7 +319,7 @@ fn since(repo: &Repo, base: &str, dir: &Path, inputs: &Inputs) -> Result<String,
     };
     let mut out = format!("## Since base `{base}`\n\n### Approvals\n\n");
     let then = at_base(APPROVALS_FILE)?;
-    if read_or_empty(&dir.join(APPROVALS_FILE))?.starts_with(&then) {
+    if read_or_empty(&inputs.dir.join(APPROVALS_FILE))?.starts_with(&then) {
         let before = Log::parse(&then)
             .map_err(|e| format!("{base}:{e}"))?
             .entries
@@ -363,9 +350,10 @@ fn since(repo: &Repo, base: &str, dir: &Path, inputs: &Inputs) -> Result<String,
     }
     out.push_str("\n### Failing runs\n\n");
     let then = at_base(RUNS_FILE)?;
-    if read_or_empty(&dir.join(RUNS_FILE))?.starts_with(&then) {
+    if read_or_empty(&inputs.dir.join(RUNS_FILE))?.starts_with(&then) {
         let before = runs::parse(&then, &format!("{base}:{RUNS_FILE}"))?.len();
-        let failures: Vec<String> = inputs.ledgers[0]
+        let failures: Vec<String> = inputs
+            .catalog_ledger
             .runs
             .iter()
             .skip(before)
@@ -399,7 +387,6 @@ fn none_or(text: String) -> String {
     }
 }
 
-/// A code fence longer than any run of backticks in `text`.
 fn fence(text: &str) -> String {
     let longest = text.split(|c| c != '`').map(str::len).max().unwrap_or(0);
     "`".repeat(longest.max(2) + 1)

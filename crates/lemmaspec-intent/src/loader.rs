@@ -1,5 +1,3 @@
-//! Loads the catalog from its fixed root and checks its imports and links.
-
 use std::{
     collections::BTreeMap,
     fs, io,
@@ -8,7 +6,7 @@ use std::{
 
 use crate::{
     syntax::{parse, Block, Field, File, Value},
-    Catalog, ExceptionKind, Statement, StatementKind,
+    Catalog, ExceptionKind, ItemKind, Statement, StatementKind,
 };
 
 pub const ROOT_FILE: &str = "catalog.intent";
@@ -20,6 +18,14 @@ pub trait Reader {
     fn read(&self, path: &str) -> io::Result<String>;
     /// Every file under the catalog directory.
     fn list(&self) -> io::Result<Vec<String>>;
+
+    /// A missing file reads as empty; any other error reads `path: error`.
+    fn read_or_empty(&self, path: &str) -> Result<String, String> {
+        match self.read(path) {
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(String::new()),
+            read => read.map_err(|e| format!("{path}: {e}")),
+        }
+    }
 }
 
 impl Reader for BTreeMap<String, String> {
@@ -34,7 +40,6 @@ impl Reader for BTreeMap<String, String> {
     }
 }
 
-/// Reads a catalog directory on disk.
 pub struct DirReader(pub PathBuf);
 
 impl Reader for DirReader {
@@ -65,8 +70,7 @@ fn list_dir(dir: &Path, prefix: &str, files: &mut Vec<String>) -> io::Result<()>
 
 struct Loaded {
     file: File,
-    /// alias -> imported file path
-    imports: BTreeMap<String, String>,
+    target_by_alias: BTreeMap<String, String>,
 }
 
 /// Load the catalog rooted at [`ROOT_FILE`] and everything it imports, then
@@ -103,7 +107,7 @@ fn loaded(file: File) -> Result<Loaded, String> {
     }
     Ok(Loaded {
         file,
-        imports: BTreeMap::new(),
+        target_by_alias: BTreeMap::new(),
     })
 }
 
@@ -126,7 +130,7 @@ fn walk_imports(
             return Err(format!("{at}: import cycle through {target}"));
         }
         if files[index]
-            .imports
+            .target_by_alias
             .insert(import.alias.clone(), target.clone())
             .is_some()
         {
@@ -147,8 +151,6 @@ fn walk_imports(
     Ok(())
 }
 
-/// Resolve `target` against the importing file's directory. `None` when the
-/// path is absolute or climbs above the catalog directory.
 fn import_target(importer: &str, target: &str) -> Option<String> {
     let target = target.replace('\\', "/");
     if target.starts_with('/') || target.contains(':') {
@@ -168,24 +170,36 @@ fn import_target(importer: &str, target: &str) -> Option<String> {
     Some(parts.join("/"))
 }
 
-/// Where each statement is declared: id -> (kind, file, line).
-type Declared<'a> = BTreeMap<&'a str, (&'a str, &'a str, usize)>;
+struct Declaration<'a> {
+    kind: ItemKind,
+    file: &'a str,
+    line: usize,
+}
 
 fn statements(files: &[Loaded]) -> Result<Catalog, String> {
-    let mut declared = Declared::new();
+    let mut declared = BTreeMap::new();
     for loaded in files {
         let path = loaded.file.path.as_str();
         for block in &loaded.file.blocks {
             let at = format!("{path}:{}", block.line);
-            if !["intent", "definition", "exception", "channel"].contains(&block.kind.as_str()) {
+            let Some(kind) = ItemKind::parse(&block.kind).filter(|kind| *kind != ItemKind::Example)
+            else {
                 return Err(format!("{at}: unknown statement kind {}", block.kind));
-            }
+            };
             let id = block
                 .name
                 .as_deref()
                 .ok_or_else(|| format!("{at}: {} needs an id", block.kind))?;
-            if let Some((_, other, line)) = declared.insert(id, (&block.kind, path, block.line)) {
-                return Err(format!("duplicate id {id} in {other}:{line} and {at}"));
+            let declaration = Declaration {
+                kind,
+                file: path,
+                line: block.line,
+            };
+            if let Some(other) = declared.insert(id, declaration) {
+                return Err(format!(
+                    "duplicate id {id} in {}:{} and {at}",
+                    other.file, other.line
+                ));
             }
         }
     }
@@ -199,41 +213,29 @@ fn statements(files: &[Loaded]) -> Result<Catalog, String> {
     Ok(Catalog { statements })
 }
 
-fn statement(block: &Block, loaded: &Loaded, declared: &Declared) -> Result<Statement, String> {
+fn statement(
+    block: &Block,
+    loaded: &Loaded,
+    declared: &BTreeMap<&str, Declaration>,
+) -> Result<Statement, String> {
     let path = &loaded.file.path;
     let id = block.name.as_deref().unwrap_or_default();
-    let at = format!("{path}:{}", block.line);
-    let allowed: &[&str] = match block.kind.as_str() {
-        "definition" => &["text", "refines"],
-        "exception" => &["text", "narrows", "kind", "channels"],
+    let declaration = &declared[id];
+    let allowed: &[&str] = match declaration.kind {
+        ItemKind::Definition => &["text", "refines"],
+        ItemKind::Exception => &["text", "narrows", "kind", "channels"],
         _ => &["text"],
     };
-    let mut fields = BTreeMap::new();
-    for field in &block.fields {
-        let at = format!("{path}:{}", field.line);
-        if !allowed.contains(&field.name.as_str()) {
-            return Err(format!(
-                "{at}: {} {id} has no field {}",
-                block.kind, field.name
-            ));
-        }
-        if fields.insert(field.name.as_str(), field).is_some() {
-            return Err(format!("{at}: duplicate field {} in {id}", field.name));
-        }
-    }
-    let required = |name: &str| -> Result<&Field, String> {
-        fields
-            .get(name)
-            .copied()
-            .ok_or_else(|| format!("{at}: {} {id} needs {name}", block.kind))
-    };
-    let link = |field: &Field, value: &Value, kind: &str| -> Result<String, String> {
+    let subject = format!("{} {id}", block.kind);
+    let fields = block.fields_by_name(path, allowed, &subject, id)?;
+    let link = |field: &Field, value: &Value, kind: ItemKind| -> Result<String, String> {
         let at = format!("{path}:{}", field.line);
         let (target, local) = match value {
             Value::Ident(target) => (target, Some(path.as_str())),
-            Value::Qualified(alias, target) => {
-                (target, loaded.imports.get(alias).map(String::as_str))
-            }
+            Value::Qualified(alias, target) => (
+                target,
+                loaded.target_by_alias.get(alias).map(String::as_str),
+            ),
             _ => {
                 return Err(format!(
                     "{at}: {} of {id} must be a statement reference",
@@ -242,13 +244,13 @@ fn statement(block: &Block, loaded: &Loaded, declared: &Declared) -> Result<Stat
             }
         };
         match declared.get(target.as_str()) {
-            Some((found, file, _)) if Some(*file) == local => {
-                if *found != kind {
+            Some(found) if Some(found.file) == local => {
+                if found.kind != kind {
                     return Err(format!(
                         "{at}: {} of {id} must name {}, but {value} is {}",
                         field.name,
                         article(kind),
-                        article(found)
+                        article(found.kind)
                     ));
                 }
                 Ok(target.clone())
@@ -259,7 +261,7 @@ fn statement(block: &Block, loaded: &Loaded, declared: &Declared) -> Result<Stat
             )),
         }
     };
-    let text = required("text")?;
+    let text = fields.required("text")?;
     let text = match &text.value {
         Value::Str(prose) if !prose.trim().is_empty() => prose.clone(),
         _ => {
@@ -269,30 +271,30 @@ fn statement(block: &Block, loaded: &Loaded, declared: &Declared) -> Result<Stat
             ))
         }
     };
-    let kind = match block.kind.as_str() {
-        "intent" => StatementKind::Intent,
-        "channel" => StatementKind::Channel,
-        "definition" => {
-            let refines = required("refines")?;
+    let kind = match declaration.kind {
+        ItemKind::Intent => StatementKind::Intent,
+        ItemKind::Channel => StatementKind::Channel,
+        ItemKind::Definition => {
+            let refines = fields.required("refines")?;
             StatementKind::Definition {
-                refines: link(refines, &refines.value, "intent")?,
+                refines: link(refines, &refines.value, ItemKind::Intent)?,
             }
         }
-        _ => {
-            let narrows = required("narrows")?;
-            let narrows = link(narrows, &narrows.value, "definition")?;
-            let kind_field = required("kind")?;
-            let kind = match &kind_field.value {
-                Value::Ident(kind) if kind == "does_not_apply" => ExceptionKind::DoesNotApply,
-                Value::Ident(kind) if kind == "holds_instead" => ExceptionKind::HoldsInstead,
-                other => {
-                    return Err(format!(
-                        "{path}:{}: exception {id} has unknown kind {other}; expected does_not_apply or holds_instead",
-                        kind_field.line
-                    ))
-                }
-            };
-            let field = required("channels")?;
+        ItemKind::Exception => {
+            let narrows = fields.required("narrows")?;
+            let narrows = link(narrows, &narrows.value, ItemKind::Definition)?;
+            let kind_field = fields.required("kind")?;
+            let kind = kind_field
+                .value
+                .as_ident()
+                .and_then(ExceptionKind::parse)
+                .ok_or_else(|| {
+                    format!(
+                        "{path}:{}: exception {id} has unknown kind {}; expected does_not_apply or holds_instead",
+                        kind_field.line, kind_field.value
+                    )
+                })?;
+            let field = fields.required("channels")?;
             let at = format!("{path}:{}", field.line);
             let Value::List(items) = &field.value else {
                 return Err(format!("{at}: channels of {id} must be a list"));
@@ -302,7 +304,7 @@ fn statement(block: &Block, loaded: &Loaded, declared: &Declared) -> Result<Stat
             }
             let mut channels = Vec::new();
             for item in items {
-                let channel = link(field, item, "channel")?;
+                let channel = link(field, item, ItemKind::Channel)?;
                 if channels.contains(&channel) {
                     return Err(format!(
                         "{at}: exception {id} names channel {channel} twice"
@@ -317,6 +319,7 @@ fn statement(block: &Block, loaded: &Loaded, declared: &Declared) -> Result<Stat
                 channels,
             }
         }
+        ItemKind::Example => unreachable!("statements() declares no example"),
     };
     Ok(Statement {
         id: id.into(),
@@ -326,7 +329,8 @@ fn statement(block: &Block, loaded: &Loaded, declared: &Declared) -> Result<Stat
     })
 }
 
-fn article(kind: &str) -> String {
+fn article(kind: ItemKind) -> String {
+    let kind = kind.as_str();
     let article = if kind.starts_with(['a', 'e', 'i', 'o', 'u']) {
         "an"
     } else {

@@ -70,8 +70,6 @@ Who approves
 
 Reference: crates/lemmaspec-intent/README.md in the lemmaspec repository"#;
 
-/// A command line split into item IDs, single-valued options and the
-/// repeatable `--ledger` of `report`.
 struct Args {
     ids: Vec<String>,
     options: BTreeMap<&'static str, String>,
@@ -189,8 +187,6 @@ fn run() -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
-/// Build the whole report before writing any output, so an error leaves
-/// existing files untouched.
 fn write_report(args: &Args, dir: PathBuf, tests: PathBuf) -> Result<ExitCode, String> {
     let html = match args.options.get("--format").map(String::as_str) {
         None | Some("md") => false,
