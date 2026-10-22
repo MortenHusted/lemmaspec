@@ -76,7 +76,10 @@ impl Repo {
                 Err(e) => return Err(format!("cannot read {path}: {e}")),
             }
         }
-        let input: String = files.iter().map(|path| format!("{path}\n")).collect();
+        let input: String = files
+            .iter()
+            .map(|path| format!("{}\n", c_quoted(path)))
+            .collect();
         let hashed = git_with_input(
             &self.root,
             &["hash-object", "--stdin-paths"],
@@ -215,4 +218,23 @@ fn run_git(dir: &Path, args: &[&str], input: Option<Vec<u8>>) -> Result<String, 
         ));
     }
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// `git hash-object --stdin-paths` unquotes a line that starts with `"` and
+/// trims a trailing carriage return, so every path is sent C-quoted.
+fn c_quoted(path: &str) -> String {
+    let mut quoted = String::from("\"");
+    for byte in path.bytes() {
+        match byte {
+            b'"' => quoted.push_str("\\\""),
+            b'\\' => quoted.push_str("\\\\"),
+            b'\n' => quoted.push_str("\\n"),
+            b'\r' => quoted.push_str("\\r"),
+            b'\t' => quoted.push_str("\\t"),
+            0x20..=0x7e => quoted.push(char::from(byte)),
+            _ => quoted.push_str(&format!("\\{byte:03o}")),
+        }
+    }
+    quoted.push('"');
+    quoted
 }

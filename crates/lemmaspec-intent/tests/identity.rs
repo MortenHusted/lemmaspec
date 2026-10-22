@@ -291,3 +291,18 @@ fn the_catalog_may_live_below_the_top_level() {
     repo.write("docs/intent/runs.intent", "// runs\n// another\n");
     assert_eq!(source.working_tree_identity().unwrap(), identity);
 }
+
+#[cfg(unix)]
+#[test]
+fn paths_git_would_unquote_or_trim_still_hash_as_their_files() {
+    let repo = TempRepo::with_project("quoted-paths");
+    repo.write("\"quoted\".txt", "quoted\n");
+    repo.write("ends-in-cr\r", "carriage return\n");
+    let head = repo.commit("unusual names");
+    let source = repo.source();
+
+    assert_eq!(
+        source.working_tree_identity().unwrap(),
+        source.commit_identity(&head).unwrap()
+    );
+}
