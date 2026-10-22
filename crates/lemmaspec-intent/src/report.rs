@@ -292,7 +292,7 @@ fn not_evaluated(inputs: &Inputs) -> Option<String> {
                 "- Approval entry {} for `{}` by {}: recorded under digest version {}\n",
                 index + 1,
                 entry.item,
-                entry.by,
+                code_span(&entry.by),
                 entry.digest_version
             ));
         }
@@ -338,7 +338,7 @@ fn since(repo: &Repo, base: &str, inputs: &Inputs) -> Result<String, String> {
                 format!(
                     "- Entry {}: {} {verb} {} `{}`\n",
                     index + 1,
-                    entry.by,
+                    code_span(&entry.by),
                     entry.kind.as_str(),
                     entry.item
                 )
@@ -367,8 +367,11 @@ fn since(repo: &Repo, base: &str, inputs: &Inputs) -> Result<String, String> {
                     "\n"
                 };
                 format!(
-                    "`{}` failed on `{}` at source `{}`, based on `{}`:\n\n{fence}diff\n{diff}{newline}{fence}\n",
-                    run.example, run.channel, run.source, run.base
+                    "`{}` failed on `{}` at source {}, based on {}:\n\n{fence}diff\n{diff}{newline}{fence}\n",
+                    run.example,
+                    run.channel,
+                    code_span(&run.source),
+                    code_span(&run.base)
                 )
             })
             .collect();
@@ -388,8 +391,24 @@ fn none_or(text: String) -> String {
 }
 
 fn fence(text: &str) -> String {
-    let longest = text.split(|c| c != '`').map(str::len).max().unwrap_or(0);
-    "`".repeat(longest.max(2) + 1)
+    "`".repeat(longest_backtick_run(text).max(2) + 1)
+}
+
+/// Free text from the approval log or a run ledger as one inline code span,
+/// so no name or source a branch writes can start a block of its own.
+fn code_span(text: &str) -> String {
+    let text = text.replace(['\r', '\n'], " ");
+    let ticks = "`".repeat(longest_backtick_run(&text) + 1);
+    let pad = if text.starts_with('`') || text.ends_with('`') {
+        " "
+    } else {
+        ""
+    };
+    format!("{ticks}{pad}{text}{pad}{ticks}")
+}
+
+fn longest_backtick_run(text: &str) -> usize {
+    text.split(|c| c != '`').map(str::len).max().unwrap_or(0)
 }
 
 fn quote(text: &str) -> String {

@@ -341,6 +341,11 @@ fn approver(by: &str) -> Result<(), String> {
     if by.trim().is_empty() {
         return Err("an approval needs the approver's name".into());
     }
+    if by.chars().any(char::is_control) {
+        return Err(format!(
+            "the approver's name {by:?} has a control character"
+        ));
+    }
     Ok(())
 }
 

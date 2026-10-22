@@ -225,8 +225,9 @@ fn approvals_added_since_the_base_are_listed_with_their_approver_and_an_edited_l
     let report = project.report(&[], Some(&base));
     let since = section(&report.markdown, &format!("Since base `{base}`"));
     assert!(
-        since
-            .contains("### Approvals\n\n- Entry 8: agent approved definition `walk_exit_status`\n"),
+        since.contains(
+            "### Approvals\n\n- Entry 8: `agent` approved definition `walk_exit_status`\n"
+        ),
         "{since}"
     );
     assert!(!since.contains("Entry 7"), "{since}");
@@ -250,9 +251,28 @@ fn a_base_without_an_approval_log_lists_every_entry_as_added() {
     let report = project.report(&[], Some(&base));
     let since = section(&report.markdown, &format!("Since base `{base}`"));
     assert_eq!(since.matches("\n- Entry ").count(), 7, "{since}");
-    assert!(since.contains("- Entry 1: owner approved channel `cli`\n"));
-    assert!(since.contains("- Entry 7: owner approved example `library_report`\n"));
+    assert!(since.contains("- Entry 1: `owner` approved channel `cli`\n"));
+    assert!(since.contains("- Entry 7: `owner` approved example `library_report`\n"));
     assert!(since.contains("### Failing runs\n\nNone.\n"), "{since}");
+}
+
+#[test]
+fn an_approver_name_from_the_log_cannot_start_a_markdown_block() {
+    let project = Project::new("injected-name");
+    let base = project.commit("no approvals yet");
+    project.approve_all();
+    project.edit(
+        "intent/approvals.intent",
+        "by: \"owner\"",
+        "by: \"alice `x`\\n\\n<!--\"",
+    );
+    let report = project.report(&[], Some(&base));
+    let since = section(&report.markdown, &format!("Since base `{base}`"));
+    assert!(
+        since.contains("- Entry 1: ``alice `x`  <!--`` approved channel `cli`\n"),
+        "{since}"
+    );
+    assert!(!report.markdown.contains("\n<!--"), "{}", report.markdown);
 }
 
 // Covers AE20
@@ -403,7 +423,7 @@ fn approvals_and_runs_recorded_under_another_digest_version_are_listed_and_not_e
     assert!(!report.pending, "{}", report.markdown);
     let skipped = section(&report.markdown, "Not evaluated");
     assert!(skipped.contains(
-        "- Approval entry 8 for `walk_exit_status` by old tool: recorded under digest version 0\n"
+        "- Approval entry 8 for `walk_exit_status` by `old tool`: recorded under digest version 0\n"
     ), "{skipped}");
     assert!(
         skipped.contains(&format!(

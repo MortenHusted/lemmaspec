@@ -454,6 +454,14 @@ fn approving_needs_an_approver_and_an_id_that_names_one_item() {
             .unwrap_err(),
         "an approval needs the approver's name"
     );
+    assert_eq!(
+        project
+            .append(|_, catalog, examples| {
+                approvals::approve(catalog, examples, &["walk_exit_status"], "owner\n<!--")
+            })
+            .unwrap_err(),
+        "the approver's name \"owner\\n<!--\" has a control character"
+    );
     project.write(
         "tests/clash.rs",
         "/// intent: example walk_exit_status exemplifies walk_exit_status on cli\n#[test]\nfn clash() {}\n",
