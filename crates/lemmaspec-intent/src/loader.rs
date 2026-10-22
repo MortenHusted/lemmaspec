@@ -1,5 +1,6 @@
 use std::{
     collections::BTreeMap,
+    fmt::Display,
     fs, io,
     path::{Path, PathBuf},
 };
@@ -19,12 +20,19 @@ pub trait Reader {
     /// Every file under the catalog directory.
     fn list(&self) -> io::Result<Vec<String>>;
 
-    /// A missing file reads as empty; any other error reads `path: error`.
     fn read_or_empty(&self, path: &str) -> Result<String, String> {
-        match self.read(path) {
-            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(String::new()),
-            read => read.map_err(|e| format!("{path}: {e}")),
-        }
+        missing_as_empty(self.read(path), path)
+    }
+}
+
+/// A missing file reads as empty; any other error reads `path: error`.
+pub(crate) fn missing_as_empty(
+    read: io::Result<String>,
+    path: impl Display,
+) -> Result<String, String> {
+    match read {
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(String::new()),
+        read => read.map_err(|e| format!("{path}: {e}")),
     }
 }
 

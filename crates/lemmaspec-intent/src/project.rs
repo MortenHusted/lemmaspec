@@ -12,7 +12,7 @@ use crate::{
     approvals::{Entry, Log},
     digest::{sha256, statement_digest, DIGEST_VERSION},
     examples::{scan, Scan},
-    loader::{load, DirReader, APPROVALS_FILE, RUNS_FILE},
+    loader::{load, missing_as_empty, DirReader, APPROVALS_FILE, RUNS_FILE},
     runs::{self, Run},
     Catalog, ItemKind, StatementKind,
 };
@@ -137,10 +137,7 @@ impl Inputs {
 }
 
 pub(crate) fn read_or_empty(path: &Path) -> Result<String, String> {
-    match fs::read_to_string(path) {
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(String::new()),
-        read => read.map_err(|e| format!("{}: {e}", path.display())),
-    }
+    missing_as_empty(fs::read_to_string(path), path.display())
 }
 
 fn test_path(tests: &Path, stem: &str) -> PathBuf {

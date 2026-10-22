@@ -190,7 +190,8 @@ fn run() -> Result<ExitCode, String> {
                 match command.as_str() {
                     "approve" => approve(catalog, examples, ids, by),
                     "reconfirm" => reconfirm(log, catalog, examples, ids, by),
-                    _ => remove(log, catalog, examples, ids, by),
+                    "remove" => remove(log, catalog, examples, ids, by),
+                    _ => unreachable!("an approval command"),
                 }
             })?;
         }
@@ -219,7 +220,8 @@ fn run() -> Result<ExitCode, String> {
         }
         "report" => return write_report(&args, dir, tests),
         "intro" => println!("{INTRO}"),
-        _ => print!("{CHECKER}"),
+        "checker" => print!("{CHECKER}"),
+        _ => unreachable!("Args::parse accepts only known commands"),
     }
     Ok(ExitCode::SUCCESS)
 }

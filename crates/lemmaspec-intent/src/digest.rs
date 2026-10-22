@@ -97,7 +97,7 @@ fn render(stream: TokenStream, tokens: &mut Vec<String>) {
                 };
                 tokens.push(open.into());
                 match doc_text(&group) {
-                    Some(text) => tokens.extend(["doc".into(), "=".into(), quote(&text)]),
+                    Some(text) => tokens.extend(["doc".into(), "=".into(), doc_literal(&text)]),
                     None => render(group.stream(), tokens),
                 }
                 tokens.push(close.into());
@@ -124,7 +124,10 @@ fn doc_text(group: &Group) -> Option<String> {
     }
 }
 
-fn quote(text: &str) -> String {
+/// Doc comment text as the canonical form spells it. Unlike the catalog's
+/// string syntax it leaves CR and tab as they are, and changing that would
+/// change existing example digests.
+fn doc_literal(text: &str) -> String {
     let escaped = text
         .replace('\\', "\\\\")
         .replace('"', "\\\"")
