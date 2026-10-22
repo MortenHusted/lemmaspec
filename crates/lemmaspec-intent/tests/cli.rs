@@ -283,10 +283,25 @@ fn checker_prints_the_bundled_checker_and_help_prints_the_usage() {
         "record",
         "report",
         "checker",
+        "intro",
     ] {
         assert!(
             stdout(&help).contains(&format!("lemmaspec-intent {command}")),
             "{command}"
         );
+    }
+}
+
+#[test]
+fn intro_prints_the_agent_workflow_and_names_the_tool_written_files() {
+    let intro = intent(&["intro"]);
+    assert!(intro.status.success(), "{}", stderr(&intro));
+    let text = stdout(&intro);
+    for expected in [
+        "intent/approvals.intent",
+        "intent/runs.intent",
+        "LEMMASPEC_INTENT_CHANNEL",
+    ] {
+        assert!(text.contains(expected), "intro lacks {expected:?}:\n{text}");
     }
 }

@@ -60,6 +60,14 @@ dependency on that consumer. Build it separately with
 `cargo install --path crates/lemmaspec-plan`; it is not bundled in core binary
 releases.
 
+The optional [lemmaspec-intent](crates/lemmaspec-intent/README.md) consumer
+keeps a typed catalog of a system's intents, domain definitions, exceptions and
+channels. It reads tagged `cargo test` integration tests as the examples that
+prove them, records approvals and runs, and reports each statement as
+unapproved, stale, unverified or verified. The core engine has no dependency on
+it. Build it separately with `cargo install --path crates/lemmaspec-intent`; it
+is not bundled in core binary releases.
+
 ## Install
 
 Versioned GitHub releases provide prebuilt binaries for macOS, glibc-based

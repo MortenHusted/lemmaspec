@@ -23,8 +23,52 @@ const USAGE: &str = "usage: lemmaspec-intent check [--dir DIR]
        lemmaspec-intent record [--example ID] [--channel CHANNEL] [--ledger PATH] [--dir DIR] [--tests DIR]
        lemmaspec-intent report [--dir DIR] [--tests DIR] [--ledger PATH]... [--base COMMIT] [--format md|html] [-o PATH] [--bound PATH]
        lemmaspec-intent checker
+       lemmaspec-intent intro
 
 DIR defaults to intent and --tests to tests. report exits 1 while anything awaits approval; every command exits 2 on an error.";
+
+const INTRO: &str = r#"lemmaspec-intent, for an agent
+
+What it is
+  An intent catalog in intent/ states what a system is for: intents, domain
+  definitions that refine them, exceptions that narrow a definition on named
+  channels, and the channels themselves. Acceptance tests tagged as examples
+  prove definitions and exceptions. The report gives every intent, definition
+  and exception exactly one standing, checked in the order unapproved, stale,
+  unverified, verified, and says why anything is not verified.
+
+The loop
+  1. Draft statements   edit intent/catalog.intent and the files it imports;
+                        lemmaspec-intent check validates imports, IDs and links
+  2. Tag tests          one doc-comment line on a #[test] fn in tests/*.rs:
+       /// intent: example <id> exemplifies <statement> on <channel>, <channel>
+                        A test tagged for more than one channel must choose its
+                        channel driver from LEMMASPEC_INTENT_CHANNEL; a test
+                        that does not read it is tagged for one channel only.
+  3. Record red         break the behavior under test on purpose, as a scratch
+                        edit to a tracked file that still builds, then run
+                        lemmaspec-intent record --example <id>, confirm every
+                        outcome is fail, and revert the break. Never record red
+                        from a broken build: that records error, which never
+                        counts.
+  4. Report             lemmaspec-intent report
+                        exits 0 when nothing awaits approval, 1 while something
+                        does, 2 on an error. Passing runs at the commit come
+                        from record --ledger <tmp>, then report --ledger <tmp>,
+                        as CI runs them.
+
+Files only the tool writes
+  intent/approvals.intent   approve, reconfirm and remove append to it
+  intent/runs.intent        record appends to it
+  Never hand-edit either file. The one exception is a rebase conflict in one:
+  keep the base's entries first and the branch's entries after them.
+
+Who approves
+  The project decides who approves. Draft and change statements and examples
+  freely, but run approve, reconfirm or remove only when the project has
+  designated you as an approver.
+
+Reference: crates/lemmaspec-intent/README.md in the lemmaspec repository"#;
 
 /// A command line split into item IDs, single-valued options and the
 /// repeatable `--ledger` of `report`.
@@ -49,7 +93,7 @@ impl Args {
                 ],
                 false,
             ),
-            "checker" => (&[], false),
+            "checker" | "intro" => (&[], false),
             _ => return Err(format!("unknown command {command}")),
         };
         let mut parsed = Args {
@@ -139,6 +183,7 @@ fn run() -> Result<ExitCode, String> {
             }
         }
         "report" => return write_report(&args, dir, tests),
+        "intro" => println!("{INTRO}"),
         _ => print!("{CHECKER}"),
     }
     Ok(ExitCode::SUCCESS)
