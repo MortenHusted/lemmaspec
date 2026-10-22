@@ -1,0 +1,5 @@
+// The catalog is this root file and everything it imports.
+catalog fixture {
+  use "./channels.intent" as channels
+  use "./walk.intent" as walk
+}

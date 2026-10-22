@@ -17,6 +17,7 @@ exclude = [
   ".codex",
   ".github",
   "dist-workspace.toml",
+  "intent",
   "plugins/lemmaspec/.claude-plugin",
   "plugins/lemmaspec/.codex-plugin",
   "plugins/lemmaspec/skills/conventions",
@@ -32,6 +33,6 @@ serde_json = "1"
 sha2 = "0.10"
 
 [workspace]
-members = [".", "crates/lemmaspec-plan"]
+members = [".", "crates/lemmaspec-plan", "crates/lemmaspec-intent"]
 default-members = ["."]
 resolver = "2"

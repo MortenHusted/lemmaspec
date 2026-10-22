@@ -1,0 +1,5 @@
+catalog stray {
+  intent orphan {
+    text: "No file imports this one."
+  }
+}

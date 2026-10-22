@@ -1,0 +1,60 @@
+run {
+  example: walk_clean_exits_zero
+  digest: "sha256:c414e0c4e2c0d8a90fec374a0390d6e09b2530bc0a9d7063a1ba4dbbd0f71c2a"
+  digest_version: 1
+  channel: cli
+  source: "sha256:18fa60c32ed3f3c7a73b12c2882c849940f5f59da426aa2f6719c074dda8301e"
+  base: "c20c3865e6f6d4f7cdf6ff75e7a99550337605d2"
+  outcome: fail
+  diff: "diff --git a/src/main.rs b/src/main.rs\nindex fd2219d..7d8a32b 100644\n--- a/src/main.rs\n+++ b/src/main.rs\n@@ -450,7 +450,7 @@ fn report_walk(report: &lemmaspec::WalkReport, json: bool) -> Result<ExitCode, S\n     }\n \n     Ok(if report.status == \"clean\" {\n-        ExitCode::SUCCESS\n+        ExitCode::from(1)\n     } else {\n         ExitCode::from(1)\n     })\n"
+}
+run {
+  example: walk_open_expectation_exits_one
+  digest: "sha256:ef26438952c0ef32bc3e5663455151928b824d9e33fb66ffc63a9ae7e37aec23"
+  digest_version: 1
+  channel: cli
+  source: "sha256:445f8017bd0f085e23e395dca88663719d9f38a3faf0009b937f82b4337bc811"
+  base: "c20c3865e6f6d4f7cdf6ff75e7a99550337605d2"
+  outcome: fail
+  diff: "diff --git a/src/main.rs b/src/main.rs\nindex fd2219d..01c95c1 100644\n--- a/src/main.rs\n+++ b/src/main.rs\n@@ -452,7 +452,7 @@ fn report_walk(report: &lemmaspec::WalkReport, json: bool) -> Result<ExitCode, S\n     Ok(if report.status == \"clean\" {\n         ExitCode::SUCCESS\n     } else {\n-        ExitCode::from(1)\n+        ExitCode::SUCCESS\n     })\n }\n \n"
+}
+run {
+  example: walk_unreadable_artifact_exits_two
+  digest: "sha256:e1aa47a505dd07d90820335725179b162e6b503a2d3ec63f63e5f5e81c42ee2a"
+  digest_version: 1
+  channel: cli
+  source: "sha256:e4bba4f47ea99919d30de2093173eb079e5d306dfb3d0f28e33ccb5c1d815233"
+  base: "c20c3865e6f6d4f7cdf6ff75e7a99550337605d2"
+  outcome: fail
+  diff: "diff --git a/src/main.rs b/src/main.rs\nindex fd2219d..9a72c68 100644\n--- a/src/main.rs\n+++ b/src/main.rs\n@@ -145,7 +145,7 @@ fn main() -> ExitCode {\n         Ok(code) => code,\n         Err(error) => {\n             eprintln!(\"lemmaspec: {error}\");\n-            ExitCode::from(2)\n+            ExitCode::from(1)\n         }\n     }\n }\n"
+}
+run {
+  example: mutate_survivor_exits_one
+  digest: "sha256:d5dc9e949f51671a04d62a758a3dc245f1c966d69e085c090d9f3406bd5f79e2"
+  digest_version: 1
+  channel: cli
+  source: "sha256:95bf92a07ec77999210b7f564bb1627b4a0390f5fa3c191ec6b0750d16218a07"
+  base: "c20c3865e6f6d4f7cdf6ff75e7a99550337605d2"
+  outcome: fail
+  diff: "diff --git a/src/main.rs b/src/main.rs\nindex fd2219d..8d40ba1 100644\n--- a/src/main.rs\n+++ b/src/main.rs\n@@ -536,7 +536,7 @@ fn run_mutate(args: &[String]) -> Result<ExitCode, String> {\n     Ok(if report.status == \"clean\" {\n         ExitCode::SUCCESS\n     } else {\n-        ExitCode::from(1)\n+        ExitCode::SUCCESS\n     })\n }\n \n"
+}
+run {
+  example: walk_report_clean
+  digest: "sha256:c2264d958cb6e9fdf910665dc0d8da129602805c92fa0088cd1d19c949c0385b"
+  digest_version: 1
+  channel: library
+  source: "sha256:dee1cf51d6366eff5a6ab94d77d92d514dc52498c1e0c6fcd093db36dea3f780"
+  base: "c20c3865e6f6d4f7cdf6ff75e7a99550337605d2"
+  outcome: fail
+  diff: "diff --git a/src/artifact/validate.rs b/src/artifact/validate.rs\nindex 1bf1fe0..3dbaea3 100644\n--- a/src/artifact/validate.rs\n+++ b/src/artifact/validate.rs\n@@ -436,7 +436,7 @@ pub fn walk_parsed_artifact(artifact: &Artifact) -> Result<WalkReport, ArtifactE\n         .count();\n     let derived_count = facts.len() - asserted_count;\n     let status = if expectations.iter().all(|expectation| expectation.satisfied) {\n-        \"clean\"\n+        \"incomplete\"\n     } else {\n         \"incomplete\"\n     };\n"
+}
+run {
+  example: walk_report_incomplete
+  digest: "sha256:19da55ee425d39aaf45177d41b69831f35a9a49d50d539ea3ef9d3a97fe8018b"
+  digest_version: 1
+  channel: library
+  source: "sha256:b20ada839e407e8ed529fba7b3329dd4ac9581e7270ae0574993595c0a806688"
+  base: "c20c3865e6f6d4f7cdf6ff75e7a99550337605d2"
+  outcome: fail
+  diff: "diff --git a/src/artifact/validate.rs b/src/artifact/validate.rs\nindex 1bf1fe0..c3717fd 100644\n--- a/src/artifact/validate.rs\n+++ b/src/artifact/validate.rs\n@@ -438,7 +438,7 @@ pub fn walk_parsed_artifact(artifact: &Artifact) -> Result<WalkReport, ArtifactE\n     let status = if expectations.iter().all(|expectation| expectation.satisfied) {\n         \"clean\"\n     } else {\n-        \"incomplete\"\n+        \"clean\"\n     };\n \n     Ok(WalkReport {\n"
+}

@@ -1,0 +1,8 @@
+catalog channels {
+  channel cli {
+    text: "The lemmaspec command line."
+  }
+  channel library {
+    text: "The lemmaspec Rust library."
+  }
+}

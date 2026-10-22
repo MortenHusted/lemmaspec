@@ -64,3 +64,34 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace --locked --all-targets
+
+  intent:
+    name: Intent catalog
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Record examples and report verified statements
+        shell: bash
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          cargo run -q -p lemmaspec-intent --locked -- record --ledger "$RUNNER_TEMP/runs.intent" | tee "$RUNNER_TEMP/record.txt"
+
+          base_args=()
+          if [[ -n "$BASE" && ! "$BASE" =~ ^0+$ ]]; then
+            base_args=(--base "$BASE")
+          fi
+          status=0
+          cargo run -q -p lemmaspec-intent --locked -- report --ledger "$RUNNER_TEMP/runs.intent" "${base_args[@]}" -o "$RUNNER_TEMP/intent.md" || status=$?
+          if [[ -f "$RUNNER_TEMP/intent.md" ]]; then
+            cat "$RUNNER_TEMP/intent.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if grep -E ': (fail|error)$' "$RUNNER_TEMP/record.txt"; then
+            echo "::error::An example fails or errors at this commit."
+            [[ "$status" -ne 0 ]] || status=1
+          fi
+          exit "$status"
