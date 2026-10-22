@@ -204,8 +204,11 @@ doc-comment line:
 - A doc-comment line that starts with `intent:` but does not parse, or that
   names an unknown statement or channel, a statement an example cannot
   exemplify, or a channel outside the exception's own, is listed under "Ignored
-  examples" with its reason, and the rest of the report still renders.
+  examples" with its reason, and the rest of the report still renders. So is a
+  tagged test whose `module::function` path another test in the same file
+  shares, because `cargo test --exact` cannot tell the two apart.
 - Two tags that claim one example ID are an error.
+- A missing `tests/` directory holds no examples.
 
 `record` runs an example once per channel it is tagged for, with
 `LEMMASPEC_INTENT_CHANNEL` set to that channel. A test tagged for more than one
@@ -240,7 +243,8 @@ Digests are SHA-256 over a versioned canonical rendering, `intent-digest/1`.
   comments.
 - An example's digest covers the test function's tokens, its attributes and
   doc comments included, so the tag is covered. Formatting and comments are
-  not.
+  not. The attributes of the file and of every module around the test are
+  covered too, since a `#[cfg]` there decides whether the test is compiled.
 - Helpers, fixtures and channel drivers that a test calls are not covered.
   `greet_on_the_command_line` above can change without any approval.
 
@@ -301,7 +305,8 @@ else, such as a build failure or a path that matches no test, is `error`.
 `<example> on <channel>: <outcome>`.
 
 The source identity is SHA-256 over the sorted path, mode and git blob ID of
-every tracked file, without `approvals.intent` and `runs.intent`. A clean
+every tracked file, without `approvals.intent` and `runs.intent`. A submodule
+counts as the commit it has checked out. A clean
 checkout has exactly its commit tree's identity on every platform, so
 committing runs and approvals leaves the identity as it was, and an uncommitted
 scratch edit gets an identity of its own. Untracked files are neither in the
@@ -445,6 +450,11 @@ catalog.
   itself reviewable.
 - Shared helpers, fixtures and channel drivers are not in an example's digest.
   A weakened helper changes no digest and needs no approval.
+- `record` finds an example's test target by its file stem. A `[[test]]` entry
+  in `Cargo.toml` that gives another file that name runs other code, and
+  `Cargo.toml` is in no example's digest.
+- A failing run stores the diff of every tracked file against HEAD, not only
+  the break. Record red from a tree whose only uncommitted change is the break.
 - Scratch breaks are not kept under a git ref. A failing run stores the break's
   diff for review instead.
 - Approvers are not authenticated, who may approve is not enforced, and
