@@ -218,12 +218,17 @@ the same code.
 #[test]
 fn greets_grace_by_name() {
     let greeting = match std::env::var("LEMMASPEC_INTENT_CHANNEL").as_deref() {
+        Ok("library") | Err(_) => greeter::greet("Grace"),
         Ok("cli") => greet_on_the_command_line("Grace"),
-        _ => greeter::greet("Grace"),
+        Ok(channel) => panic!("no driver for channel {channel}"),
     };
     assert_eq!(greeting, "Hello, Grace!");
 }
 ```
+
+Name every channel the test drives and panic on any other. Plain `cargo test`
+sets no channel, so the `Err(_)` arm picks the driver it runs. A catch-all arm
+would let a tag for a new channel pass by running another channel's driver.
 
 ## Digests
 
