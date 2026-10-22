@@ -37,13 +37,13 @@ The existing tools each cover part of this. LemmaSpec evaluates evidence determi
 ### Key Decisions
 
 - **The scope is the intent model.** Execution binding and toolset packaging follow as separate plans that reuse its vocabulary. (session-settled: user-approved — chosen over starting with execution binding or toolset shape: both depend on the intent model's terms.)
-- **Domain definitions are a human-approved layer between intent and code.** A change of meaning needs sign-off; a change of code behind an unchanged definition does not. Governs R2, R16. (session-settled: user-approved — chosen over rewriting the intent on every meaning change, or leaving definitions to agents: the follow-up case changed meaning without changing intent.)
+- **Domain definitions are a human-approved layer between intent and code.** A change of meaning needs sign-off; a change of code behind an unchanged definition does not. Governs R2, R18. (session-settled: user-approved — chosen over rewriting the intent on every meaning change, or leaving definitions to agents: the follow-up case changed meaning without changing intent.)
 - **A definition holds on every channel unless an approved exception scopes it out.** Governs R3, R4. (session-settled: user-approved — chosen over per-channel opt-in, or keeping channels out of intent: a new channel must not silently skip an intent.)
-- **The first deliverable is the verified-statement report.** Governs R14, R15, R16, R17, R18, R19. (session-settled: user-approved — chosen over change impact, orphan detection and a channel coverage view: it needs no code facts.)
+- **The first deliverable is the verified-statement report.** Governs R16, R17, R18, R19, R20, R21. (session-settled: user-approved — chosen over change impact, orphan detection and a channel coverage view: it needs no code facts.)
 - **The catalog is a typed, linked format, not Markdown, and examples are the project's own tagged tests.** Typed links let a change be traced to everything that depends on it. Governs R5, R6, R7, R8, R9. (session-settled: user-directed — chosen over a Markdown catalog: references must be checkable so dependent changes can be tracked.)
 - **Exceptions narrow definitions, never intents.** An intent that needs an exception is stated at the mechanism level, as "authenticated by a browser session" was. Governs R3.
-- **Agents draft; only humans approve.** The catalog must stay agent-driven without letting an agent's edit count as approved. Governs R11, R12, R13.
-- **The catalog is an optional companion to LemmaSpec.** A project adopts it one statement at a time, and LemmaSpec without the catalog is unchanged. Governs R20, R21.
+- **Agents draft; only humans approve.** The catalog must stay agent-driven without letting an agent's edit count as approved. Governs R11, R12, R13, R14, R15.
+- **The catalog is an optional companion to LemmaSpec.** A project adopts it one statement at a time, and LemmaSpec without the catalog is unchanged. Governs R22, R23.
 
 ### Requirements
 
@@ -62,7 +62,7 @@ flowchart TB
 
 **Catalog statements**
 
-- R1. The catalog declares four kinds of statement: intent, domain definition, exception and channel. Each statement has a stable ID and required prose text.
+- R1. The catalog declares four kinds of statement: intent, domain definition, exception and channel. Each statement has required prose text and a stable ID that is unique across every file of the catalog.
 - R2. A domain definition refines one intent and states what a domain term means for the system, such as "a process's next follow-up is the due date of its earliest open task".
 - R3. An exception narrows one definition for named channels.
 - R4. A definition applies on every declared channel except the channels named by its approved exceptions.
@@ -71,8 +71,8 @@ flowchart TB
 
 - R5. Statements link to each other with typed links, and each link points from the dependent statement to the statement it depends on.
 - R6. A catalog can span several files that import one another, and a reference across files resolves and is checked exactly like one within a file.
-- R7. An unknown reference, a cycle, or a link between the wrong kinds of statement is an error that names the offending reference.
-- R8. Artifacts outside the catalog (examples, plans, memspec slices, LemmaSpec checkers) may cite a statement by ID, and the catalog itself never references files or code.
+- R7. An unknown reference, a cycle, a duplicate ID across files, or a link between the wrong kinds of statement is an error that names the offending reference.
+- R8. Artifacts outside the catalog (examples, plans, memspec slices, LemmaSpec checkers) may cite a statement by its bare ID, while the catalog's only references to other files are the imports R6 allows.
 
 **Examples and runs**
 
@@ -81,39 +81,41 @@ flowchart TB
 
 **Approval**
 
-- R11. Agents may draft and change statements and examples, and approval is a separate, explicit step that records the approver and the digest of the approved text.
+- R11. Agents may draft and change statements and examples, and approval is a separate, explicit step that records the approver, the digest of the approved text, and the digest of each statement the item links to.
 - R12. A statement or example whose current text differs from its approved digest is unapproved.
-- R13. When a statement changes, every statement and example linked to it becomes stale until a human re-confirms that item.
+- R13. An item is stale when a statement it links to no longer has the digest recorded at the item's last approval or re-confirmation, and it stays stale until a human re-confirms it.
+- R14. Removing an approved statement or example is a change that needs approval, and until it is approved the report treats the item as present with no passing run and names the removal as the reason.
+- R15. Approvals and recorded runs count only when they come from a declared source that the project's agents cannot write to under the owner's identity, and the report treats anything else as missing and says why.
 
 **Verified-statement report**
 
-- R14. For a given commit, the report gives every intent, definition and exception exactly one standing: verified, unverified, unapproved or stale.
-- R15. A definition or exception is verified when it and its examples are approved as they read now and none is stale, and on each channel it applies to, at least one example failed with its current text and passes at the commit.
-- R16. An intent is verified when it is approved and every definition refining it is verified, and an intent with no definitions is unverified.
-- R17. Every standing other than verified states its reason, such as a missing approval, example, channel or failing run, traced back to the facts it rests on.
-- R18. The same catalog, recorded runs and commit always produce the same report.
-- R19. The report renders for a human reader, showing each statement's prose, links and standing.
+- R16. For a given commit, the report gives every intent, definition and exception exactly one standing: verified, unverified, unapproved or stale.
+- R17. A definition or exception is verified when it and its examples are approved as they read now and none is stale, each channel it applies to has at least one example, and every one of those examples failed with its current text and passes at the commit.
+- R18. An intent is verified when it is approved and every definition refining it is verified, and an intent with no definitions is unverified.
+- R19. Every standing other than verified states its reason, such as a missing approval, example, channel or failing run, traced back to the facts it rests on.
+- R20. The same catalog, recorded runs and commit always produce the same report.
+- R21. The report renders for a human reader, showing each statement's prose, links and standing.
 
 **Adoption**
 
-- R20. A catalog with a single statement produces a useful report, and statements without examples show as unverified without blocking the rest.
-- R21. LemmaSpec stays usable without the catalog, and its core gains no dependency on it.
+- R22. A catalog with a single statement produces a useful report, and statements without examples show as unverified without blocking the rest.
+- R23. LemmaSpec stays usable without the catalog, and its core gains no dependency on it.
 
 ### Acceptance Examples
 
-- AE1. **Covers R15.**
+- AE1. **Covers R17.**
   - **Given:** the definition "next follow-up is the due date of the earliest open task" and its example are approved; the example failed with its current text and passes at the commit on the browser and MCP channels; no exception applies.
   - **When:** the report runs.
   - **Then:** the definition is verified.
-- AE2. **Covers R12, R15.**
+- AE2. **Covers R12, R17.**
   - **Given:** AE1, except that an agent edited the example after its failing run, and the edited example passes.
   - **When:** the report runs.
   - **Then:** the example is unapproved and the definition is not verified.
 - AE3. **Covers R12, R13.**
   - **Given:** the follow-up definition changes from "the next-touch date the consultant sets" to "the due date of the earliest open task".
   - **When:** the report runs.
-  - **Then:** the definition is unapproved, and its examples and the exception narrowing it are stale until a human re-confirms each.
-- AE4. **Covers R4, R15.**
+  - **Then:** the definition is unapproved, and its examples and the exception narrowing it are stale. After a human approves the new definition text, they stay stale until a human re-confirms each.
+- AE4. **Covers R4, R17.**
   - **Given:** an MCP channel is added to the catalog and approved.
   - **When:** the report runs.
   - **Then:** every definition without an exception for MCP becomes unverified, with the missing MCP example as its reason, until it has an MCP example that failed and then passed.
@@ -125,14 +127,18 @@ flowchart TB
   - **Given:** an exception links to a definition ID that does not exist.
   - **When:** the catalog is checked.
   - **Then:** the check fails with an error naming the unknown reference.
-- AE7. **Covers R16, R20.**
+- AE7. **Covers R18, R22.**
   - **Given:** a catalog holding one approved intent and nothing else.
   - **When:** the report runs.
   - **Then:** the report completes and shows the intent as unverified because no definition refines it.
+- AE8. **Covers R14, R17.**
+  - **Given:** the private-data definition has two approved browser examples, one passing and one failing, and an agent deletes the failing one without an approved removal.
+  - **When:** the report runs.
+  - **Then:** the definition is unverified, and the reason names the removed example.
 
 ### Success Criteria
 
-- AE1 through AE7 run as the catalog checker's own fixture and produce the stated standings.
+- AE1 through AE8 run as the catalog checker's own fixture and produce the stated standings.
 - The checker's mutation policies leave no surviving mutants, so every rule and condition is load-bearing for that fixture.
 
 ### Scope Boundaries
@@ -158,8 +164,9 @@ flowchart TB
 
 - The first version needs a run-recording path that keeps failing runs. The existing status producer turns only passing gates into `observed` facts.
 - The repository owner is the only approver at first.
-- The catalog records who approved, but cannot prove it. What keeps agents from approving is where approvals happen, such as the owner's commits or a protected path, consistent with LemmaSpec's documented limit that basis metadata does not authenticate authorship.
-- Cross-file references follow memspec's import model: `use "<path>" as <alias>`, qualified IDs, cycles rejected, and a file imported along two paths loaded once.
+- Agents commit under the owner's identity, so the source R15 (trusted approvals and runs) declares must be a step they cannot take, such as CI on a protected branch or a protected path. The owner's commits alone do not qualify. LemmaSpec's basis metadata likewise does not authenticate authorship.
+- Test code an example calls outside its digest, such as shared steps, helpers, fixtures and channel drivers, is not protected by approval until the example-digest question below is settled.
+- Cross-file references follow memspec's import model: `use "<path>" as <alias>`, qualified IDs, cycles rejected, and a file imported along two paths loaded once. `alias.id` is only how one catalog file refers into another; artifacts outside the catalog cite the bare ID.
 
 ### Outstanding Questions
 
@@ -168,7 +175,8 @@ flowchart TB
 - Does the catalog get its own syntax with first-class statement kinds, or LemmaSpec syntax with a fixed relation vocabulary? Readability favors first-class kinds that project to LemmaSpec evidence.
 - Where does the catalog tool live? The default is a crate beside `crates/lemmaspec-plan` unless the packaging work decides otherwise.
 - How does a human approve or re-confirm: a command, an approval file, or a signed commit?
-- What does a digest cover: prose only, or prose and links, and is whitespace normalized?
+- What does a statement digest cover: prose only, or prose and links, and is whitespace normalized?
+- Does an example's digest cover only its body and tags, or also the test code it calls, such as shared steps, helpers, fixtures and channel drivers? A body-only digest lets a weakened helper go unnoticed.
 - Which test framework does the first version read examples from? The first project to adopt the catalog decides.
 
 <!-- ce-section: work-relationships -->
@@ -179,7 +187,7 @@ This plan covers the intent model and its verified-statement report. The areas b
 - **Execution binding:** Depends on this plan's statement and example IDs. It supplies recorded runs, including failures, per test framework and channel.
 - **Toolset shape:** Can proceed independently of execution binding. Still to decide: whether the catalog tool lives with LemmaSpec, with the code-fact extractor, or in a merged toolset.
 - **Code tie-in** (change impact, unreached code, channel coverage): Depends on this plan and on code facts. Shares this plan's link direction, with code-level facts pointing up at statements.
-- **Approval UI:** Depends on this plan's approved, pending and stale standings.
+- **Approval UI:** Depends on this plan's approval step and its unapproved and stale standings.
 
 ### Sources / Research
 
