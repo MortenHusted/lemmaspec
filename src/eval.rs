@@ -171,6 +171,16 @@ impl Engine {
     ) -> Result<String, Box<dyn std::error::Error>> {
         self.validate_aggregates(&clauses)?;
         self.validate_rule_safety(&clauses)?;
+        for clause in &clauses {
+            for literal in &clause.body {
+                if let Lit::Cmp(_, left, right) = literal {
+                    self.intern_comparison_constant(left);
+                    if let crate::ast::Expr::T(term) = right {
+                        self.intern_comparison_constant(term);
+                    }
+                }
+            }
+        }
         let previous_clause_count = self.clauses.len();
         let previous_ever_derived = self.ever_derived.clone();
         for (offset, clause) in clauses.iter().enumerate() {
@@ -292,6 +302,14 @@ impl Engine {
 
     pub fn sym(&mut self, s: &str) -> Value {
         Value::Sym(self.interner.intern(s))
+    }
+
+    /// Comparisons resolve constants by lookup, so a symbol no fact mentions
+    /// must be interned or `X \= c` could never hold.
+    fn intern_comparison_constant(&mut self, term: &Term) {
+        if let Term::Sym(symbol) = term {
+            self.interner.intern(symbol);
+        }
     }
 
     /// Retract a base (EDB) fact. Used for supersession when the old tuple
