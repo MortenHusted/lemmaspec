@@ -5,7 +5,10 @@ use std::collections::BTreeMap;
 pub mod approvals;
 pub mod digest;
 pub mod examples;
+pub mod identity;
 pub mod loader;
+pub mod recorder;
+pub mod runs;
 pub mod syntax;
 
 /// A validated catalog: every statement reachable from the root, keyed by its
