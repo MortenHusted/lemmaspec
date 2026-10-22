@@ -274,15 +274,15 @@ This plan covers the intent model, its verified-statement report, and run record
 
 - KTD1. **A new optional crate, `crates/lemmaspec-intent`, mirrors `crates/lemmaspec-plan`.** It is a library plus a `lemmaspec-intent` binary, depends on `lemmaspec` by path, is a workspace member with `dist = false`, and parses its own arguments as the plan crate does. LemmaSpec's core gains no code (R26). (session-settled: user-approved — chosen over adding catalog support to LemmaSpec's core: the core stays a general engine and the catalog stays optional.)
 - KTD2. **The catalog has its own block syntax with first-class statement kinds.** `.intent` files hold `use` imports, then `intent`, `definition`, `exception` and `channel` blocks whose fields are `text`, `refines`, `narrows`, `kind` and `channels`; the same parser reads approval and run entries. A hand-written recursive-descent parser in the crate projects it into LemmaSpec evidence, with each statement's prose as its symbol label. Governs R1–R9. (session-settled: user-approved — chosen over LemmaSpec syntax with a fixed relation vocabulary: prose would sit in symbol labels and cross-file imports would have to enter LemmaSpec's core.)
-- KTD3. **The import loader mirrors memspec's instead of depending on memspec.** It loads transitively, rejects cycles, loads a file reached along two paths once, and reports a missing file at the importing `use`. It adds what memspec lacks: IDs unique across all files, imports confined to the catalog root, and a fixed root at `intent/catalog.intent` whose transitive imports are the catalog; an `.intent` file under the catalog directory that the root does not reach is an error. Governs R6, R7, R8. (session-settled: user-approved — chosen over depending on memspec: it is unpublished, uses another edition and toolchain, and its loader reads only memspec syntax.)
+- KTD3. **The import loader mirrors memspec's instead of depending on memspec.** It loads transitively, rejects cycles, loads a file reached along two paths once, and reports a missing file at the importing `use`. It adds what memspec lacks: IDs unique across all files, imports confined to the catalog root, and a fixed root at `intent/catalog.intent` whose transitive imports are the catalog; an `.intent` file under the catalog directory that the root does not reach is an error, except the tool-written `intent/approvals.intent` and `intent/runs.intent`, which are read by fixed path. Governs R6, R7, R8. (session-settled: user-approved — chosen over depending on memspec: it is unpublished, uses another edition and toolchain, and its loader reads only memspec syntax.)
 - KTD4. **Digests are SHA-256 over a versioned canonical rendering (`intent-digest/1`).** A statement's digest covers its kind, its prose with whitespace collapsed, its links as resolved IDs, its exception kind and its sorted channel scope; it excludes file path, position, alias spelling and comments, so splitting files changes nothing (AE16). An example's digest covers the test function's token stream, including its attributes and tag, with formatting and comments excluded; helpers it calls are not covered. Approvals and runs store the digest version, and a version mismatch is its own reason. Governs R13, R14, R18. (session-settled: user-approved — chosen over prose-only statement digests and over digesting helper code: links must be protected, and helper tracing is per-framework work.)
-- KTD5. **Approvals live in an append-only log, `intent/approvals.intent`.** Only `lemmaspec-intent approve`, `reconfirm` and `remove` write it. Each entry holds a sequence number, item ID and kind, the action (approve or remove), the item digest and digest version, each resolved link with its digest, the channels for an example, the approved prose for a statement, and the approver's name. The latest entry per item wins. An item that is missing but approved and not removed is reinstated from its latest entry, so references to it still resolve (R15). `remove` is refused while approved items still link to the target. Governs R12–R15. (session-settled: user-approved — chosen over approvals keyed by any matching digest: reverting to text approved long ago must show as unapproved.)
-- KTD6. **Runs live in a ledger, `intent/runs.intent`, keyed by a source identity.** Each run records the example ID, digest, digest version, channel, source identity, base commit and an outcome of pass, fail, error or skip. The source identity is SHA-256 over the path, mode and content hash of every tracked file as it is in the working tree, excluding the run ledger and the approval log. Committing runs therefore leaves their identity intact, and an uncommitted scratch break gets an identity of its own (R20). Governs R10, R20, R23. (session-settled: user-approved — chosen over keying runs by commit SHA: recording a run would otherwise create a new commit that the run does not match.)
-- KTD7. **CI regenerates green; the committed ledger needs only red.** A CI job records every example on every channel at the commit into a temporary ledger, then reports over the committed ledger plus those runs. Governs R11, R18. (session-settled: user-approved — chosen over committing green runs: a green run at a commit cannot be committed in that same commit.)
+- KTD5. **Approvals live in an append-only log, `intent/approvals.intent`.** Only `lemmaspec-intent approve`, `reconfirm` and `remove` write it. Each entry holds the item ID and kind, the action (approve or remove), the item digest and digest version, each resolved link with its digest, the channels for an example, the approved prose for a statement, and the approver's name. Entries are ordered by their position in the file, so branches that each append entries merge without renumbering, and the last entry per item wins. An item is stale (R14) when a linked statement's current digest or its latest approved digest differs from the digest the item's entry recorded, so reverting the dependency does not clear staleness; only a new entry for the item does. An item that is missing but approved and not removed is reinstated from its latest entry, so references to it still resolve (R15). `remove` is refused while approved items still link to the target. Governs R12–R15. (session-settled: user-approved — chosen over approvals keyed by any matching digest: reverting to text approved long ago must show as unapproved.)
+- KTD6. **Runs live in a ledger, `intent/runs.intent`, keyed by a source identity.** Each run records the example ID, digest, digest version, channel, source identity, base commit and an outcome of pass, fail, error or skip. The source identity is SHA-256 over the sorted path, mode and git blob ID of every tracked file, excluding the run ledger and the approval log. Blob IDs come from `git hash-object` on the working tree, which applies the repository's line-ending rules, so a clean checkout has exactly its commit tree's identity on every platform. Committing runs therefore leaves their identity intact, and an uncommitted scratch break gets an identity of its own (R20). The report evaluates the checked-out source and names its identity and whether it matches HEAD's commit tree, so a dirty tree's runs never count toward the commit. Governs R10, R20, R23. (session-settled: user-approved — chosen over keying runs by commit SHA: recording a run would otherwise create a new commit that the run does not match.)
+- KTD7. **CI regenerates green; the committed ledger needs only red.** A CI job records every example on every channel at the commit into a temporary ledger, then runs `report --ledger <temp>`, which reads that ledger in addition to `intent/runs.intent`. Governs R11, R18. (session-settled: user-approved — chosen over committing green runs: a green run at a commit cannot be committed in that same commit.)
 - KTD8. **The first recorder targets `cargo test` integration tests.** Examples are `#[test]` functions in `tests/*.rs`, tagged by a doc-comment line `intent: example <id> exemplifies <statement> on <channel>, <channel>`, found with `syn`. The recorder runs each example once per channel with `cargo test --locked --test <file stem> -- --exact <test path>`, setting `LEMMASPEC_INTENT_CHANNEL`. It classifies the outcome from the exit status and libtest's summary line: one passed is pass, one failed is fail, one ignored is skip, and a build failure or zero matching tests is error. Tests inside `src/` are not supported. Governs R9, R11, R29. (session-settled: user-approved — chosen over a proc-macro attribute: a doc comment needs no extra crate in the adopting project.)
-- KTD9. **A bundled checker, `crates/lemmaspec-intent/intent_checker.lemmaspec`, decides standings.** Its synthetic fixture covers the standing-level acceptance examples, and its `drop_rule` and `drop_condition` policies must stay clean. Standings follow a negation chain in R17's order; "no example on a channel" is a negation, never `count = 0`. Projected evidence carries only invariant expectations: nothing awaiting approval (count 0), which makes the bound report exit 1 while changes are pending (R16), and no item with two standings. Unverified items never change the exit status (R25). Governs R16–R22, R25, R29.
+- KTD9. **A bundled checker, `crates/lemmaspec-intent/intent_checker.lemmaspec`, decides standings.** Its synthetic fixture covers the standing-level acceptance examples, and its `drop_rule` and `drop_condition` policies must stay clean. Standings follow a negation chain in R17's order; "no example on a channel" is a negation, never `count = 0`. The four standing relations feed one union relation, `standing(Item, Kind)`. Projected evidence carries only invariant expectations: nothing awaiting approval (count 0), which makes the bound report exit 1 while changes are pending (R16), and `standing(<id>, Kind)` count 1 for every intent, definition and exception, which catches both a missing and a doubled standing and is killable through every rule it reads. Unverified items never change the exit status (R25). Governs R16–R22, R25, R29.
 - KTD10. **Evidence keeps identities in relation arguments, not in `observed` bases.** Runs at other source identities are honest evidence (R20), but `observed` facts with an identity trip `render --target-identity` into a "Not current" banner and exit 1. Catalog, approval-log and ledger facts are `basis: snapshot`, with the file as source and its digest as identity. Fact IDs are sanitized and deterministic (`<relation>_<n>` after sorting by relation and arguments), because digests, commits and `alias.id` references are not valid bare identifiers. Governs R20, R23.
-- KTD11. **`record` is the only execution boundary.** `check`, `approve`, `reconfirm`, `remove` and `report` read files and git objects but never run project code. `report --base <commit>` reads the approval log at the base through `git show` and lists entries that are new or altered since (R27). Governs R23, R27.
+- KTD11. **`record` is the only execution boundary.** `check`, `approve`, `reconfirm`, `remove` and `report` read files and git objects but never run project code. `report --base <commit>` reads the approval log at the base through `git show`, treats a base without one as an empty log, and lists the entries added since; when the base's log is not a byte prefix of the current one, it reports the log as altered (R27). Governs R23, R27.
 - KTD12. **Agent guidance ships as `lemmaspec-intent intro` plus one pointer line in `plugins/lemmaspec/skills/lemmaspec/SKILL.md`.** The intro covers drafting statements, tagging tests, recording red on a scratch break, and never hand-editing the approval log or the run ledger. (session-settled: user-approved — chosen over a second installable skill: no install-code or CI distribution changes.)
 - KTD13. **Local gates use `--workspace`.** The root `Cargo.toml` sets `default-members = ["."]`, so `CONTRIBUTING.md`'s commands skip workspace crates. CI already passes `--workspace`; `CONTRIBUTING.md` is updated to match.
 
@@ -317,7 +317,6 @@ stateDiagram-v2
   Approved --> Unapproved: text, links, kind or channel tags change
   Approved --> Stale: a linked statement's digest changes
   Stale --> Approved: reconfirm records the new linked digests
-  Stale --> Approved: dependency reverted to the recorded digest
   Approved --> RemovalPending: item, link or channel tag disappears
   RemovalPending --> Approved: restored unchanged
   RemovalPending --> Removed: remove, refused while approved items still link to it
@@ -328,8 +327,8 @@ Standing precedence (R17), evaluated per intent, definition and exception:
 
 | First condition that holds | Standing | Example reason |
 |---|---|---|
-| Item, or a link or tag it depends on, is unapproved or pending removal | unapproved | "text differs from latest approval" |
-| A linked statement's digest differs from the one recorded at approval | stale | "refines `results_are_honest`, which changed" |
+| Item's own text, or one of its own link IDs or channel tags, differs from its latest approval or is pending removal | unapproved | "text differs from latest approval" |
+| A linked statement's current or latest approved digest differs from the one recorded at approval | stale | "refines `results_are_honest`, which changed" |
 | Any R18, R19 or R21 condition fails | unverified | "no failing run on library" |
 | Otherwise | verified | none |
 
@@ -367,7 +366,7 @@ catalog walk {
 fn ...
 
 // intent/approvals.intent (written only by the tool)
-approval 7 { item: walk_exit_status action: approve by: "owner"
+approval { item: walk_exit_status action: approve by: "owner"
              digest: "sha256:..." digest_version: 1
              links: [results_are_honest: "sha256:..."] text: "walk exits 0 when ..." }
 
@@ -402,7 +401,7 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
 ### Risks & Dependencies
 
 - **Digest stability.** `syn` and `proc-macro2` token printing could change between versions and silently unapprove every example. Pin them through `Cargo.lock`, test the canonical rendering against fixed expected strings, and bump `intent-digest` deliberately when it must change.
-- **Cross-platform identity.** Windows line endings and path separators can change content hashes and paths. Normalize separators in stored paths, hash the bytes git tracks, and run the identity tests on all three CI platforms.
+- **Cross-platform identity.** Windows line endings and path separators can change content hashes and paths. Normalize separators in stored paths, take blob IDs from `git hash-object` so line-ending rules apply (KTD6), and run the identity tests on all three CI platforms.
 - **CI time.** Recording runs every example once per channel. Integration tests compile once per test file, so the cost is test execution, which is small for lemmaspec's catalog; revisit if a catalog grows past a few dozen examples.
 - **Red-run ergonomics.** Recording red for working behavior needs a deliberate local break. If that proves error-prone, a later `record --expect-fail` guard can refuse to write a pass where a fail was intended.
 
@@ -439,6 +438,7 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
   - A definition that refines a channel fails as a wrong-kind link.
   - An import path that leaves the catalog directory fails.
   - An `.intent` file under the catalog directory that the root does not reach fails.
+  - A catalog directory holding unimported `approvals.intent` and `runs.intent` passes `check`.
   - A bare ID that names a statement in a file the current file does not import fails as unknown.
   - An exception without a kind, with an unknown kind, or with channels that are not channel statements fails.
   - A statement without prose fails.
@@ -484,8 +484,8 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
   - `crates/lemmaspec-intent/src/lib.rs` (`CHECKER` constant and `checker` subcommand)
   - `crates/lemmaspec-intent/tests/checker.rs`
 - **Approach:**
-  1. Start from `docs/research/2026-10-22-behavior-checker-sketch.lemmaspec`, and add channels, outcomes, approval sequence, linked digests, exception kinds and removal reinstatement as relations.
-  2. Derive per-(example, channel) red and green, applicable channels, latest approval, staleness, pending removals, the standing chain in R17's order, and reason facts with constant reason codes.
+  1. Start from `docs/research/2026-10-22-behavior-checker-sketch.lemmaspec`, and add channels, outcomes, approval order, linked digests, exception kinds and removal reinstatement as relations.
+  2. Derive per-(example, channel) red and green, applicable channels, latest approval, staleness per KTD5, pending removals, the standing chain in R17's order, the union `standing(Item, Kind)` relation, and reason facts with constant reason codes.
   3. Write the fixture as synthetic facts with exact-count expectations for each case, then the `drop_rule` and `drop_condition` policies.
 - **Execution note:** Write each fixture case and its expectation before the rule that satisfies it, and run `lemmaspec mutate` after every rule added.
 - **Patterns to follow:** `crates/lemmaspec-plan/plan_checker.lemmaspec` (layout, negation chains, fixture naming, self-test); `crates/lemmaspec-plan/tests/project.rs` (clean-mutation assertion).
@@ -506,6 +506,8 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
   - Covers AE17. Red on one channel only leaves the definition unverified on the other.
   - Covers AE18. An error outcome is not a failing run.
   - An item that is both unapproved and stale has exactly one standing, unapproved.
+  - Every fixture item has `standing(<id>, Kind)` count 1.
+  - A dependent stays stale after its definition is changed, re-approved, and then reverted to the text the dependent was confirmed against.
   - An intent whose definition is stale is unverified and names the definition.
   - A stale exception does not scope its channel out, and the definition's reason names the exception.
   - Runs whose digest matches no current example do not count, and the example's reason names the digest mismatch.
@@ -522,13 +524,13 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
   - `crates/lemmaspec-intent/src/main.rs` (`approve`, `reconfirm`, `remove` subcommands)
   - `crates/lemmaspec-intent/tests/approvals.rs`
 - **Approach:**
-  1. Parse existing `approval` entries with the U1 parser and validate their sequence order.
+  1. Parse existing `approval` entries with the U1 parser, in file order.
   2. `approve <id>... --by <name>` computes current digests (U2) and resolved links, and appends one entry per item. `reconfirm` does the same for an unchanged item and records the new linked digests. `remove <id>` appends a removal entry.
   3. Each command refuses unknown IDs and refuses to write while the catalog has R7 errors.
   4. Expose the latest entry per item, and the reinstatement data for approved items that are now missing.
 - **Patterns to follow:** `crates/lemmaspec-plan/src/lib.rs` (`compose_status` validation and fail-closed errors); `crates/lemmaspec-plan/tests/cli.rs` (output not overwritten on invalid input).
 - **Test scenarios:**
-  - Approving a definition appends an entry with its digest, its refined intent and that intent's digest, its prose and the approver, under the next sequence number.
+  - Approving a definition appends an entry, as the last in the file, with its digest, its refined intent and that intent's digest, its prose and the approver.
   - Approving an example stores its statement, channels and digest.
   - Covers AE13. After approvals of text A and then B, the latest entry is B, so text A is reported unapproved.
   - Re-confirming an unchanged example after its definition changed records the definition's new digest.
@@ -536,7 +538,7 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
   - `remove` on an item that approved items still link to is refused, naming the dependents.
   - Approving an unknown ID, or approving while the catalog has a link error, writes nothing.
   - Every write leaves the existing bytes of the log as an unchanged prefix.
-  - Entries out of sequence order fail to load with the offending sequence named.
+  - Entries appended on two branches load in either merge order, and the later-positioned entry for an item wins.
 - **Verification:** Running `approve` twice on a fixture catalog produces a log whose second entry differs only where the item changed.
 
 ### U5. Run ledger and the cargo test recorder
@@ -552,7 +554,7 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
   - `crates/lemmaspec-intent/tests/identity.rs`
   - `crates/lemmaspec-intent/tests/recorder.rs`
 - **Approach:**
-  1. Compute the source identity from `git ls-files` plus working-tree content hashes, excluding the ledger and the approval log.
+  1. Compute the source identity per KTD6 from `git ls-files` modes and `git hash-object` blob IDs, excluding the ledger and the approval log.
   2. Read existing `run` entries, and append new ones; `--ledger <path>` lets CI write a temporary ledger.
   3. Run each selected example once per channel through a runner trait. The real runner invokes `cargo test` per KTD8 with `LEMMASPEC_INTENT_CHANNEL` set; tests use a fake runner that returns canned exit statuses and output.
   4. Classify outcomes from the exit status and libtest's summary line, and store the example digest computed before the run.
@@ -560,6 +562,8 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
 - **Patterns to follow:** `crates/lemmaspec-plan/src/main.rs` (argument handling and exit codes); KTD11 for the execution boundary.
 - **Test scenarios:**
   - The same tracked content gives the same identity, and editing any tracked file changes it.
+  - A clean checkout's identity equals the identity computed from its commit's tree.
+  - A working tree with CRLF line endings under `eol=lf` rules has the same identity as its LF commit.
   - Editing only the run ledger or the approval log leaves the identity unchanged.
   - A fake run reporting one passed is recorded as pass, one failed as fail, and one ignored as skip.
   - Covers AE18. A fake run with a build failure and no summary line is recorded as error.
@@ -585,8 +589,9 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
   1. Project the model into a `lemmaspec::Artifact` with snapshot bases, sanitized fact IDs, prose as symbol labels, catalog paths as symbol sources, and the invariant expectations from KTD9.
   2. Bind with `CHECKER` through `lemmaspec::bind_artifact`, walk it, and read the standing, reason and pending-change facts.
   3. Render through `render_projection_html_with_context` or the Markdown equivalent, with the pending-change list first.
-  4. With `--base <commit>`, read the base's approval log through `git show` and list new or altered entries with their approvers.
-  5. Exit 1 while anything awaits approval, 2 on catalog or argument errors, and 0 otherwise, including when items are unverified.
+  4. Read every `--ledger <path>` given, in addition to `intent/runs.intent`, and name the evaluated source identity and whether it matches HEAD's commit tree in the report header.
+  5. With `--base <commit>`, read the base's approval log per KTD11 and list the entries added since, with their approvers, or report the log as altered.
+  6. Exit 1 while anything awaits approval, 2 on catalog or argument errors, and 0 otherwise, including when items are unverified.
 - **Patterns to follow:** `crates/lemmaspec-plan/tests/project.rs` (bind-to-render chain, byte-equal determinism); `src/source.rs` (`SourceContext` for repository-relative links).
 - **Test scenarios:**
   - Projecting the same inputs twice gives byte-identical artifacts.
@@ -594,7 +599,10 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
   - No projected fact uses an `observed` basis, so rendering with `--target-identity` never shows a "Not current" banner.
   - A catalog with an unapproved definition exits 1 and lists the definition first.
   - A fully approved catalog with unverified definitions exits 0 and shows their reasons.
-  - Covers AE11. With `--base`, an approval added after the base is listed with its approver; an entry altered after the base is listed as altered.
+  - Covers AE11. With `--base`, an approval added after the base is listed with its approver; a log whose base entries were edited is reported as altered.
+  - A base commit with no approval log lists every current entry as added.
+  - A green run present only in a `--ledger` file verifies a definition that the committed ledger alone leaves unverified.
+  - On a dirty tree, the header names the working-tree identity and says it does not match HEAD.
   - Covers AE16. Splitting a verified catalog into imported files leaves every standing unchanged and nothing pending.
   - Covers AE19. A test tagged with an unknown statement is listed as ignored with its reason, and the report still renders.
   - The rendered HTML and Markdown show each statement's prose, its links and its standing.
@@ -620,7 +628,7 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
   1. Declare the `cli` and `library` channels and a small set of statements about walk and mutate exit behavior that existing tests already check.
   2. Tag those existing tests; add a library-channel test only where a definition has none.
   3. For each example and channel, break the behavior locally, record red, and revert the break, keeping the ledger entries.
-  4. Add a CI job on Ubuntu that records every example at the commit into a temporary ledger and runs `report`, failing while changes await approval.
+  4. Add a CI job on Ubuntu that checks out with full history (`fetch-depth: 0`), records every example at the commit into a temporary ledger, and runs `report --ledger <temp>`, passing `--base` with the pull request's base commit on pull requests. It appends the Markdown report to the job summary and fails while changes await approval.
   5. Leave approvals to the repository owner; the PR's intent job stays red until they are recorded, which is the intended alert.
 - **Execution note:** Record each red run from a deliberate one-line break of the behavior the example checks, never from a broken build, and confirm the recorded outcome is fail before reverting.
 - **Patterns to follow:** `.github/workflows/ci.yml` (existing job layout and caching).
@@ -644,7 +652,7 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
   - `plugins/lemmaspec/skills/lemmaspec/SKILL.md` (one pointer line)
 - **Approach:**
   1. The crate README documents the syntax, the root and import rules, digests, the approval and run files, the commands and their exit statuses, and the documented gaps from Scope Boundaries.
-  2. `intro` prints the agent workflow: draft statements, tag tests, record red on a scratch break, run `report`, and never hand-edit the approval log or the run ledger.
+  2. `intro` prints the agent workflow: draft statements, tag tests, record red on a scratch break, run `report`, and never hand-edit the approval log or the run ledger, except to resolve a rebase conflict by keeping the base's entries first and the branch's entries after them.
   3. The skill gains one line pointing agents at `lemmaspec-intent intro` when a repository has an `intent/` catalog.
 - **Patterns to follow:** `crates/lemmaspec-plan/README.md`; `src/agent.rs` (`INTRO` text style).
 - **Test scenarios:**
@@ -664,7 +672,7 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
 | Checker self-test | `cargo test -p lemmaspec-intent --test checker`, which asserts `mutate_artifact(CHECKER)` is clean | U3 |
 | Root package | `cargo package --locked` | U1, U8 (the root crate's package contents must not change apart from docs) |
 | Release config | `dist generate --check` | U1 (the new crate stays out of release binaries) |
-| Dogfood | the CI intent job: `lemmaspec-intent record --all --ledger <temp>` then `lemmaspec-intent report` | U7 |
+| Dogfood | the CI intent job: `lemmaspec-intent record --all --ledger <temp>` then `lemmaspec-intent report --ledger <temp> --base <PR base>` | U7 |
 
 ## Definition of Done
 
