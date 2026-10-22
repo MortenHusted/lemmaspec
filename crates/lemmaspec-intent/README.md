@@ -329,12 +329,17 @@ the working tree's. The committed ledger needs only red. CI records every
 example at the commit into a temporary ledger and reports with it:
 
 ```sh
-lemmaspec-intent record --ledger "$RUNNER_TEMP/runs.intent"
+lemmaspec-intent record --ledger "$RUNNER_TEMP/runs.intent" | tee "$RUNNER_TEMP/record.txt"
 lemmaspec-intent report --ledger "$RUNNER_TEMP/runs.intent" --base <pull request base>
+! grep -E ': (fail|error)$' "$RUNNER_TEMP/record.txt"
 ```
 
 The ledger's directory must exist, and the ledger must not be a tracked file. A
 failing or erroring run at the target keeps the example from passing there.
+`record` exits 0 whatever the outcomes and `report` fails only while something
+awaits approval, so the last line fails the job on a regression. Without it, a
+regression on a channel that plain `cargo test` never drives shows only as an
+unverified statement.
 
 ## Standings
 

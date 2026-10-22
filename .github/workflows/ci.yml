@@ -79,7 +79,7 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          cargo run -q -p lemmaspec-intent --locked -- record --ledger "$RUNNER_TEMP/runs.intent"
+          cargo run -q -p lemmaspec-intent --locked -- record --ledger "$RUNNER_TEMP/runs.intent" | tee "$RUNNER_TEMP/record.txt"
 
           base_args=()
           if [[ -n "$BASE" && ! "$BASE" =~ ^0+$ ]]; then
@@ -89,5 +89,9 @@ jobs:
           cargo run -q -p lemmaspec-intent --locked -- report --ledger "$RUNNER_TEMP/runs.intent" "${base_args[@]}" -o "$RUNNER_TEMP/intent.md" || status=$?
           if [[ -f "$RUNNER_TEMP/intent.md" ]]; then
             cat "$RUNNER_TEMP/intent.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if grep -E ': (fail|error)$' "$RUNNER_TEMP/record.txt"; then
+            echo "::error::An example fails or errors at this commit."
+            [[ "$status" -ne 0 ]] || status=1
           fi
           exit "$status"
