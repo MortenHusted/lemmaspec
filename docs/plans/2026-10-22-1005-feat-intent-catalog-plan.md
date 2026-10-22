@@ -116,7 +116,7 @@ flowchart TB
 
 **Change review**
 
-- R27. Given a base commit, the report also lists the approvals recorded between the base and the target, naming each approver, so approvals are reviewable like any other change.
+- R27. Given a base commit, the report also lists the approvals and the failing runs recorded between the base and the target, naming each approver and showing the break behind each failing run, so approvals and red evidence are reviewable like any other change.
 
 ### Acceptance Examples
 
@@ -196,10 +196,14 @@ flowchart TB
   - **Given:** a test is tagged as an example of a statement ID the catalog does not declare.
   - **When:** the report runs.
   - **Then:** the report completes, lists the example as ignored with the unknown statement as the reason, and no standing counts it.
+- AE20. **Covers R27.**
+  - **Given:** a branch records a failing run for an example by deliberately breaking the code path it checks.
+  - **When:** the report runs with the branch's base commit as base.
+  - **Then:** the report lists that failing run with the diff of the break, so a reviewer can judge whether the break tests the claim.
 
 ### Success Criteria
 
-- Every acceptance example runs as an automated test: the standing-level ones as the checker's own fixture, and AE6, AE11, AE16 and AE19 against the catalog tool.
+- Every acceptance example runs as an automated test: the standing-level ones as the checker's own fixture, and AE6, AE11, AE16, AE19 and AE20 against the catalog tool.
 - The checker's mutation policies leave no surviving mutants, so every rule and condition is load-bearing for that fixture.
 - On the first project to adopt the catalog, the report at a real commit shows at least one definition verified from that project's own tagged tests and recorded runs, and editing one of those tests turns it unapproved.
 
@@ -227,7 +231,7 @@ flowchart TB
 - Rejecting approvals or runs forged on a branch. Change is surfaced, not policed: a forged approval still shows in the approvals listed since the base (R27). Evidence of forged runs reaching a merge would change this.
 - Isolating the recorder from test hooks or harness configuration at the version under test. A hook that turns failures into passes is out of reach of example digests; CI regenerates green from the committed tree, so the hook change is itself reviewable. Evidence of such a hook surviving review would change this.
 - Covering shared helpers, fixtures and channel drivers in an example's digest. The digest covers the test function and its tag (KTD4); tracing helpers per framework is costly, and a weakened helper remains a documented gap.
-- Preserving scratch breaks under a reserved git ref. Standings never need the scratch source to resolve; the run record keeps its source identity and base commit for traceability.
+- Preserving scratch breaks under a reserved git ref. Standings never need the scratch source to resolve; a failing run's entry stores the break's diff for review (KTD6).
 - A second installable agent skill for the catalog. An `intro` command and one pointer line in the existing skill carry the guidance (KTD12).
 
 **Deferred to Follow-Up Work**
@@ -268,7 +272,7 @@ This plan covers the intent model, its verified-statement report, and run record
 
 ## Planning Contract
 
-**Product Contract preservation:** changed: R12, R16, R27 (approvals recorded in the catalog and surfaced, not policed, as directed during planning); tightened as confirmed in the planning synthesis: R4, R10, R13, R15, R17, R18, R20, R23; added: R28, R29, AE12–AE19; Outstanding Questions resolved into KTD2–KTD8.
+**Product Contract preservation:** changed: R12, R16, R27 (approvals recorded in the catalog and surfaced, not policed, as directed during planning; R27 and AE20 widened to failing runs, as recommended and accepted after plan review); tightened as confirmed in the planning synthesis: R4, R10, R13, R15, R17, R18, R20, R23; added: R28, R29, AE12–AE19; Outstanding Questions resolved into KTD2–KTD8.
 
 ### Key Technical Decisions
 
@@ -277,12 +281,12 @@ This plan covers the intent model, its verified-statement report, and run record
 - KTD3. **The import loader mirrors memspec's instead of depending on memspec.** It loads transitively, rejects cycles, loads a file reached along two paths once, and reports a missing file at the importing `use`. It adds what memspec lacks: IDs unique across all files, imports confined to the catalog root, and a fixed root at `intent/catalog.intent` whose transitive imports are the catalog; an `.intent` file under the catalog directory that the root does not reach is an error, except the tool-written `intent/approvals.intent` and `intent/runs.intent`, which are read by fixed path. Governs R6, R7, R8. (session-settled: user-approved — chosen over depending on memspec: it is unpublished, uses another edition and toolchain, and its loader reads only memspec syntax.)
 - KTD4. **Digests are SHA-256 over a versioned canonical rendering (`intent-digest/1`).** A statement's digest covers its kind, its prose with whitespace collapsed, its links as resolved IDs, its exception kind and its sorted channel scope; it excludes file path, position, alias spelling and comments, so splitting files changes nothing (AE16). An example's digest covers the test function's token stream, including its attributes and tag, with formatting and comments excluded; helpers it calls are not covered. Approvals and runs store the digest version, and a version mismatch is its own reason. Governs R13, R14, R18. (session-settled: user-approved — chosen over prose-only statement digests and over digesting helper code: links must be protected, and helper tracing is per-framework work.)
 - KTD5. **Approvals live in an append-only log, `intent/approvals.intent`.** Only `lemmaspec-intent approve`, `reconfirm` and `remove` write it. Each entry holds the item ID and kind, the action (approve or remove), the item digest and digest version, each resolved link with its digest, the channels for an example, the approved prose for a statement, and the approver's name. Entries are ordered by their position in the file, so branches that each append entries merge without renumbering, and the last entry per item wins. An item is stale (R14) when a linked statement's current digest or its latest approved digest differs from the digest the item's entry recorded, so reverting the dependency does not clear staleness; only a new entry for the item does. An item that is missing but approved and not removed is reinstated from its latest entry, so references to it still resolve (R15). `remove` is refused while approved items still link to the target. Governs R12–R15. (session-settled: user-approved — chosen over approvals keyed by any matching digest: reverting to text approved long ago must show as unapproved.)
-- KTD6. **Runs live in a ledger, `intent/runs.intent`, keyed by a source identity.** Each run records the example ID, digest, digest version, channel, source identity, base commit and an outcome of pass, fail, error or skip. The source identity is SHA-256 over the sorted path, mode and git blob ID of every tracked file, excluding the run ledger and the approval log. Blob IDs come from `git hash-object` on the working tree, which applies the repository's line-ending rules, so a clean checkout has exactly its commit tree's identity on every platform. Committing runs therefore leaves their identity intact, and an uncommitted scratch break gets an identity of its own (R20). The report evaluates the checked-out source and names its identity and whether it matches HEAD's commit tree, so a dirty tree's runs never count toward the commit. Governs R10, R20, R23. (session-settled: user-approved — chosen over keying runs by commit SHA: recording a run would otherwise create a new commit that the run does not match.)
+- KTD6. **Runs live in a ledger, `intent/runs.intent`, keyed by a source identity.** Each run records the example ID, digest, digest version, channel, source identity, base commit and an outcome of pass, fail, error or skip. The source identity is SHA-256 over the sorted path, mode and git blob ID of every tracked file, excluding the run ledger and the approval log. Blob IDs come from `git hash-object` on the working tree, which applies the repository's line-ending rules, so a clean checkout has exactly its commit tree's identity on every platform. Committing runs therefore leaves their identity intact, and an uncommitted scratch break gets an identity of its own (R20). The report evaluates the checked-out source and names its identity and whether it matches HEAD's commit tree, so a dirty tree's runs never count toward the commit. A failing run also stores the diff of tracked files against its base commit, excluding the run ledger and the approval log, so the break behind it stays reviewable (R27). Governs R10, R20, R23. (session-settled: user-approved — chosen over keying runs by commit SHA: recording a run would otherwise create a new commit that the run does not match.)
 - KTD7. **CI regenerates green; the committed ledger needs only red.** A CI job records every example on every channel at the commit into a temporary ledger, then runs `report --ledger <temp>`, which reads that ledger in addition to `intent/runs.intent`. Governs R11, R18. (session-settled: user-approved — chosen over committing green runs: a green run at a commit cannot be committed in that same commit.)
 - KTD8. **The first recorder targets `cargo test` integration tests.** Examples are `#[test]` functions in `tests/*.rs`, tagged by a doc-comment line `intent: example <id> exemplifies <statement> on <channel>, <channel>`, found with `syn`. The recorder runs each example once per channel with `cargo test --locked --test <file stem> -- --exact <test path>`, setting `LEMMASPEC_INTENT_CHANNEL`. It classifies the outcome from the exit status and libtest's summary line: one passed is pass, one failed is fail, one ignored is skip, and a build failure or zero matching tests is error. Tests inside `src/` are not supported. Governs R9, R11, R29. (session-settled: user-approved — chosen over a proc-macro attribute: a doc comment needs no extra crate in the adopting project.)
 - KTD9. **A bundled checker, `crates/lemmaspec-intent/intent_checker.lemmaspec`, decides standings.** Its synthetic fixture covers the standing-level acceptance examples, and its `drop_rule` and `drop_condition` policies must stay clean. Standings follow a negation chain in R17's order; "no example on a channel" is a negation, never `count = 0`. The four standing relations feed one union relation, `standing(Item, Kind)`. Projected evidence carries only invariant expectations: nothing awaiting approval (count 0), which makes the bound report exit 1 while changes are pending (R16), and `standing(<id>, Kind)` count 1 for every intent, definition and exception, which catches both a missing and a doubled standing and is killable through every rule it reads. Unverified items never change the exit status (R25). Governs R16–R22, R25, R29.
 - KTD10. **Evidence keeps identities in relation arguments, not in `observed` bases.** Runs at other source identities are honest evidence (R20), but `observed` facts with an identity trip `render --target-identity` into a "Not current" banner and exit 1. Catalog, approval-log and ledger facts are `basis: snapshot`, with the file as source and its digest as identity. Fact IDs are sanitized and deterministic (`<relation>_<n>` after sorting by relation and arguments), because digests, commits and `alias.id` references are not valid bare identifiers. Governs R20, R23.
-- KTD11. **`record` is the only execution boundary.** `check`, `approve`, `reconfirm`, `remove` and `report` read files and git objects but never run project code. `report --base <commit>` reads the approval log at the base through `git show`, treats a base without one as an empty log, and lists the entries added since; when the base's log is not a byte prefix of the current one, it reports the log as altered (R27). Governs R23, R27.
+- KTD11. **`record` is the only execution boundary.** `check`, `approve`, `reconfirm`, `remove` and `report` read files and git objects but never run project code. `report --base <commit>` reads the approval log at the base through `git show`, treats a base without one as an empty log, and lists the entries added since, together with the failing runs added to the ledger since and their diffs; when the base's log is not a byte prefix of the current one, it reports the log as altered (R27). Governs R23, R27.
 - KTD12. **Agent guidance ships as `lemmaspec-intent intro` plus one pointer line in `plugins/lemmaspec/skills/lemmaspec/SKILL.md`.** The intro covers drafting statements, tagging tests, recording red on a scratch break, and never hand-editing the approval log or the run ledger. (session-settled: user-approved — chosen over a second installable skill: no install-code or CI distribution changes.)
 - KTD13. **Local gates use `--workspace`.** The root `Cargo.toml` sets `default-members = ["."]`, so `CONTRIBUTING.md`'s commands skip workspace crates. CI already passes `--workspace`; `CONTRIBUTING.md` is updated to match.
 
@@ -571,13 +575,14 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
   - An example tagged for two channels runs twice, once with each channel in the environment variable.
   - Recording appends entries and never rewrites existing ones.
   - Covers AE10. A run recorded on a dirty scratch tree stores that tree's identity and the base commit.
+  - A failing run stores the tracked-file diff against its base commit, without the ledger or approval log; a passing run stores no diff.
   - `--ledger` writes to the given path and leaves `intent/runs.intent` untouched.
 - **Verification:** The fake-runner tests pass on all three platforms; the real runner is proven by U7's CI job.
 
 ### U6. Evidence projection and the report command
 
 - **Goal:** Turn catalog, examples, approvals and runs into evidence, bind it to the checker, and render the report with its exit status.
-- **Requirements:** R16, R17, R22–R25, R27, R28; AE11, AE16, AE19; KTD9, KTD10, KTD11.
+- **Requirements:** R16, R17, R22–R25, R27, R28; AE11, AE16, AE19, AE20; KTD9, KTD10, KTD11.
 - **Dependencies:** U1–U5.
 - **Files:**
   - `crates/lemmaspec-intent/src/project.rs`
@@ -603,6 +608,7 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
   - A base commit with no approval log lists every current entry as added.
   - A green run present only in a `--ledger` file verifies a definition that the committed ledger alone leaves unverified.
   - On a dirty tree, the header names the working-tree identity and says it does not match HEAD.
+  - Covers AE20. With `--base`, a failing run added since the base is listed with its diff.
   - Covers AE16. Splitting a verified catalog into imported files leaves every standing unchanged and nothing pending.
   - Covers AE19. A test tagged with an unknown statement is listed as ignored with its reason, and the report still renders.
   - The rendered HTML and Markdown show each statement's prose, its links and its standing.
