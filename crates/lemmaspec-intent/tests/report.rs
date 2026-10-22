@@ -2,7 +2,7 @@ mod common;
 
 use std::collections::BTreeMap;
 
-use common::{root_catalog, Project, STATEMENTS};
+use common::{cited, root_catalog, Project, STATEMENTS};
 use lemmaspec::{parse_artifact, print_artifact, EvidenceKind, FactValue};
 use lemmaspec_intent::{
     digest::DIGEST_VERSION,
@@ -155,7 +155,7 @@ fn html_and_markdown_show_each_statements_prose_links_and_standing() {
     let catalog = project.intent().join("catalog.intent");
     assert!(statements.contains(&format!(
         "### `walk_exit_status` (definition): verified\n\n> walk exits 0 when every expectation holds, 1 when one is open, and 2 when the artifact is invalid.\n\n- File: `{}`\n- Refines: `results_are_honest`\n- Examples: `open_exits_one` on `cli`\n",
-        catalog.display()
+        cited(&catalog)
     )), "{statements}");
     assert!(statements.contains(
         "- Narrows: `walk_exit_status`\n- Kind: holds_instead on `library`\n- Examples: `library_report` on `library`\n"
@@ -312,7 +312,7 @@ fn moving_statements_into_an_imported_file_leaves_every_standing_unchanged_and_n
     assert!(!after.pending, "{}", after.markdown);
     assert!(after.markdown.contains(&format!(
         "- File: `{}`",
-        project.intent().join("walk.intent").display()
+        cited(&project.intent().join("walk.intent"))
     )));
 }
 
@@ -330,7 +330,7 @@ fn a_test_tagged_with_an_unknown_statement_is_listed_as_ignored_and_the_report_s
         ignored,
         format!(
             "## Ignored examples\n\n- `ghost` at `{}:1` (`ghost`): unknown statement no_such_statement\n",
-            project.tests().join("ghost.rs").display()
+            cited(&project.tests().join("ghost.rs"))
         )
     );
     assert_eq!(report.standings["walk_exit_status"], "verified");
@@ -389,7 +389,7 @@ fn approvals_and_runs_recorded_under_another_digest_version_are_listed_and_not_e
     assert!(
         skipped.contains(&format!(
             "- Run of `open_exits_one` on `cli` in `{}`: recorded under digest version 0\n",
-            project.intent().join(RUNS_FILE).display()
+            cited(&project.intent().join(RUNS_FILE))
         )),
         "{skipped}"
     );

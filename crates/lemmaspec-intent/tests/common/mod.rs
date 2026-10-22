@@ -65,6 +65,11 @@ pub const ITEMS: [&str; 7] = [
     "library_report",
 ];
 
+/// `path` as the report cites it, with forward slashes on every platform.
+pub fn cited(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
 pub fn root_catalog(body: &str) -> String {
     format!("catalog fixture {{\n  use \"./channels.intent\" as ch\n\n{body}}}\n")
 }
