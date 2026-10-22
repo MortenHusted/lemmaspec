@@ -1,0 +1,190 @@
+// Which approved behaviors are verified by a scenario that went red before
+// green without being edited, and which shipped code does no approved
+// behavior ask for?
+//
+// Behavior text stays in the project's own acceptance format; this checker
+// only reasons over digests, observations and an extracted call graph.
+
+spec behaviors {
+
+  // ================================================================ evidence
+
+  relation behavior { args: [symbol] roles: [behavior] reads: "{behavior} is declared intent" }
+  relation behavior_digest { args: [symbol, symbol] roles: [behavior, digest] reads: "{behavior} currently reads as {digest}" }
+  relation approved { args: [symbol, symbol] roles: [behavior, digest] reads: "a human approved {behavior} as {digest}" }
+  relation verifies { args: [symbol, symbol] roles: [scenario, behavior] reads: "{scenario} verifies {behavior}" }
+  relation scenario_digest { args: [symbol, symbol] roles: [scenario, digest] reads: "{scenario} currently reads as {digest}" }
+  relation failed_at { args: [symbol, symbol] roles: [scenario, digest] reads: "{scenario} was observed failing as {digest}" }
+  relation passed_at { args: [symbol, symbol, symbol] roles: [scenario, digest, identity] reads: "{scenario} was observed passing as {digest} at {identity}" }
+  relation target_identity { args: [symbol] roles: [identity] reads: "{identity} is the target" }
+  relation drives { args: [symbol, symbol] roles: [scenario, entry] reads: "{scenario} enters the system at {entry}" }
+  relation calls { args: [symbol, symbol] roles: [caller, callee] reads: "{caller} calls {callee}" }
+  relation production_symbol { args: [symbol] roles: [symbol] reads: "{symbol} ships" }
+
+  // ============================================================== judgement
+
+  relation approved_current { args: [symbol] roles: [behavior] reads: "{behavior} is approved as it reads now" }
+  relation unapproved { args: [symbol] roles: [behavior] reads: "{behavior} lacks approval for its current text" }
+  relation red_proven { args: [symbol] roles: [scenario] reads: "{scenario} failed with its current text" }
+  relation green { args: [symbol] roles: [scenario] reads: "{scenario} passes with its current text at the target" }
+  relation trusted { args: [symbol] roles: [scenario] reads: "{scenario} went red then green unedited" }
+  relation has_untrusted { args: [symbol] roles: [behavior] reads: "{behavior} has an untrusted scenario" }
+  relation verified { args: [symbol] roles: [behavior] reads: "{behavior} is verified" }
+  relation unverified { args: [symbol] roles: [behavior] reads: "{behavior} is not verified" }
+  relation has_behavior { args: [symbol] roles: [scenario] reads: "{scenario} verifies a declared behavior" }
+  relation orphan_scenario { args: [symbol] roles: [scenario] reads: "{scenario} verifies no declared behavior" }
+  relation reaches { args: [symbol, symbol] roles: [behavior, symbol] reads: "{behavior} reaches {symbol}" }
+  relation justified { args: [symbol] roles: [symbol] reads: "{symbol} is reached by an approved behavior" }
+  relation unrequested { args: [symbol] roles: [symbol] reads: "{symbol} ships but no approved behavior reaches it" }
+
+  // ================================================================ fixture
+
+  // summer_discount: approved, red then green with the same scenario text.
+  fact b1 { relation: behavior args: [summer_discount] }
+  fact b1_digest { relation: behavior_digest args: [summer_discount, bd1] }
+  fact b1_ok { relation: approved args: [summer_discount, bd1] }
+  fact s1 { relation: verifies args: [s_summer, summer_discount] }
+  fact s1_digest { relation: scenario_digest args: [s_summer, sd1] }
+  fact s1_red { relation: failed_at args: [s_summer, sd1] }
+  fact s1_green { relation: passed_at args: [s_summer, sd1, t1] }
+
+  // free_shipping: approved, but the scenario was edited between red and green.
+  fact b2 { relation: behavior args: [free_shipping] }
+  fact b2_digest { relation: behavior_digest args: [free_shipping, bd2] }
+  fact b2_ok { relation: approved args: [free_shipping, bd2] }
+  fact s2 { relation: verifies args: [s_ship, free_shipping] }
+  fact s2_digest { relation: scenario_digest args: [s_ship, sd2_edited] }
+  fact s2_red { relation: failed_at args: [s_ship, sd2_original] }
+  fact s2_green { relation: passed_at args: [s_ship, sd2_edited, t1] }
+
+  // loyalty_points: its text changed after approval.
+  fact b3 { relation: behavior args: [loyalty_points] }
+  fact b3_digest { relation: behavior_digest args: [loyalty_points, bd3_new] }
+  fact b3_ok { relation: approved args: [loyalty_points, bd3_old] }
+  fact s3 { relation: verifies args: [s_loyal, loyalty_points] }
+  fact s3_digest { relation: scenario_digest args: [s_loyal, sd3] }
+  fact s3_red { relation: failed_at args: [s_loyal, sd3] }
+  fact s3_green { relation: passed_at args: [s_loyal, sd3, t1] }
+
+  // gift_cards: approved; one scenario still red, one green only at an old
+  // identity, one green only with text it no longer has.
+  fact b4 { relation: behavior args: [gift_cards] }
+  fact b4_digest { relation: behavior_digest args: [gift_cards, bd4] }
+  fact b4_ok { relation: approved args: [gift_cards, bd4] }
+  fact s5 { relation: verifies args: [s_pending, gift_cards] }
+  fact s5_digest { relation: scenario_digest args: [s_pending, sd5] }
+  fact s5_red { relation: failed_at args: [s_pending, sd5] }
+  fact s6 { relation: verifies args: [s_stale, gift_cards] }
+  fact s6_digest { relation: scenario_digest args: [s_stale, sd6] }
+  fact s6_red { relation: failed_at args: [s_stale, sd6] }
+  fact s6_green { relation: passed_at args: [s_stale, sd6, t0] }
+  fact s7 { relation: verifies args: [s_old_green, gift_cards] }
+  fact s7_digest { relation: scenario_digest args: [s_old_green, sd7] }
+  fact s7_red { relation: failed_at args: [s_old_green, sd7] }
+  fact s7_green { relation: passed_at args: [s_old_green, sd7_old, t1] }
+
+  // refunds: approved, but nothing verifies it yet.
+  fact b5 { relation: behavior args: [refunds] }
+  fact b5_digest { relation: behavior_digest args: [refunds, bd5] }
+  fact b5_ok { relation: approved args: [refunds, bd5] }
+
+  // An agent-written test nobody asked for, and one tagged with a behavior
+  // that was never declared.
+  fact s4_digest { relation: scenario_digest args: [s_extra, sd4] }
+  fact s8 { relation: verifies args: [s_ghost, ghost_behavior] }
+  fact s8_digest { relation: scenario_digest args: [s_ghost, sd8] }
+
+  fact target { relation: target_identity args: [t1] }
+
+  // Driver layer and an extracted call graph.
+  fact d1 { relation: drives args: [s_summer, apply_code] }
+  fact d2 { relation: drives args: [s_ship, ship_quote] }
+  fact d3 { relation: drives args: [s_loyal, award_points] }
+  fact c1 { relation: calls args: [apply_code, discount_rate] }
+  fact p1 { relation: production_symbol args: [apply_code] }
+  fact p2 { relation: production_symbol args: [discount_rate] }
+  fact p3 { relation: production_symbol args: [ship_quote] }
+  fact p4 { relation: production_symbol args: [award_points] }
+  fact p5 { relation: production_symbol args: [legacy_coupon] }
+
+  // ================================================================== rules
+
+  rule approval_matches_text {
+    derive: "approved_current(B)"
+    when: { reads_now: "behavior_digest(B, D)" approved_as: "approved(B, D)" }
+  }
+  rule find_unapproved {
+    derive: "unapproved(B)"
+    when: { declared: "behavior(B)" not_current: "!approved_current(B)" }
+  }
+  rule red_with_current_text {
+    derive: "red_proven(S)"
+    when: { reads_now: "scenario_digest(S, D)" failed: "failed_at(S, D)" }
+  }
+  rule green_with_current_text {
+    derive: "green(S)"
+    when: { reads_now: "scenario_digest(S, D)" passed: "passed_at(S, D, I)" at_target: "target_identity(I)" }
+  }
+  rule red_then_green {
+    derive: "trusted(S)"
+    when: { red: "red_proven(S)" green: "green(S)" }
+  }
+  rule find_untrusted {
+    derive: "has_untrusted(B)"
+    when: { scenario: "verifies(S, B)" untrusted: "!trusted(S)" }
+  }
+  rule verify_behavior {
+    derive: "verified(B)"
+    when: { approved: "approved_current(B)" has_scenario: "verifies(_, B)" all_trusted: "!has_untrusted(B)" }
+  }
+  rule find_unverified {
+    derive: "unverified(B)"
+    when: { declared: "behavior(B)" not_verified: "!verified(B)" }
+  }
+  rule scenario_has_behavior {
+    derive: "has_behavior(S)"
+    when: { link: "verifies(S, B)" declared: "behavior(B)" }
+  }
+  rule find_orphan {
+    derive: "orphan_scenario(S)"
+    when: { exists: "scenario_digest(S, _)" no_behavior: "!has_behavior(S)" }
+  }
+  rule reach_entry {
+    derive: "reaches(B, X)"
+    when: { link: "verifies(S, B)" entry: "drives(S, X)" }
+  }
+  rule reach_callee {
+    derive: "reaches(B, Y)"
+    when: { reached: "reaches(B, X)" call: "calls(X, Y)" }
+  }
+  rule justify {
+    derive: "justified(X)"
+    when: { reached: "reaches(B, X)" approved: "approved_current(B)" }
+  }
+  rule find_unrequested {
+    derive: "unrequested(X)"
+    when: { ships: "production_symbol(X)" unjustified: "!justified(X)" }
+  }
+
+  // =========================================================== expectations
+
+  expect only_summer_is_verified { query: "verified(B)" count: 1 }
+  expect summer_is_verified { query: "verified(summer_discount)" count: 1 }
+  expect edited_scenario_is_not_trusted { query: "trusted(s_ship)" count: 0 }
+  expect two_scenarios_are_trusted { query: "trusted(S)" count: 2 }
+  expect drifted_text_is_unapproved { query: "unapproved(loyalty_points)" count: 1 }
+  expect one_behavior_is_unapproved { query: "unapproved(B)" count: 1 }
+  expect four_behaviors_are_unverified { query: "unverified(B)" count: 4 }
+  expect behavior_without_scenario_is_unverified { query: "verified(refunds)" count: 0 }
+  expect two_orphan_scenarios { query: "orphan_scenario(S)" count: 2 }
+  expect undeclared_behavior_leaves_an_orphan { query: "orphan_scenario(s_ghost)" count: 1 }
+  expect transitive_callee_is_justified { query: "justified(discount_rate)" count: 1 }
+  expect unverified_but_approved_code_is_requested { query: "justified(ship_quote)" count: 1 }
+  expect two_symbols_are_unrequested { query: "unrequested(X)" count: 2 }
+  expect legacy_code_is_unrequested { query: "unrequested(legacy_coupon)" count: 1 }
+
+  // ================================================================ stress
+
+  mutation every_rule_is_load_bearing { operator: drop_rule }
+  mutation every_condition_is_load_bearing { operator: drop_condition }
+}
