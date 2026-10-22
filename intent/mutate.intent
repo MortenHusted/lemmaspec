@@ -1,0 +1,17 @@
+catalog mutate {
+  use "./channels.intent" as ch
+
+  intent mutate_tells_whether_expectations_catch_mutants {
+    text: "Mutation analysis tells the caller whether the artifact's expectations catch every mutant its mutation policies generate."
+  }
+  definition surviving_mutant_fails_mutate {
+    refines: mutate_tells_whether_expectations_catch_mutants
+    text: "The mutate command exits 1 when a mutant survives."
+  }
+  exception library_mutate_has_no_exit_status {
+    narrows: surviving_mutant_fails_mutate
+    channels: [ch.library]
+    kind: does_not_apply
+    text: "The library sets no exit status. mutate_artifact returns its mutation report to the caller."
+  }
+}

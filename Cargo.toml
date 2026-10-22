@@ -17,6 +17,7 @@ exclude = [
   ".codex",
   ".github",
   "dist-workspace.toml",
+  "intent",
   "plugins/lemmaspec/.claude-plugin",
   "plugins/lemmaspec/.codex-plugin",
   "plugins/lemmaspec/skills/conventions",
