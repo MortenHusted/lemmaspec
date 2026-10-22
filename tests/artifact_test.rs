@@ -472,3 +472,23 @@ spec overflow {{
     assert_eq!(report.status, "clean");
     assert_eq!(report.derived, 0);
 }
+
+#[test]
+fn inequality_holds_against_a_symbol_no_fact_mentions() {
+    let artifact = r#"
+spec unseen_symbol {
+  relation item { args: [symbol] }
+  relation not_ghost { args: [symbol] }
+  relation is_ghost { args: [symbol] }
+  fact alpha { relation: item args: [alpha] }
+  fact beta { relation: item args: [beta] }
+  rule differs_from_ghost { derive: "not_ghost(X)" when: ["item(X)", "X \\= ghost"] }
+  rule equals_ghost { derive: "is_ghost(X)" when: ["item(X)", "X = ghost"] }
+  expect both_items_differ_from_ghost { query: "not_ghost(X)" count: 2 }
+  expect no_item_equals_ghost { query: "is_ghost(X)" count: 0 }
+}
+"#;
+    let report = walk_artifact(artifact).expect("walk artifact");
+
+    assert_eq!(report.status, "clean", "{:#?}", report.expectations);
+}

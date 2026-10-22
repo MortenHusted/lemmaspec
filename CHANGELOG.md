@@ -7,6 +7,11 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- A rule comparison against a symbol that no fact mentions now evaluates
+  correctly: `X \= ghost` holds for every bound `X` instead of never.
+
 ## [0.4.2] - 2026-10-15
 
 ### Added
