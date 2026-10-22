@@ -50,7 +50,7 @@ impl ItemKind {
         }
     }
 
-    fn of(kind: &StatementKind) -> ItemKind {
+    pub(crate) fn of(kind: &StatementKind) -> ItemKind {
         match kind {
             StatementKind::Intent => ItemKind::Intent,
             StatementKind::Definition { .. } => ItemKind::Definition,

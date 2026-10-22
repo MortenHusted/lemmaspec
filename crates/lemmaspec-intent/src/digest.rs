@@ -8,7 +8,7 @@ use quote::ToTokens;
 use sha2::{Digest, Sha256};
 use syn::{ItemFn, Lit};
 
-use crate::{ExceptionKind, Statement, StatementKind};
+use crate::{Statement, StatementKind};
 
 pub const DIGEST_VERSION: u64 = 1;
 
@@ -31,16 +31,13 @@ pub fn canonical_statement(statement: &Statement) -> String {
             kind,
             channels,
         } => {
-            let kind = match kind {
-                ExceptionKind::DoesNotApply => "does_not_apply",
-                ExceptionKind::HoldsInstead => "holds_instead",
-            };
             let mut channels = channels.clone();
             channels.sort();
             (
                 "exception",
                 format!(
-                    "narrows: {narrows}\nkind: {kind}\nchannels: {}\n",
+                    "narrows: {narrows}\nkind: {}\nchannels: {}\n",
+                    kind.as_str(),
                     channels.join(", ")
                 ),
             )

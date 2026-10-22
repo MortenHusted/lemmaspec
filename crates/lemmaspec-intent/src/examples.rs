@@ -96,7 +96,7 @@ pub fn scan(dir: &Path, catalog: &Catalog) -> Result<Scan, String> {
                 "duplicate example id {id} in {other} and {location}"
             ));
         }
-        if let Some(reason) = cannot_exemplify(catalog, &statement) {
+        if let Some(reason) = cannot_exemplify(catalog, &statement, &channels) {
             scan.issues.push(issue(Some(&id), reason));
             continue;
         }
@@ -203,21 +203,48 @@ fn is_identifier(word: &str) -> bool {
         && word.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
-fn cannot_exemplify(catalog: &Catalog, statement: &str) -> Option<String> {
-    let kind = match catalog.statements.get(statement).map(|found| &found.kind) {
+/// Why the tag cannot count (R28): its statement is not one an example can
+/// exemplify, or one of its channels is not a channel that statement can
+/// apply on.
+fn cannot_exemplify(catalog: &Catalog, statement: &str, channels: &[String]) -> Option<String> {
+    let kind = |id: &str| catalog.statements.get(id).map(|found| &found.kind);
+    let scope = match kind(statement) {
         None => return Some(format!("unknown statement {statement}")),
-        Some(
-            StatementKind::Definition { .. }
-            | StatementKind::Exception {
-                kind: ExceptionKind::HoldsInstead,
-                ..
-            },
-        ) => return None,
-        Some(StatementKind::Intent) => "an intent",
-        Some(StatementKind::Channel) => "a channel",
-        Some(StatementKind::Exception { .. }) => "a does_not_apply exception",
+        Some(StatementKind::Definition { .. }) => None,
+        Some(StatementKind::Exception {
+            kind: ExceptionKind::HoldsInstead,
+            channels,
+            ..
+        }) => Some(channels),
+        Some(other) => {
+            return Some(format!(
+            "{statement} is {}; an example exemplifies a definition or a holds_instead exception",
+            described(other)
+        ))
+        }
     };
-    Some(format!(
-        "{statement} is {kind}; an example exemplifies a definition or a holds_instead exception"
-    ))
+    channels.iter().find_map(|channel| match kind(channel) {
+        None => Some(format!("unknown channel {channel}")),
+        Some(StatementKind::Channel) => {
+            let scope = scope.filter(|scope| !scope.contains(channel))?;
+            Some(format!(
+                "{statement} applies only on {}, not on {channel}",
+                scope.join(", ")
+            ))
+        }
+        Some(other) => Some(format!("{channel} is {}, not a channel", described(other))),
+    })
+}
+
+fn described(kind: &StatementKind) -> &'static str {
+    match kind {
+        StatementKind::Intent => "an intent",
+        StatementKind::Definition { .. } => "a definition",
+        StatementKind::Exception {
+            kind: ExceptionKind::DoesNotApply,
+            ..
+        } => "a does_not_apply exception",
+        StatementKind::Exception { .. } => "a holds_instead exception",
+        StatementKind::Channel => "a channel",
+    }
 }

@@ -237,6 +237,42 @@ fn a_tag_naming_an_undeclared_statement_is_an_example_issue_not_an_error() {
     );
 }
 
+// R28's channel half: a channel tag must name a channel its statement can apply on.
+#[test]
+fn a_tag_naming_a_channel_its_statement_cannot_apply_on_is_an_example_issue() {
+    for (index, (tag, reason)) in [
+        ("walk_exit_status on cli, ghost", "unknown channel ghost"),
+        (
+            "walk_exit_status on results_are_honest",
+            "results_are_honest is an intent, not a channel",
+        ),
+        (
+            "library_returns_report on cli, library",
+            "library_returns_report applies only on library, not on cli",
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let scanned = scan_source(
+            &format!("channel-{index}"),
+            &format!("/// intent: example tagged exemplifies {tag}\n#[test]\nfn tagged() {{}}\n"),
+        );
+        assert!(scanned.examples.is_empty(), "{tag}");
+        assert_eq!(
+            scanned.issues,
+            [ExampleIssue {
+                example: Some("tagged".into()),
+                file: "example".into(),
+                test: "tagged".into(),
+                line: 1,
+                reason: reason.into(),
+            }],
+            "{tag}"
+        );
+    }
+}
+
 #[test]
 fn two_tests_claiming_one_example_id_fail_naming_both_locations() {
     assert_eq!(

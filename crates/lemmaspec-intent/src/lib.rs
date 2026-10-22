@@ -7,9 +7,14 @@ pub mod digest;
 pub mod examples;
 pub mod identity;
 pub mod loader;
+pub mod project;
 pub mod recorder;
+pub mod report;
 pub mod runs;
 pub mod syntax;
+
+/// The bundled checker that decides standings over projected evidence.
+pub const CHECKER: &str = include_str!("../intent_checker.lemmaspec");
 
 /// A validated catalog: every statement reachable from the root, keyed by its
 /// catalog-wide unique ID.
@@ -46,4 +51,13 @@ pub enum StatementKind {
 pub enum ExceptionKind {
     DoesNotApply,
     HoldsInstead,
+}
+
+impl ExceptionKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ExceptionKind::DoesNotApply => "does_not_apply",
+            ExceptionKind::HoldsInstead => "holds_instead",
+        }
+    }
 }

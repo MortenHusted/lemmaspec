@@ -23,6 +23,9 @@ use crate::{
 pub struct Repo {
     /// The work tree's top-level directory.
     pub root: PathBuf,
+    /// The catalog directory relative to `root`, with `/` separators and a
+    /// trailing `/` unless it is `root` itself.
+    catalog: String,
     /// The catalog's run ledger and approval log, relative to `root` with `/`
     /// separators.
     excluded: [String; 2],
@@ -37,8 +40,20 @@ impl Repo {
         let prefix = lines.next().unwrap_or_default();
         Ok(Repo {
             root: root.into(),
+            catalog: prefix.into(),
             excluded: [RUNS_FILE, APPROVALS_FILE].map(|file| format!("{prefix}{file}")),
         })
+    }
+
+    /// The catalog file `name`, such as its approval log, as `commit` has it;
+    /// `None` when that commit has no such file.
+    pub fn catalog_file_at(&self, commit: &str, name: &str) -> Result<Option<String>, String> {
+        let path = format!("{}{name}", self.catalog);
+        let listed = git(&self.root, &["ls-tree", "--name-only", commit, "--", &path])?;
+        if listed.is_empty() {
+            return Ok(None);
+        }
+        git(&self.root, &["show", &format!("{commit}:{path}")]).map(Some)
     }
 
     /// The identity of the tracked files as they are in the working tree. A
