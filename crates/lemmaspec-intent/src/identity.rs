@@ -18,6 +18,9 @@ use crate::{
     loader::{APPROVALS_FILE, RUNS_FILE},
 };
 
+/// The mode git gives a submodule's entry, whose object is a commit.
+const GITLINK: &str = "160000";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Repo {
     pub root: PathBuf,
@@ -55,18 +58,25 @@ impl Repo {
     pub fn working_tree_identity(&self) -> Result<String, String> {
         let listing = git(&self.root, &["ls-files", "-s", "-z"])?;
         let mut modes = BTreeMap::new();
-        for entry in records(&listing) {
-            let (meta, path) = entry
-                .split_once('\t')
-                .ok_or_else(|| format!("unexpected `git ls-files -s -z` entry {entry:?}"))?;
-            let mode = meta.split(' ').next().unwrap_or_default();
-            if !self.is_excluded(path) {
-                modes.insert(path, mode);
-            }
-        }
         let mut files = Vec::new();
         let mut blobs = BTreeMap::new();
-        for &path in modes.keys() {
+        for entry in records(&listing) {
+            let unexpected = || format!("unexpected `git ls-files -s -z` entry {entry:?}");
+            let (meta, path) = entry.split_once('\t').ok_or_else(unexpected)?;
+            let mut meta = meta.split(' ');
+            let (Some(mode), Some(object)) = (meta.next(), meta.next()) else {
+                return Err(unexpected());
+            };
+            if self.is_excluded(path) {
+                continue;
+            }
+            modes.insert(path, mode);
+            if mode == GITLINK {
+                if let Some(commit) = self.submodule_commit(path, object)? {
+                    blobs.insert(path, commit);
+                }
+                continue;
+            }
             match fs::symlink_metadata(self.root.join(path)) {
                 Ok(metadata) if metadata.file_type().is_symlink() => {
                     blobs.insert(path, self.link_blob(path)?);
@@ -145,6 +155,21 @@ impl Repo {
         self.ledger_and_log_paths
             .iter()
             .any(|excluded| excluded == path)
+    }
+
+    /// The commit a submodule has checked out, the commit the index records
+    /// for it when it is not checked out, and `None` when its directory is
+    /// gone, as for a deleted file.
+    fn submodule_commit(&self, path: &str, recorded: &str) -> Result<Option<String>, String> {
+        let dir = self.root.join(path);
+        if !dir.exists() {
+            return Ok(None);
+        }
+        if !dir.join(".git").exists() {
+            return Ok(Some(recorded.into()));
+        }
+        let head = git(&dir, &["rev-parse", "--verify", "HEAD"])?;
+        Ok(Some(head.trim().to_string()))
     }
 
     /// The blob ID of a symlink's own text, which `git hash-object <path>`

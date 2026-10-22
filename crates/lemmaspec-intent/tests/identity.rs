@@ -157,6 +157,44 @@ fn a_clean_checkout_has_the_identity_of_its_commit_tree() {
 }
 
 #[test]
+fn a_submodule_counts_as_the_commit_it_has_checked_out() {
+    let repo = TempRepo::with_project("submodule");
+    let nested = ["-C", "vendor/lib", "-c", "user.email=intent@example.com"];
+    repo.write("vendor/lib/lib.rs", "pub fn one() -> u8 {\n    1\n}\n");
+    repo.git(&["-C", "vendor/lib", "init", "-q"]);
+    repo.git(&["-C", "vendor/lib", "add", "-A"]);
+    repo.git(
+        &[
+            &nested[..],
+            &["-c", "user.name=Intent", "commit", "-q", "-m", "one"],
+        ]
+        .concat(),
+    );
+    let head = repo.commit("adds a submodule");
+    assert!(repo
+        .git(&["ls-files", "-s", "vendor/lib"])
+        .starts_with("160000 "));
+    let source = repo.source();
+    assert_eq!(
+        source.working_tree_identity().unwrap(),
+        source.commit_identity(&head).unwrap()
+    );
+
+    repo.write("vendor/lib/lib.rs", "pub fn one() -> u8 {\n    2\n}\n");
+    repo.git(
+        &[
+            &nested[..],
+            &["-c", "user.name=Intent", "commit", "-qam", "two"],
+        ]
+        .concat(),
+    );
+    let bumped = source.working_tree_identity().unwrap();
+    assert_ne!(bumped, source.commit_identity(&head).unwrap());
+    let bump = repo.commit("bumps the submodule");
+    assert_eq!(bumped, source.commit_identity(&bump).unwrap());
+}
+
+#[test]
 fn a_crlf_working_tree_under_eol_lf_has_the_identity_of_its_lf_commit() {
     let repo = TempRepo::with_project("crlf");
     repo.write(".gitattributes", "* text eol=lf\n*.bin -text\n");
