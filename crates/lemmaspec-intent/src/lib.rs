@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 
+pub mod approvals;
 pub mod digest;
 pub mod examples;
 pub mod loader;

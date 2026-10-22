@@ -1,0 +1,21 @@
+catalog fixture {
+  intent results_are_honest {
+    text: "LemmaSpec never reports an artifact as passing while one of its claims is open."
+  }
+  definition walk_exit_status {
+    refines: results_are_honest
+    text: "walk exits 0 when every expectation holds, 1 when one is open, and 2 when the artifact is invalid."
+  }
+  exception library_returns_report {
+    narrows: walk_exit_status
+    channels: [library]
+    kind: holds_instead
+    text: "The library returns the report value, and its status field carries the same outcomes."
+  }
+  channel cli {
+    text: "The lemmaspec command line."
+  }
+  channel library {
+    text: "The lemmaspec Rust library."
+  }
+}
