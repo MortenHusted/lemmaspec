@@ -1,6 +1,7 @@
 mod common;
 
 use std::{
+    collections::BTreeMap,
     fs,
     path::Path,
     process::{Command, Output},
@@ -8,7 +9,7 @@ use std::{
 
 use common::{Project, ITEMS};
 use lemmaspec::walk_artifact;
-use lemmaspec_intent::CHECKER;
+use lemmaspec_intent::{loader::load, CHECKER};
 
 const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/catalog");
 
@@ -304,7 +305,29 @@ fn intro_prints_the_agent_workflow_and_names_the_tool_written_files() {
         "intent/approvals.intent",
         "intent/runs.intent",
         "LEMMASPEC_INTENT_CHANNEL",
+        "definition checkout_checks_stock {",
+        "commit intent/runs.intent",
+        "report exiting 1 is the correct end",
     ] {
         assert!(text.contains(expected), "intro lacks {expected:?}:\n{text}");
     }
+}
+
+#[test]
+fn the_intro_catalog_example_is_a_valid_catalog() {
+    let text = stdout(&intent(&["intro"]));
+    let start = text.find("    catalog shop {").unwrap();
+    let end = start + text[start..].find("\n    }\n").unwrap() + "\n    }\n".len();
+    let root: String = text[start..end]
+        .lines()
+        .map(|line| format!("{}\n", line.strip_prefix("    ").unwrap()))
+        .collect();
+    let channels = "catalog channels { channel api { text: \"The shop API.\" } }\n";
+    assert!(text.contains(channels.trim_end()));
+    let files = BTreeMap::from([
+        ("catalog.intent".to_string(), root),
+        ("channels.intent".to_string(), channels.to_string()),
+    ]);
+    let catalog = load(&files).unwrap();
+    assert_eq!(catalog.statements.len(), 4);
 }

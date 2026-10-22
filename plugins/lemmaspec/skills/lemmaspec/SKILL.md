@@ -22,7 +22,7 @@ matches the installed version. `lemmaspec agent install` writes this skill into
 a project's `.claude/skills` and `.codex/skills` from the same binary, and
 `lemmaspec upgrade --check` says whether a newer release exists.
 
-When a repository has an `intent/` catalog, run `lemmaspec-intent intro` before changing its statements, tagged tests, approvals or runs.
+When a repository has an `intent/` catalog, run `lemmaspec-intent intro` before changing its statements, tagged tests, approvals or runs. `lemmaspec-intent` is not part of the `lemmaspec` release; if it is unavailable, tell the user it installs with `cargo install --locked --git https://github.com/MortenHusted/lemmaspec lemmaspec-intent`.
 
 If `lemmaspec` is unavailable, tell the user to install it from the public
 release instructions at `https://github.com/MortenHusted/lemmaspec#install`.

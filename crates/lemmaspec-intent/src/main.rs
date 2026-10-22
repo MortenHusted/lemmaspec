@@ -37,6 +37,30 @@ What it is
   and exception exactly one standing, checked in the order unapproved, stale,
   unverified, verified, and says why anything is not verified.
 
+The catalog
+  intent/catalog.intent is the root. A statement in another file is named
+  <alias>.<id> after `use "./<file>" as <alias>`; IDs are unique across files.
+    catalog shop {
+      use "./channels.intent" as ch
+      intent orders_are_honest {
+        text: "A customer never pays for an order the shop cannot fill."
+      }
+      definition checkout_checks_stock {
+        refines: orders_are_honest
+        text: "Checkout refuses an order when a line exceeds the stock."
+      }
+      exception api_reserves_stock {
+        narrows: checkout_checks_stock
+        channels: [ch.api]
+        kind: holds_instead
+        text: "The API reserves the stock when the cart is created."
+      }
+    }
+  intent/channels.intent declares each channel the same way, inside
+  catalog channels { channel api { text: "The shop API." } }.
+  An exception of kind does_not_apply states only that the definition does
+  not hold on its channels.
+
 The loop
   1. Draft statements   edit intent/catalog.intent and the files it imports;
                         lemmaspec-intent check validates imports, IDs and links
@@ -45,12 +69,18 @@ The loop
                         A test tagged for more than one channel must choose its
                         channel driver from LEMMASPEC_INTENT_CHANNEL; a test
                         that does not read it is tagged for one channel only.
-  3. Record red         break the behavior under test on purpose, as a scratch
-                        edit to a tracked file that still builds, then run
-                        lemmaspec-intent record --example <id>, confirm every
-                        outcome is fail, and revert the break. Never record red
-                        from a broken build: that records error, which never
-                        counts.
+  3. Record red         git add any new file, then break the behavior under
+                        test on purpose, as a scratch edit to a tracked file
+                        that still builds, run lemmaspec-intent record
+                        --example <id>, and confirm every outcome is fail.
+                        Revert only the files you broke (not git checkout .
+                        or git stash, which also drop the new runs), then
+                        commit intent/runs.intent.
+                        error means the test did not run: a broken build, a
+                        test path cargo cannot find, or a Cargo.lock that is
+                        missing or out of date, since record runs cargo test
+                        --locked --test <file> -- --exact <module::fn>. Run
+                        that command to see why. error never counts.
   4. Report             lemmaspec-intent report
                         exits 0 when nothing awaits approval, 1 while something
                         does, 2 on an error. Passing runs at the commit come
@@ -66,9 +96,16 @@ Files only the tool writes
 Who approves
   The project decides who approves. Draft and change statements and examples
   freely, but run approve, reconfirm or remove only when the project has
-  designated you as an approver.
+  designated you as an approver:
+    approve ID... --by NAME     approves each item as it reads now
+    reconfirm ID... --by NAME   clears staleness for an item whose own text
+                                has not changed
+    remove ID... --by NAME      approves the removal of a deleted item
+  If you are not a designated approver, report exiting 1 is the correct end
+  state: hand its Awaiting approval list to an approver and stop. Never
+  approve only to make report or CI pass.
 
-Reference: crates/lemmaspec-intent/README.md in the lemmaspec repository"#;
+Reference: https://github.com/MortenHusted/lemmaspec/blob/main/crates/lemmaspec-intent/README.md"#;
 
 struct Args {
     ids: Vec<String>,
