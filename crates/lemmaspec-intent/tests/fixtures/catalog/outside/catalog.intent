@@ -1,0 +1,3 @@
+catalog outside {
+  use "../escape_target.intent" as escaped
+}

@@ -1,0 +1,13 @@
+[package]
+name = "lemmaspec-intent"
+version = "0.1.0"
+edition = "2021"
+description = "Typed intent catalog for LemmaSpec"
+license = "MIT"
+repository = "https://github.com/MortenHusted/lemmaspec"
+
+[dependencies]
+lemmaspec = { path = "../..", version = "0.4.0" }
+
+[package.metadata.dist]
+dist = false

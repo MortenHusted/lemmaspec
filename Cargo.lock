@@ -72,6 +72,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "lemmaspec-intent"
+version = "0.1.0"
+dependencies = [
+ "lemmaspec",
+]
+
+[[package]]
 name = "lemmaspec-plan"
 version = "0.1.0"
 dependencies = [

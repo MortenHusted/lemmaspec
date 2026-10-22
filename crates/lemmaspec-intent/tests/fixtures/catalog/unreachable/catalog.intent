@@ -1,0 +1,5 @@
+catalog unreachable {
+  intent goal {
+    text: "A goal."
+  }
+}
