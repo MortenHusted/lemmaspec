@@ -81,11 +81,15 @@ The loop
                         missing or out of date, since record runs cargo test
                         --locked --test <file> -- --exact <module::fn>. Run
                         that command to see why. error never counts.
-  4. Report             lemmaspec-intent report
+  4. Record green       on a clean tree, run lemmaspec-intent record, confirm
+                        every outcome is pass, and commit intent/runs.intent.
+                        The run ledger is outside the source identity, so that
+                        commit keeps the identity the runs were recorded at.
+                        Record green again after the source changes.
+  5. Report             lemmaspec-intent report
                         exits 0 when nothing awaits approval, 1 while something
-                        does, 2 on an error. Passing runs at the commit come
-                        from record --ledger <tmp>, then report --ledger <tmp>,
-                        as CI runs them.
+                        does, 2 on an error. Passing runs count only at the
+                        working tree's source identity.
 
 Files only the tool writes
   intent/approvals.intent   approve, reconfirm and remove append to it
@@ -103,7 +107,7 @@ Who approves
     remove ID... --by NAME      approves the removal of a deleted item
   If you are not a designated approver, report exiting 1 is the correct end
   state: hand its Awaiting approval list to an approver and stop. Never
-  approve only to make report or CI pass.
+  approve only to make report pass.
 
 Reference: https://github.com/MortenHusted/lemmaspec/blob/main/crates/lemmaspec-intent/README.md"#;
 

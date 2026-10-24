@@ -17,7 +17,7 @@ execution: code
 - **Product authority:** The repository owner decides who approves statements and examples; the catalog records approvals and surfaces every change awaiting one. This plan covers the intent model, its verified-statement report, and run recording for one test framework. Execution binding beyond that framework, toolset packaging, code tie-in and an approval UI are not active scope.
 - **Stop conditions:** Stop and re-plan if the checker cannot be expressed without changing LemmaSpec's core (R26), or if example digests cannot be made identical across the Linux, macOS and Windows CI runners.
 - **Execution profile:** Deep. Units land as separate commits on a feature branch; once U1's crate scaffold exists, U3 can proceed in parallel with U2, U4 and U5.
-- **Who finishes:** `ce-work` implements and verifies the units. The repository owner records the approvals for lemmaspec's own catalog before merge, because CI stays red until they exist (R16).
+- **Who finishes:** `ce-work` implements and verifies the units. The repository owner records the approvals for lemmaspec's own catalog. Until they exist, `report` exits 1 locally (R16), and nothing blocks the merge. (revised 2026-10-22, user-directed: the catalog is a local artifact with no CI job.)
 - **Open blockers:** None.
 
 ---
@@ -48,7 +48,7 @@ The existing tools each cover part of this. LemmaSpec evaluates evidence determi
 - **Exceptions narrow definitions, never intents.** An intent that needs an exception is stated at the mechanism level, as "authenticated by a browser session" was. Governs R3.
 - **Exceptions come in two kinds.** One states that a definition does not apply on a channel; the other states what holds there instead and carries its own examples. Governs R3, R18, R19, R21. (session-settled: user-approved — chosen over requiring a tested exception for every channel a definition does not concern: each new channel would force placeholder examples onto unrelated definitions.)
 - **Run recording for one test framework is in scope.** Without it the plan could be finished on fixture runs while no real project ever gets a report. Governs R11. (session-settled: user-approved — chosen over narrowing the objective to fixture-only runs: the objective is a report for any real commit.)
-- **lemmaspec is the first adopter.** Its own `cargo test` suite is the first framework, and its catalog proves the success criteria in its own CI. Governs R11. (session-settled: user-approved — chosen over the CRM on Rails/minitest and over a private Rust repository: one public repo keeps the end-to-end proof in this repo's CI.)
+- **lemmaspec is the first adopter.** Its own `cargo test` suite is the first framework, and its catalog, with the red and green runs committed to its ledger, proves the success criteria in this repository. Governs R11. (session-settled: user-approved — chosen over the CRM on Rails/minitest and over a private Rust repository: one public repo keeps the end-to-end proof in this repo. Revised 2026-10-22, user-directed: the catalog is a local artifact with no CI job, so the proof is the committed catalog and ledger, not a CI run.)
 - **A failing run may come from a deliberately broken scratch version of the source.** Behavior that already works has no natural failing run, so requiring red on an earlier commit would leave it unverified forever. Governs R20. (session-settled: user-approved — chosen over requiring red on an earlier commit or a killed mutant: old commits may no longer build, and mutation testing stays deferred.)
 - **Change is surfaced, not policed.** Anyone, human or agent, may draft or approve; the catalog records each approval in the catalog itself and makes every change to intent loud until an approval is recorded. Who may approve, and how strongly that is checked, is the project's own policy. Governs R12, R13, R14, R15, R16, R27. (session-settled: user-directed — chosen over designated approvers and signed approvals: trust is a deployment choice, and the catalog's job is to make every change to intent visible so it can be approved.)
 - **The catalog is an optional companion to LemmaSpec.** A project adopts it one statement at a time, and LemmaSpec without the catalog is unchanged. Governs R25, R26.
@@ -229,7 +229,7 @@ flowchart TB
 **Considered and not built**
 
 - Rejecting approvals or runs forged on a branch. Change is surfaced, not policed: a forged approval still shows in the approvals listed since the base (R27). Evidence of forged runs reaching a merge would change this.
-- Isolating the recorder from test hooks or harness configuration at the version under test. A hook that turns failures into passes is out of reach of example digests; CI regenerates green from the committed tree, so the hook change is itself reviewable. Evidence of such a hook surviving review would change this.
+- Isolating the recorder from test hooks or harness configuration at the version under test. A hook that turns failures into passes is out of reach of example digests; a hook change is a tracked change, so it changes the source identity, green runs recorded before it stop counting, and the change itself is reviewable (revised 2026-10-22, user-directed: the catalog is a local artifact with no CI job). Evidence of such a hook surviving review would change this.
 - Covering shared helpers, fixtures and channel drivers in an example's digest. The digest covers the test function and its tag (KTD4); tracing helpers per framework is costly, and a weakened helper remains a documented gap.
 - Preserving scratch breaks under a reserved git ref. Standings never need the scratch source to resolve; a failing run's entry stores the break's diff for review (KTD6).
 - A second installable agent skill for the catalog. An `intro` command and one pointer line in the existing skill carry the guidance (KTD12).
@@ -282,7 +282,7 @@ This plan covers the intent model, its verified-statement report, and run record
 - KTD4. **Digests are SHA-256 over a versioned canonical rendering (`intent-digest/1`).** A statement's digest covers its kind, its prose with whitespace collapsed, its links as resolved IDs, its exception kind and its sorted channel scope; it excludes file path, position, alias spelling and comments, so splitting files changes nothing (AE16). An example's digest covers the test function's token stream, including its attributes and tag, with formatting and comments excluded; helpers it calls are not covered. Approvals and runs store the digest version, and a version mismatch is its own reason. Governs R13, R14, R18. (session-settled: user-approved — chosen over prose-only statement digests and over digesting helper code: links must be protected, and helper tracing is per-framework work.)
 - KTD5. **Approvals live in an append-only log, `intent/approvals.intent`.** Only `lemmaspec-intent approve`, `reconfirm` and `remove` write it. Each entry holds the item ID and kind, the action (approve or remove), the item digest and digest version, each resolved link with its digest, the channels for an example, the approved prose for a statement, and the approver's name. Entries are ordered by their position in the file, so branches that each append entries merge without renumbering, and the last entry per item wins. An item is stale (R14) when a linked statement's current digest or its latest approved digest differs from the digest the item's entry recorded, so reverting the dependency does not clear staleness; only a new entry for the item does. An item that is missing but approved and not removed is reinstated from its latest entry, so references to it still resolve (R15). `remove` is refused while approved items still link to the target. Governs R12–R15. (session-settled: user-approved — chosen over approvals keyed by any matching digest: reverting to text approved long ago must show as unapproved.)
 - KTD6. **Runs live in a ledger, `intent/runs.intent`, keyed by a source identity.** Each run records the example ID, digest, digest version, channel, source identity, base commit and an outcome of pass, fail, error or skip. The source identity is SHA-256 over the sorted path, mode and git blob ID of every tracked file, excluding the run ledger and the approval log. Blob IDs come from `git hash-object` on the working tree, which applies the repository's line-ending rules, so a clean checkout has exactly its commit tree's identity on every platform. Committing runs therefore leaves their identity intact, and an uncommitted scratch break gets an identity of its own (R20). The report evaluates the checked-out source and names its identity and whether it matches HEAD's commit tree, so a dirty tree's runs never count toward the commit. A failing run also stores the diff of tracked files against its base commit, excluding the run ledger and the approval log, so the break behind it stays reviewable (R27). Governs R10, R20, R23. (session-settled: user-approved — chosen over keying runs by commit SHA: recording a run would otherwise create a new commit that the run does not match.)
-- KTD7. **CI regenerates green; the committed ledger needs only red.** A CI job records every example on every channel at the commit into a temporary ledger, then runs `report --ledger <temp>`, which reads that ledger in addition to `intent/runs.intent`. Governs R11, R18. (session-settled: user-approved — chosen over committing green runs: a green run at a commit cannot be committed in that same commit.)
+- KTD7. **The committed ledger holds red and green runs; nothing runs in CI.** `record` appends every run to `intent/runs.intent`, and `report` reads only that ledger. The source identity leaves out the ledger (KTD6), so a green run recorded on a clean tree and committed keeps the identity it was recorded at, and the report at that commit counts it. After a source change, statements stay unverified until green is recorded again. Governs R11, R18. (revised 2026-10-22, user-directed: the catalog is a local artifact with no CI job. This replaces "CI regenerates green into a temporary ledger, and the committed ledger needs only red", which was chosen over committing green runs because a green run at a commit cannot be committed in that same commit; under KTD6 it can.)
 - KTD8. **The first recorder targets `cargo test` integration tests.** Examples are `#[test]` functions in `tests/*.rs`, tagged by a doc-comment line `intent: example <id> exemplifies <statement> on <channel>, <channel>`, found with `syn`. The recorder runs each example once per channel with `cargo test --locked --test <file stem> -- --exact <test path>`, setting `LEMMASPEC_INTENT_CHANNEL`. It classifies the outcome from the exit status and libtest's summary line: one passed is pass, one failed is fail, one ignored is skip, and a build failure or zero matching tests is error. Tests inside `src/` are not supported. Governs R9, R11, R29. (session-settled: user-approved — chosen over a proc-macro attribute: a doc comment needs no extra crate in the adopting project.)
 - KTD9. **A bundled checker, `crates/lemmaspec-intent/intent_checker.lemmaspec`, decides standings.** Its synthetic fixture covers the standing-level acceptance examples, and its `drop_rule` and `drop_condition` policies must stay clean. Standings follow a negation chain in R17's order; "no example on a channel" is a negation, never `count = 0`. The four standing relations feed one union relation, `standing(Item, Kind)`. Projected evidence carries only invariant expectations: nothing awaiting approval (count 0), which makes the bound report exit 1 while changes are pending (R16), and `standing(<id>, Kind)` count 1 for every intent, definition and exception, which catches both a missing and a doubled standing and is killable through every rule it reads. Unverified items never change the exit status (R25). Governs R16–R22, R25, R29.
 - KTD10. **Evidence keeps identities in relation arguments, not in `observed` bases.** Runs at other source identities are honest evidence (R20), but `observed` facts with an identity trip `render --target-identity` into a "Not current" banner and exit 1. Catalog, approval-log and ledger facts are `basis: snapshot`, with the file as source and its digest as identity. Fact IDs are sanitized and deterministic (`<relation>_<n>` after sorting by relation and arguments), because digests, commits and `alias.id` references are not valid bare identifiers. Governs R20, R23.
@@ -301,7 +301,7 @@ flowchart TB
   LOAD --> MODEL[Catalog model]
   SCAN --> MODEL
   APPR["intent/approvals.intent"] --> MODEL
-  LEDGER["intent/runs.intent + CI runs"] --> MODEL
+  LEDGER["intent/runs.intent (red and green runs)"] --> MODEL
   REC["lemmaspec-intent record (runs cargo test)"] --> LEDGER
   APP["lemmaspec-intent approve / reconfirm / remove"] --> APPR
   MODEL --> PROJ[Projector: evidence facts + invariant expectations]
@@ -406,7 +406,7 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
 
 - **Digest stability.** `syn` and `proc-macro2` token printing could change between versions and silently unapprove every example. Pin them through `Cargo.lock`, test the canonical rendering against fixed expected strings, and bump `intent-digest` deliberately when it must change.
 - **Cross-platform identity.** Windows line endings and path separators can change content hashes and paths. Normalize separators in stored paths, take blob IDs from `git hash-object` so line-ending rules apply (KTD6), and run the identity tests on all three CI platforms.
-- **CI time.** Recording runs every example once per channel. Integration tests compile once per test file, so the cost is test execution, which is small for lemmaspec's catalog; revisit if a catalog grows past a few dozen examples.
+- **Recording time.** Recording runs every example once per channel, locally (revised 2026-10-22, user-directed: the catalog is a local artifact with no CI job). Integration tests compile once per test file, so the cost is test execution, which is small for lemmaspec's catalog; revisit if a catalog grows past a few dozen examples.
 - **Red-run ergonomics.** Recording red for working behavior needs a deliberate local break. If that proves error-prone, a later `record --expect-fail` guard can refuse to write a pass where a fail was intended.
 
 ---
@@ -577,7 +577,7 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
   - Covers AE10. A run recorded on a dirty scratch tree stores that tree's identity and the base commit.
   - A failing run stores the tracked-file diff against its base commit, without the ledger or approval log; a passing run stores no diff.
   - `--ledger` writes to the given path and leaves `intent/runs.intent` untouched.
-- **Verification:** The fake-runner tests pass on all three platforms; the real runner is proven by U7's CI job.
+- **Verification:** The fake-runner tests pass on all three platforms; the real runner is proven by U7's committed red and green runs (revised 2026-10-22, user-directed: the catalog is a local artifact with no CI job).
 
 ### U6. Evidence projection and the report command
 
@@ -628,20 +628,21 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
   - `intent/runs.intent`
   - `tests/cli_test.rs` (tags on existing tests)
   - `tests/artifact_test.rs` (tags on existing library-channel tests)
-  - `.github/workflows/ci.yml` (intent job)
   - `Cargo.toml` (add `intent` to the root package's `exclude` list)
 - **Approach:**
   1. Declare the `cli` and `library` channels and a small set of statements about walk and mutate exit behavior that existing tests already check.
   2. Tag those existing tests; add a library-channel test only where a definition has none.
   3. For each example and channel, break the behavior locally, record red, and revert the break, keeping the ledger entries.
-  4. Add a CI job on Ubuntu that checks out with full history (`fetch-depth: 0`), records every example at the commit into a temporary ledger, and runs `report --ledger <temp>`, passing `--base` with the pull request's base commit on pull requests. It appends the Markdown report to the job summary and fails while changes await approval.
-  5. Leave approvals to the repository owner; the PR's intent job stays red until they are recorded, which is the intended alert.
+  4. On the final clean tree, record every example with `record`, confirm every outcome is pass, and commit `intent/runs.intent` (KTD7).
+  5. Leave approvals to the repository owner. Until they are recorded, `report` exits 1, which is the intended alert; it does not block the PR.
+  (Steps 4–5 revised 2026-10-22, user-directed: the catalog is a local artifact with no CI job. They replace a CI job that recorded green into a temporary ledger and failed while changes awaited approval.)
 - **Execution note:** Record each red run from a deliberate one-line break of the behavior the example checks, never from a broken build, and confirm the recorded outcome is fail before reverting.
-- **Patterns to follow:** `.github/workflows/ci.yml` (existing job layout and caching).
+- **Patterns to follow:** the crate README's walkthrough (record green on a clean tree, then commit the ledger).
 - **Test scenarios:**
-  - Test expectation: none beyond the CI job itself. Its observable outcomes are the scenarios: the job fails while any statement awaits approval, passes once the owner's approvals are recorded, and shows at least one definition verified.
-  - After merge, editing one tagged test in a scratch branch makes the job fail with that example unapproved.
-- **Verification:** On the PR, the intent job fails with every statement awaiting approval; after the owner records approvals, it passes and the report lists at least one verified definition.
+  - Test expectation: none beyond the committed catalog and ledger. Their observable outcomes are the scenarios: on a clean checkout, `report` names an identity that matches HEAD, exits 1 while any statement awaits approval, exits 0 once the owner's approvals are recorded, and shows at least one definition verified.
+  - After merge, editing one tagged test in a scratch branch makes `report` exit 1 with that example unapproved.
+  (Revised 2026-10-22, user-directed: the catalog is a local artifact with no CI job.)
+- **Verification:** On the PR's head, `report` names an identity that matches HEAD, counts every example's green run and exits 1 with every statement awaiting approval; after the owner records approvals, it exits 0 and lists at least one verified definition. (revised 2026-10-22, user-directed: the catalog is a local artifact with no CI job.)
 
 ### U8. Documentation and agent guidance
 
@@ -678,13 +679,13 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
 | Checker self-test | `cargo test -p lemmaspec-intent --test checker`, which asserts `mutate_artifact(CHECKER)` is clean | U3 |
 | Root package | `cargo package --locked` | U1, U8 (the root crate's package contents must not change apart from docs) |
 | Release config | `dist generate --check` | U1 (the new crate stays out of release binaries) |
-| Dogfood | the CI intent job: `lemmaspec-intent record --all --ledger <temp>` then `lemmaspec-intent report --ledger <temp> --base <PR base>` | U7 |
+| Dogfood | locally, on a clean tree: `lemmaspec-intent record`, commit `intent/runs.intent`, then `lemmaspec-intent report` names an identity that matches HEAD (revised 2026-10-22, user-directed: the catalog is a local artifact with no CI job) | U7 |
 
 ## Definition of Done
 
 - Every unit's verification holds, and every gate in the Verification Contract passes on all three CI platforms.
 - Every acceptance example has an automated test that names it with `Covers AE<N>`.
 - `lemmaspec mutate` on the bundled checker reports no survivors and no vacuous policy.
-- lemmaspec's own intent job passes on the merged branch with at least one verified definition, after the owner has recorded the approvals.
+- lemmaspec's own `report` exits 0 on the merged branch with at least one verified definition, after the owner has recorded the approvals. (revised 2026-10-22, user-directed: the catalog is a local artifact with no CI job.)
 - LemmaSpec's core crate has no new dependency and no new code, and `dist generate --check` is unchanged.
 - No experimental or abandoned code from approaches that did not pan out remains in the diff.

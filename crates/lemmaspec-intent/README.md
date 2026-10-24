@@ -20,7 +20,7 @@ repository's top-level directory: `--dir` defaults to `intent` and `--tests` to
 ## Walkthrough
 
 Start from a git repository holding a Rust package named `greeter`, with
-`/target` and `/ci/` in `.gitignore`, and this `src/lib.rs`:
+`/target` in `.gitignore`, and this `src/lib.rs`:
 
 ```rust
 pub fn greet(name: &str) -> String {
@@ -81,18 +81,19 @@ lemmaspec-intent approve library greets_people greeting_names_the_person hello_a
 git add -A && git commit -m "Approve the greeter catalog"
 ```
 
-Record green at the commit into a ledger that is not tracked, and report with
-it:
+Record green on the clean tree, read the report, and commit the run:
 
 ```sh
-mkdir -p ci
-lemmaspec-intent record --ledger ci/runs.intent    # hello_ada on library: pass
-lemmaspec-intent report --ledger ci/runs.intent    # exits 0
+lemmaspec-intent record    # hello_ada on library: pass
+lemmaspec-intent report    # exits 0
+git add intent/runs.intent && git commit -m "Record green for the greeter catalog"
 ```
 
 The report now shows `greeting_names_the_person` and `greets_people` as
-verified. Edit the test and `hello_ada` awaits approval again, so the report
-exits 1.
+verified, and still does at the new commit, because the run ledger is outside
+the source identity. Change any tracked file and they are unverified until you
+record green again. Edit the test and `hello_ada` awaits approval again, so the
+report exits 1.
 
 ## The catalog
 
@@ -335,21 +336,23 @@ record red again.
 ### Green runs
 
 A passing run counts only at the source identity the report evaluates, which is
-the working tree's. The committed ledger needs only red. CI records every
-example at the commit into a temporary ledger and reports with it:
+the working tree's. Record green on a clean tree, confirm every printed outcome
+is `pass`, and commit the ledger:
 
 ```sh
-lemmaspec-intent record --ledger "$RUNNER_TEMP/runs.intent" | tee "$RUNNER_TEMP/record.txt"
-lemmaspec-intent report --ledger "$RUNNER_TEMP/runs.intent" --base <pull request base>
-! grep -E ': (fail|error)$' "$RUNNER_TEMP/record.txt"
+lemmaspec-intent record
+git add intent/runs.intent && git commit -m "Record green"
 ```
 
-The ledger's directory must exist, and the ledger must not be a tracked file. A
-failing or erroring run at the target keeps the example from passing there.
-`record` exits 0 whatever the outcomes and `report` fails only while something
-awaits approval, so the last line fails the job on a regression. Without it, a
-regression on a channel that plain `cargo test` never drives shows only as an
-unverified statement.
+The run ledger is outside the source identity, so the commit that adds the runs
+keeps the identity they were recorded at, and the report at that commit counts
+them. Any later change to a tracked file gives a new identity, and every
+statement that needs a passing run is unverified until green is recorded again.
+
+A failing or erroring run at the target keeps the example from passing there.
+`record` exits 0 whatever the outcomes and `report` exits 1 only while
+something awaits approval, so a regression shows as an unverified statement,
+not as an exit status. Read the outcomes `record` prints.
 
 ## Standings
 
@@ -446,8 +449,11 @@ catalog.
   approvals since the base.
 - The recorder is not isolated from test hooks or harness configuration at the
   version under test. A hook that turns failures into passes is outside example
-  digests. CI regenerates green from the committed tree, so the hook change is
-  itself reviewable.
+  digests. A hook is a tracked file, so changing one changes the source
+  identity: green runs recorded before the change stop counting, and the change
+  itself is in the diff a reviewer reads.
+- The run ledger grows by one run per example and channel each time green is
+  recorded at a new source identity. Nothing prunes it.
 - Shared helpers, fixtures and channel drivers are not in an example's digest.
   A weakened helper changes no digest and needs no approval.
 - `record` finds an example's test target by its file stem. A `[[test]]` entry
