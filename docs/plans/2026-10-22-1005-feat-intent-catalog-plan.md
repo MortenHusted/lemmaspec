@@ -559,7 +559,7 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
   - `crates/lemmaspec-intent/tests/recorder.rs`
 - **Approach:**
   1. Compute the source identity per KTD6 from `git ls-files` modes and `git hash-object` blob IDs, excluding the ledger and the approval log.
-  2. Read existing `run` entries, and append new ones; `--ledger <path>` lets CI write a temporary ledger.
+  2. Read existing `run` entries, and append new ones to `intent/runs.intent` (revised 2026-10-22, user-directed: the catalog is a local artifact with no CI job).
   3. Run each selected example once per channel through a runner trait. The real runner invokes `cargo test` per KTD8 with `LEMMASPEC_INTENT_CHANNEL` set; tests use a fake runner that returns canned exit statuses and output.
   4. Classify outcomes from the exit status and libtest's summary line, and store the example digest computed before the run.
   5. `record` accepts `--example`, `--channel` and `--all`, and refuses when the catalog or examples fail to load.
@@ -576,7 +576,7 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
   - Recording appends entries and never rewrites existing ones.
   - Covers AE10. A run recorded on a dirty scratch tree stores that tree's identity and the base commit.
   - A failing run stores the tracked-file diff against its base commit, without the ledger or approval log; a passing run stores no diff.
-  - `--ledger` writes to the given path and leaves `intent/runs.intent` untouched.
+  - The library's `record` appends to the ledger path it is given and leaves `intent/runs.intent` untouched; the command line always passes `intent/runs.intent` (revised 2026-10-22, user-directed: the catalog is a local artifact with no CI job).
 - **Verification:** The fake-runner tests pass on all three platforms; the real runner is proven by U7's committed red and green runs (revised 2026-10-22, user-directed: the catalog is a local artifact with no CI job).
 
 ### U6. Evidence projection and the report command
@@ -594,7 +594,7 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
   1. Project the model into a `lemmaspec::Artifact` with snapshot bases, sanitized fact IDs, prose as symbol labels, catalog paths as symbol sources, and the invariant expectations from KTD9.
   2. Bind with `CHECKER` through `lemmaspec::bind_artifact`, walk it, and read the standing, reason and pending-change facts.
   3. Render through `render_projection_html_with_context` or the Markdown equivalent, with the pending-change list first.
-  4. Read every `--ledger <path>` given, in addition to `intent/runs.intent`, and name the evaluated source identity and whether it matches HEAD's commit tree in the report header.
+  4. Read runs only from `intent/runs.intent`, and name the evaluated source identity and whether it matches HEAD's commit tree in the report header (revised 2026-10-22, user-directed: the catalog is a local artifact with no CI job).
   5. With `--base <commit>`, read the base's approval log per KTD11 and list the entries added since, with their approvers, or report the log as altered.
   6. Exit 1 while anything awaits approval, 2 on catalog or argument errors, and 0 otherwise, including when items are unverified.
 - **Patterns to follow:** `crates/lemmaspec-plan/tests/project.rs` (bind-to-render chain, byte-equal determinism); `src/source.rs` (`SourceContext` for repository-relative links).
@@ -606,7 +606,7 @@ U1 comes first because every other unit lives in its crate. U3 then proceeds alo
   - A fully approved catalog with unverified definitions exits 0 and shows their reasons.
   - Covers AE11. With `--base`, an approval added after the base is listed with its approver; a log whose base entries were edited is reported as altered.
   - A base commit with no approval log lists every current entry as added.
-  - A green run present only in a `--ledger` file verifies a definition that the committed ledger alone leaves unverified.
+  - A green run recorded on a clean tree verifies a definition, and committing the ledger keeps it verified with a header that says the identity matches HEAD (revised 2026-10-22, user-directed: the catalog is a local artifact with no CI job).
   - On a dirty tree, the header names the working-tree identity and says it does not match HEAD.
   - Covers AE20. With `--base`, a failing run added since the base is listed with its diff.
   - Covers AE16. Splitting a verified catalog into imported files leaves every standing unchanged and nothing pending.

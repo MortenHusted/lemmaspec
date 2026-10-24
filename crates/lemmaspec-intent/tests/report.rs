@@ -38,15 +38,10 @@ fn section<'a>(markdown: &'a str, heading: &str) -> &'a str {
 fn projecting_the_same_inputs_twice_gives_byte_identical_evidence_with_bare_ids_and_snapshot_bases()
 {
     let project = verified("determinism");
-    let green = project.record_green("green.intent");
+    project.record_green();
     let identity = project.identity();
     let evidence = || {
-        let inputs = Inputs::read(
-            &project.intent(),
-            &project.tests(),
-            std::slice::from_ref(&green),
-        )
-        .unwrap();
+        let inputs = Inputs::read(&project.intent(), &project.tests()).unwrap();
         projection::project(&inputs, &identity)
     };
     let text = print_artifact(&evidence());
@@ -87,8 +82,8 @@ fn projecting_the_same_inputs_twice_gives_byte_identical_evidence_with_bare_ids_
         ]
     );
 
-    let report = project.report(std::slice::from_ref(&green), None);
-    assert_eq!(report.markdown, project.report(&[green], None).markdown);
+    let report = project.report(None);
+    assert_eq!(report.markdown, project.report(None).markdown);
     let html = report.html(None).unwrap();
     assert!(html.contains(&report.target));
     assert!(!html.contains("Not current"), "{html}");
@@ -108,7 +103,7 @@ fn an_unapproved_definition_makes_the_report_pending_and_is_listed_first() {
         ],
         "owner",
     );
-    let report = project.report(&[], None);
+    let report = project.report(None);
     assert!(report.pending);
     assert_eq!(report.standings["walk_exit_status"], "unapproved");
     let awaiting = section(&report.markdown, "Awaiting approval");
@@ -123,7 +118,7 @@ fn an_unapproved_definition_makes_the_report_pending_and_is_listed_first() {
 fn a_fully_approved_catalog_with_unverified_definitions_is_not_pending_and_shows_reasons() {
     let project = Project::new("unverified");
     project.approve_all();
-    let report = project.report(&[], None);
+    let report = project.report(None);
     assert!(!report.pending, "{}", report.markdown);
     assert_eq!(
         report.standings,
@@ -149,8 +144,8 @@ fn a_fully_approved_catalog_with_unverified_definitions_is_not_pending_and_shows
 #[test]
 fn html_and_markdown_show_each_statements_prose_links_and_standing() {
     let project = verified("rendered");
-    let green = project.record_green("green.intent");
-    let report = project.report(&[green], None);
+    project.record_green();
+    let report = project.report(None);
     let statements = section(&report.markdown, "Statements");
     let catalog = project.intent().join("catalog.intent");
     assert!(statements.contains(&format!(
@@ -172,35 +167,47 @@ fn html_and_markdown_show_each_statements_prose_links_and_standing() {
 }
 
 #[test]
-fn a_green_run_only_in_an_extra_ledger_verifies_a_definition() {
-    let project = verified("extra-ledger");
-    let committed = project.report(&[], None);
-    assert_eq!(committed.standings["walk_exit_status"], "unverified");
-    let green = project.record_green("green.intent");
-    let missing = project.dir.join("ci").join("missing.intent");
-    let report = project.report(&[green, missing], None);
+fn committing_green_runs_keeps_the_definition_verified_at_that_commit() {
+    let project = verified("committed-green");
+    project.commit("approves and records red");
+    let red = project.report(None);
+    assert_eq!(red.standings["walk_exit_status"], "unverified");
+    project.record_green();
+    let green = project.report(None);
     assert_eq!(
-        report.standings,
+        green.standings,
         standings(&[
             ("library_returns_report", "verified"),
             ("results_are_honest", "verified"),
             ("walk_exit_status", "verified"),
         ])
     );
-    assert!(!report.pending);
+    assert!(!green.pending);
+    let head = project.commit("records green");
+    let committed = project.report(None);
+    assert_eq!(committed.target, green.target);
+    assert_eq!(committed.standings, green.standings);
+    assert!(
+        committed.markdown.starts_with(&format!(
+            "# Intent report\n\nSource identity `{}` matches the tree of HEAD commit `{head}`.\n",
+            committed.target
+        )),
+        "{}",
+        committed.markdown
+    );
 }
 
 #[test]
 fn the_header_names_the_evaluated_identity_and_whether_it_matches_head() {
     let project = Project::new("header");
     let head = project.commit("head");
-    let clean = project.report(&[], None);
+    let clean = project.report(None);
     assert!(clean.markdown.starts_with(&format!(
         "# Intent report\n\nSource identity `{}` matches the tree of HEAD commit `{head}`.\n",
         clean.target
     )));
     project.edit("src/lib.rs", "    1", "    0");
-    let dirty = project.report(&[], None);
+    let dirty = project.report(None);
     assert_ne!(dirty.target, clean.target);
     assert_eq!(dirty.target, project.identity());
     assert!(dirty.markdown.starts_with(&format!(
@@ -222,7 +229,7 @@ fn approvals_added_since_the_base_are_listed_with_their_approver_and_an_edited_l
     );
     project.approve(&["walk_exit_status"], "agent");
     project.commit("changes the definition and approves it");
-    let report = project.report(&[], Some(&base));
+    let report = project.report(Some(&base));
     let since = section(&report.markdown, &format!("Since base `{base}`"));
     assert!(
         since.contains(
@@ -237,7 +244,7 @@ fn approvals_added_since_the_base_are_listed_with_their_approver_and_an_edited_l
         "by: \"owner\"",
         "by: \"someone else\"",
     );
-    let report = project.report(&[], Some(&base));
+    let report = project.report(Some(&base));
     let since = section(&report.markdown, &format!("Since base `{base}`"));
     assert!(since.contains("The approval log was altered"), "{since}");
     assert!(!since.contains("Entry 8"), "{since}");
@@ -248,7 +255,7 @@ fn a_base_without_an_approval_log_lists_every_entry_as_added() {
     let project = Project::new("no-base-log");
     let base = project.commit("no approvals yet");
     project.approve_all();
-    let report = project.report(&[], Some(&base));
+    let report = project.report(Some(&base));
     let since = section(&report.markdown, &format!("Since base `{base}`"));
     assert_eq!(since.matches("\n- Entry ").count(), 7, "{since}");
     assert!(since.contains("- Entry 1: `owner` approved channel `cli`\n"));
@@ -266,7 +273,7 @@ fn an_approver_name_from_the_log_cannot_start_a_markdown_block() {
         "by: \"owner\"",
         "by: \"alice `x`\\n\\n<!--\"",
     );
-    let report = project.report(&[], Some(&base));
+    let report = project.report(Some(&base));
     let since = section(&report.markdown, &format!("Since base `{base}`"));
     assert!(
         since.contains("- Entry 1: ``alice `x`  <!--`` approved channel `cli`\n"),
@@ -293,7 +300,7 @@ fn a_failing_run_recorded_since_the_base_is_listed_with_the_diff_of_its_break() 
     );
     project.edit("src/lib.rs", "    0", "    1");
     project.commit("records red on a scratch break");
-    let report = project.report(&[], Some(&base));
+    let report = project.report(Some(&base));
     let since = section(&report.markdown, &format!("Since base `{base}`"));
     assert!(
         since.contains(&format!(
@@ -306,9 +313,9 @@ fn a_failing_run_recorded_since_the_base_is_listed_with_the_diff_of_its_break() 
 #[test]
 fn a_source_edit_after_the_green_run_leaves_every_statement_unverified() {
     let project = verified("stale-green");
-    let green = project.record_green("green.intent");
+    project.record_green();
     project.edit("src/lib.rs", "    1", "    0");
-    let report = project.report(&[green], None);
+    let report = project.report(None);
     assert!(!report.pending, "{}", report.markdown);
     assert_eq!(
         report.standings,
@@ -335,7 +342,8 @@ fn editing_an_approved_example_awaits_approval_and_drops_its_red_run() {
         "fn open_expectation_exits_one() {}",
         "fn open_expectation_exits_one() {\n    assert!(true);\n}",
     );
-    let report = project.report(&[project.record_green("green.intent")], None);
+    project.record_green();
+    let report = project.report(None);
     assert!(report.pending, "{}", report.markdown);
     assert_eq!(report.standings["walk_exit_status"], "unverified");
     assert_eq!(report.standings["results_are_honest"], "unverified");
@@ -356,7 +364,8 @@ fn a_decoy_test_in_place_of_a_compiled_out_example_does_not_keep_it_verified() {
             "#[cfg(any())]\nmod m {{\n{EXAMPLES}}}\nmod m {{\n    #[test]\n    fn open_expectation_exits_one() {{}}\n}}\n"
         ),
     );
-    let report = project.report(&[project.record_green("green.intent")], None);
+    project.record_green();
+    let report = project.report(None);
     assert!(report.pending, "{}", report.markdown);
     assert_eq!(report.standings["walk_exit_status"], "unverified");
     let ignored = section(&report.markdown, "Ignored examples");
@@ -370,7 +379,8 @@ fn a_decoy_test_in_place_of_a_compiled_out_example_does_not_keep_it_verified() {
 #[test]
 fn moving_statements_into_an_imported_file_leaves_every_standing_unchanged_and_nothing_pending() {
     let project = verified("ae16");
-    let before = project.report(&[project.record_green("before.intent")], None);
+    project.record_green();
+    let before = project.report(None);
     assert!(!before.pending, "{}", before.markdown);
     assert_eq!(
         before.standings,
@@ -388,8 +398,9 @@ fn moving_statements_into_an_imported_file_leaves_every_standing_unchanged_and_n
         "intent/walk.intent",
         &root_catalog(STATEMENTS).replace("fixture", "walk"),
     );
-    // The source changed, so CI records green again at the new identity.
-    let after = project.report(&[project.record_green("after.intent")], None);
+    // The source changed, so green is recorded again at the new identity.
+    project.record_green();
+    let after = project.report(None);
     assert_ne!(after.target, before.target);
     assert_eq!(after.standings, before.standings);
     assert!(!after.pending, "{}", after.markdown);
@@ -407,7 +418,8 @@ fn a_test_tagged_with_an_unknown_statement_is_listed_as_ignored_and_the_report_s
         "tests/ghost.rs",
         "/// intent: example ghost exemplifies no_such_statement on cli\n#[test]\nfn ghost() {}\n",
     );
-    let report = project.report(&[project.record_green("green.intent")], None);
+    project.record_green();
+    let report = project.report(None);
     let ignored = section(&report.markdown, "Ignored examples");
     assert_eq!(
         ignored,
@@ -434,7 +446,7 @@ fn approvals_and_runs_recorded_under_another_digest_version_are_listed_and_not_e
         "intent/approvals.intent",
         &format!("{log}approval {{\n  item: walk_exit_status\n  kind: definition\n  action: remove\n  by: \"old tool\"\n  digest: \"sha256:old\"\n  digest_version: 0\n}}\n"),
     );
-    let current = project.report(&[], None);
+    let current = project.report(None);
     let digest = current
         .bound
         .facts
@@ -462,7 +474,7 @@ fn approvals_and_runs_recorded_under_another_digest_version_are_listed_and_not_e
         }],
     )
     .unwrap();
-    let report = project.report(&[], None);
+    let report = project.report(None);
     assert_eq!(report.standings["walk_exit_status"], "unverified");
     assert!(!report.pending, "{}", report.markdown);
     let skipped = section(&report.markdown, "Not evaluated");
@@ -490,7 +502,7 @@ fn an_approved_statement_deleted_from_the_catalog_keeps_one_unapproved_standing(
         "  exception library_returns_report {\n    narrows: walk_exit_status\n    channels: [ch.library]\n    kind: holds_instead\n    text: \"The library returns the report value, and its status field carries the same outcomes.\"\n  }\n",
         "",
     )));
-    let report = project.report(&[], None);
+    let report = project.report(None);
     assert!(report.pending);
     assert_eq!(report.standings["library_returns_report"], "unapproved");
     assert!(report

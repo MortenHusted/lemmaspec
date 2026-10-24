@@ -21,8 +21,6 @@ use crate::{
 pub struct Options {
     pub dir: PathBuf,
     pub tests: PathBuf,
-    /// Run ledgers read in addition to the catalog ledger.
-    pub ledgers: Vec<PathBuf>,
     /// The commit whose approvals and failing runs the report compares with.
     pub base: Option<String>,
 }
@@ -41,7 +39,7 @@ pub struct Report {
 }
 
 pub fn report(options: &Options) -> Result<Report, String> {
-    let inputs = Inputs::read(&options.dir, &options.tests, &options.ledgers)?;
+    let inputs = Inputs::read(&options.dir, &options.tests)?;
     let repo = Repo::of_catalog(&options.dir)?;
     let target = repo.working_tree_identity()?;
     let head = repo.head()?;
@@ -297,14 +295,13 @@ fn not_evaluated(inputs: &Inputs) -> Option<String> {
             ));
         }
     }
-    for ledger in inputs.ledgers() {
-        for run in &ledger.runs {
-            if run.digest_version != DIGEST_VERSION {
-                lines.push(format!(
-                    "- Run of `{}` on `{}` in `{}`: recorded under digest version {}\n",
-                    run.example, run.channel, ledger.path, run.digest_version
-                ));
-            }
+    let ledger = &inputs.catalog_ledger;
+    for run in &ledger.runs {
+        if run.digest_version != DIGEST_VERSION {
+            lines.push(format!(
+                "- Run of `{}` on `{}` in `{}`: recorded under digest version {}\n",
+                run.example, run.channel, ledger.path, run.digest_version
+            ));
         }
     }
     (!lines.is_empty()).then(|| format!("## Not evaluated\n\n{}", lines.concat()))

@@ -9,7 +9,10 @@ use std::{
 
 use common::{Project, ITEMS};
 use lemmaspec::walk_artifact;
-use lemmaspec_intent::{loader::load, CHECKER};
+use lemmaspec_intent::{
+    loader::{load, RUNS_FILE},
+    CHECKER,
+};
 
 const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/catalog");
 
@@ -140,15 +143,12 @@ fn report_writes_markdown_html_and_the_bound_artifact_to_the_paths_given() {
     let project = Project::new("cli-outputs");
     project.approve_all();
     project.record_red();
-    let green = project.record_green("green.intent");
-    let green = green.to_str().unwrap();
+    project.record_green();
     fs::create_dir_all(project.dir.join("out")).unwrap();
     let html = intent_in(
         &project.dir,
         &[
             "report",
-            "--ledger",
-            green,
             "--format",
             "html",
             "-o",
@@ -169,10 +169,7 @@ fn report_writes_markdown_html_and_the_bound_artifact_to_the_paths_given() {
         .iter()
         .any(|fact| fact.relation == "standing" && fact.args == ["walk_exit_status", "verified"]));
 
-    let markdown = intent_in(
-        &project.dir,
-        &["report", "--ledger", green, "-o", "out/report.md"],
-    );
+    let markdown = intent_in(&project.dir, &["report", "-o", "out/report.md"]);
     assert_eq!(markdown.status.code(), Some(0), "{}", stderr(&markdown));
     assert!(project
         .read("out/report.md")
@@ -229,14 +226,6 @@ fn invalid_options_leave_existing_output_files_untouched() {
             "-o",
             "other.md",
         ],
-        &[
-            "report",
-            "-o",
-            "out.md",
-            "--bound",
-            "bound.lemmaspec",
-            "--ledger",
-        ],
     ] {
         let run = intent_in(&project.dir, args);
         assert_eq!(run.status.code(), Some(2), "{args:?}: {}", stderr(&run));
@@ -254,10 +243,10 @@ fn invalid_options_leave_existing_output_files_untouched() {
 fn record_with_no_examples_creates_no_ledger_and_the_report_reads_a_missing_one_as_empty() {
     let project = Project::new("cli-record");
     fs::remove_file(project.tests().join("walk.rs")).unwrap();
-    let recorded = intent_in(&project.dir, &["record", "--ledger", "ci/runs.intent"]);
+    let recorded = intent_in(&project.dir, &["record"]);
     assert!(recorded.status.success(), "{}", stderr(&recorded));
-    assert!(!project.dir.join("ci/runs.intent").exists());
-    let report = intent_in(&project.dir, &["report", "--ledger", "ci/runs.intent"]);
+    assert!(!project.intent().join(RUNS_FILE).exists());
+    let report = intent_in(&project.dir, &["report"]);
     assert_eq!(report.status.code(), Some(1), "{}", stderr(&report));
 
     let unknown = intent_in(&project.dir, &["record", "--example", "ghost"]);

@@ -394,7 +394,7 @@ The Markdown report has these sections:
    ledger with their diffs. When a file's content at the base is not a prefix
    of its content now, the report says it was altered.
 
-The same catalog, approval log, run ledgers, tests and source always produce
+The same catalog, approval log, run ledger, tests and source always produce
 the same report.
 
 ## Commands
@@ -404,8 +404,8 @@ lemmaspec-intent check [--dir DIR]
 lemmaspec-intent approve ID... --by NAME [--dir DIR] [--tests DIR]
 lemmaspec-intent reconfirm ID... --by NAME [--dir DIR] [--tests DIR]
 lemmaspec-intent remove ID... --by NAME [--dir DIR] [--tests DIR]
-lemmaspec-intent record [--example ID] [--channel CHANNEL] [--ledger PATH] [--dir DIR] [--tests DIR]
-lemmaspec-intent report [--dir DIR] [--tests DIR] [--ledger PATH]... [--base COMMIT] [--format md|html] [-o PATH] [--bound PATH]
+lemmaspec-intent record [--example ID] [--channel CHANNEL] [--dir DIR] [--tests DIR]
+lemmaspec-intent report [--dir DIR] [--tests DIR] [--base COMMIT] [--format md|html] [-o PATH] [--bound PATH]
 lemmaspec-intent checker
 lemmaspec-intent intro
 ```
@@ -417,14 +417,14 @@ lemmaspec-intent intro
   their latest approval, which clears staleness. Exits 0.
 - `remove` appends an approved removal of each approved item. Exits 0.
 - `record` runs the selected examples, every example on every channel it is
-  tagged for by default, and appends one run each to `--ledger`, which defaults
-  to `DIR/runs.intent`. Exits 0 whatever the outcomes.
-- `report` prints the report, or writes it to `-o`. `--ledger` adds a run
-  ledger to the committed one and can repeat; a missing ledger holds no runs.
-  `--format html` renders through LemmaSpec's HTML renderer. `--bound` writes
-  the checker bound to the projected evidence, which `lemmaspec walk` and
-  `lemmaspec render` accept. Exits 1 while anything awaits approval, and 0
-  otherwise, even when statements are unverified.
+  tagged for by default, and appends one run each to `DIR/runs.intent`. Exits 0
+  whatever the outcomes.
+- `report` prints the report, or writes it to `-o`. It reads runs only from
+  `DIR/runs.intent`; a missing ledger holds no runs. `--format html` renders
+  through LemmaSpec's HTML renderer. `--bound` writes the checker bound to the
+  projected evidence, which `lemmaspec walk` and `lemmaspec render` accept.
+  Exits 1 while anything awaits approval, and 0 otherwise, even when statements
+  are unverified.
 - `checker` prints the bundled checker. Exits 0.
 - `intro` prints the workflow for coding agents. Exits 0.
 

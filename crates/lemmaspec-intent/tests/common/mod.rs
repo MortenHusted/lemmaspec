@@ -97,7 +97,6 @@ impl Project {
         ] {
             project.git(&["config", key, value]);
         }
-        project.write(".gitignore", "/ci/\n");
         project.write("src/lib.rs", "pub fn open_status() -> u8 {\n    1\n}\n");
         project.write("intent/catalog.intent", &root_catalog(STATEMENTS));
         project.write("intent/channels.intent", CHANNELS);
@@ -209,20 +208,20 @@ impl Project {
         );
     }
 
-    /// Every example passes at the current identity, in an ignored ledger
-    /// under `ci/`, as CI records them.
-    pub fn record_green(&self, name: &str) -> PathBuf {
-        let path = self.dir.join("ci").join(name);
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        self.record(&path, Outcome::Pass, &self.identity(), "");
-        path
+    /// Every example passes at the current identity, in the committed ledger.
+    pub fn record_green(&self) {
+        self.record(
+            &self.intent().join(RUNS_FILE),
+            Outcome::Pass,
+            &self.identity(),
+            "",
+        );
     }
 
-    pub fn report(&self, ledgers: &[PathBuf], base: Option<&str>) -> Report {
+    pub fn report(&self, base: Option<&str>) -> Report {
         report(&Options {
             dir: self.intent(),
             tests: self.tests(),
-            ledgers: ledgers.to_vec(),
             base: base.map(Into::into),
         })
         .unwrap()

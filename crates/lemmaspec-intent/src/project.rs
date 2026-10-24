@@ -37,17 +37,15 @@ pub struct Inputs {
     pub examples: Scan,
     pub log: Log,
     pub catalog_ledger: Ledger,
-    pub extra_ledgers: Vec<Ledger>,
     pub(crate) dir: PathBuf,
     tests: PathBuf,
     digest_by_cited_path: BTreeMap<String, String>,
 }
 
 impl Inputs {
-    /// Read the catalog in `dir` with its approval log and run ledger, the
-    /// examples in `tests`, and each extra ledger, where a missing one holds
-    /// no runs.
-    pub fn read(dir: &Path, tests: &Path, ledgers: &[PathBuf]) -> Result<Inputs, String> {
+    /// Read the catalog in `dir` with its approval log and run ledger, and the
+    /// examples in `tests`.
+    pub fn read(dir: &Path, tests: &Path) -> Result<Inputs, String> {
         let reader = DirReader(dir.into());
         let catalog = load(&reader)?;
         let examples = scan(tests, &catalog)?;
@@ -56,19 +54,11 @@ impl Inputs {
             path: cited(&dir.join(RUNS_FILE)),
             runs: runs::read(&reader)?,
         };
-        let mut extra_ledgers = Vec::new();
-        for path in ledgers {
-            extra_ledgers.push(Ledger {
-                path: cited(path),
-                runs: runs::parse(&read_or_empty(path)?, &cited(path))?,
-            });
-        }
         let mut inputs = Inputs {
             catalog,
             examples,
             log,
             catalog_ledger,
-            extra_ledgers,
             dir: dir.into(),
             tests: tests.into(),
             digest_by_cited_path: BTreeMap::new(),
@@ -86,7 +76,6 @@ impl Inputs {
                     .map(|example| test_path(tests, &example.file)),
             )
             .chain([dir.join(APPROVALS_FILE), dir.join(RUNS_FILE)])
-            .chain(ledgers.iter().cloned())
             .collect();
         files.sort();
         files.dedup();
@@ -123,11 +112,6 @@ impl Inputs {
             .enumerate()
             .map(|(index, entry)| (index + 1, entry))
             .filter(|(_, entry)| entry.digest_version == DIGEST_VERSION)
-    }
-
-    /// The catalog ledger, then each extra ledger in the order given.
-    pub fn ledgers(&self) -> impl Iterator<Item = &Ledger> {
-        std::iter::once(&self.catalog_ledger).chain(&self.extra_ledgers)
     }
 
     fn snapshot(&self, path: String) -> EvidenceBasis {
@@ -264,12 +248,9 @@ pub fn project(inputs: &Inputs, target: &str) -> Artifact {
         }
         judged.push(entry.item.clone());
     }
-    for ledger in inputs.ledgers() {
-        let runs: Vec<&Run> = ledger.evaluated_runs().collect();
-        if runs.is_empty() {
-            continue;
-        }
-        let basis = inputs.snapshot(ledger.path.clone());
+    let runs: Vec<&Run> = inputs.catalog_ledger.evaluated_runs().collect();
+    if !runs.is_empty() {
+        let basis = inputs.snapshot(inputs.catalog_ledger.path.clone());
         for run in runs {
             facts.add(
                 &basis,

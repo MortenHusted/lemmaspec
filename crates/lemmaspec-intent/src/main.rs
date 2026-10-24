@@ -20,8 +20,8 @@ const USAGE: &str = "usage: lemmaspec-intent check [--dir DIR]
        lemmaspec-intent approve ID... --by NAME [--dir DIR] [--tests DIR]
        lemmaspec-intent reconfirm ID... --by NAME [--dir DIR] [--tests DIR]
        lemmaspec-intent remove ID... --by NAME [--dir DIR] [--tests DIR]
-       lemmaspec-intent record [--example ID] [--channel CHANNEL] [--ledger PATH] [--dir DIR] [--tests DIR]
-       lemmaspec-intent report [--dir DIR] [--tests DIR] [--ledger PATH]... [--base COMMIT] [--format md|html] [-o PATH] [--bound PATH]
+       lemmaspec-intent record [--example ID] [--channel CHANNEL] [--dir DIR] [--tests DIR]
+       lemmaspec-intent report [--dir DIR] [--tests DIR] [--base COMMIT] [--format md|html] [-o PATH] [--bound PATH]
        lemmaspec-intent checker
        lemmaspec-intent intro
 
@@ -114,7 +114,6 @@ Reference: https://github.com/MortenHusted/lemmaspec/blob/main/crates/lemmaspec-
 struct Args {
     ids: Vec<String>,
     options: BTreeMap<&'static str, String>,
-    ledgers: Vec<PathBuf>,
 }
 
 impl Args {
@@ -122,14 +121,9 @@ impl Args {
         let (accepted, takes_ids): (&[&'static str], bool) = match command {
             "check" => (&["--dir"], false),
             "approve" | "reconfirm" | "remove" => (&["--by", "--dir", "--tests"], true),
-            "record" => (
-                &["--example", "--channel", "--ledger", "--dir", "--tests"],
-                false,
-            ),
+            "record" => (&["--example", "--channel", "--dir", "--tests"], false),
             "report" => (
-                &[
-                    "--dir", "--tests", "--ledger", "--base", "--format", "-o", "--bound",
-                ],
+                &["--dir", "--tests", "--base", "--format", "-o", "--bound"],
                 false,
             ),
             "checker" | "intro" => (&[], false),
@@ -138,7 +132,6 @@ impl Args {
         let mut parsed = Args {
             ids: Vec::new(),
             options: BTreeMap::new(),
-            ledgers: Vec::new(),
         };
         while let Some(arg) = args.next() {
             match accepted.iter().find(|option| **option == arg) {
@@ -146,9 +139,7 @@ impl Args {
                     let value = args
                         .next()
                         .ok_or_else(|| format!("{option} requires a value"))?;
-                    if command == "report" && option == "--ledger" {
-                        parsed.ledgers.push(value.into());
-                    } else if parsed.options.insert(option, value).is_some() {
+                    if parsed.options.insert(option, value).is_some() {
                         return Err(format!("unknown or duplicate option {arg}"));
                     }
                 }
@@ -206,10 +197,7 @@ fn run() -> Result<ExitCode, String> {
                 example: args.options.get("--example").cloned(),
                 channel: args.options.get("--channel").cloned(),
             };
-            let ledger = args
-                .options
-                .get("--ledger")
-                .map_or_else(|| dir.join(RUNS_FILE), PathBuf::from);
+            let ledger = dir.join(RUNS_FILE);
             let mut runner = CargoTest {
                 dir: repo.root.clone(),
             };
@@ -240,7 +228,6 @@ fn write_report(args: &Args, dir: PathBuf, tests: PathBuf) -> Result<ExitCode, S
     let report = report(&Options {
         dir,
         tests,
-        ledgers: args.ledgers.clone(),
         base: args.options.get("--base").cloned(),
     })?;
     let text = if html {
