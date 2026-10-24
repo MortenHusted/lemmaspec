@@ -58,3 +58,57 @@ run {
   outcome: fail
   diff: "diff --git a/src/artifact/validate.rs b/src/artifact/validate.rs\nindex 1bf1fe0..c3717fd 100644\n--- a/src/artifact/validate.rs\n+++ b/src/artifact/validate.rs\n@@ -438,7 +438,7 @@ pub fn walk_parsed_artifact(artifact: &Artifact) -> Result<WalkReport, ArtifactE\n     let status = if expectations.iter().all(|expectation| expectation.satisfied) {\n         \"clean\"\n     } else {\n-        \"incomplete\"\n+        \"clean\"\n     };\n \n     Ok(WalkReport {\n"
 }
+run {
+  example: walk_report_clean
+  digest: "sha256:c2264d958cb6e9fdf910665dc0d8da129602805c92fa0088cd1d19c949c0385b"
+  digest_version: 1
+  channel: library
+  source: "sha256:5eb0ef6f28478c855e4631a15c75417ce4b3305e4b408fa19ad2f3cc8c74d1a9"
+  base: "a1d307f40824f16d7fbd5dae4bf1a4d00ecf2ad3"
+  outcome: pass
+}
+run {
+  example: walk_report_incomplete
+  digest: "sha256:19da55ee425d39aaf45177d41b69831f35a9a49d50d539ea3ef9d3a97fe8018b"
+  digest_version: 1
+  channel: library
+  source: "sha256:5eb0ef6f28478c855e4631a15c75417ce4b3305e4b408fa19ad2f3cc8c74d1a9"
+  base: "a1d307f40824f16d7fbd5dae4bf1a4d00ecf2ad3"
+  outcome: pass
+}
+run {
+  example: walk_clean_exits_zero
+  digest: "sha256:c414e0c4e2c0d8a90fec374a0390d6e09b2530bc0a9d7063a1ba4dbbd0f71c2a"
+  digest_version: 1
+  channel: cli
+  source: "sha256:5eb0ef6f28478c855e4631a15c75417ce4b3305e4b408fa19ad2f3cc8c74d1a9"
+  base: "a1d307f40824f16d7fbd5dae4bf1a4d00ecf2ad3"
+  outcome: pass
+}
+run {
+  example: mutate_survivor_exits_one
+  digest: "sha256:d5dc9e949f51671a04d62a758a3dc245f1c966d69e085c090d9f3406bd5f79e2"
+  digest_version: 1
+  channel: cli
+  source: "sha256:5eb0ef6f28478c855e4631a15c75417ce4b3305e4b408fa19ad2f3cc8c74d1a9"
+  base: "a1d307f40824f16d7fbd5dae4bf1a4d00ecf2ad3"
+  outcome: pass
+}
+run {
+  example: walk_open_expectation_exits_one
+  digest: "sha256:ef26438952c0ef32bc3e5663455151928b824d9e33fb66ffc63a9ae7e37aec23"
+  digest_version: 1
+  channel: cli
+  source: "sha256:5eb0ef6f28478c855e4631a15c75417ce4b3305e4b408fa19ad2f3cc8c74d1a9"
+  base: "a1d307f40824f16d7fbd5dae4bf1a4d00ecf2ad3"
+  outcome: pass
+}
+run {
+  example: walk_unreadable_artifact_exits_two
+  digest: "sha256:e1aa47a505dd07d90820335725179b162e6b503a2d3ec63f63e5f5e81c42ee2a"
+  digest_version: 1
+  channel: cli
+  source: "sha256:5eb0ef6f28478c855e4631a15c75417ce4b3305e4b408fa19ad2f3cc8c74d1a9"
+  base: "a1d307f40824f16d7fbd5dae4bf1a4d00ecf2ad3"
+  outcome: pass
+}
