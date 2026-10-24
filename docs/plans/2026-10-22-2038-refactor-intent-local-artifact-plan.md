@@ -4,7 +4,7 @@ type: refactor
 date: 2026-10-22
 topic: intent-local-artifact
 execution: code
-status: ready
+status: completed
 builds_on: docs/plans/2026-10-22-1005-feat-intent-catalog-plan.md
 ---
 
