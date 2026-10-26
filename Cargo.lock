@@ -72,6 +72,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "lemmaspec-intent"
+version = "0.1.0"
+dependencies = [
+ "lemmaspec",
+ "proc-macro2",
+ "quote",
+ "sha2",
+ "syn",
+]
+
+[[package]]
 name = "lemmaspec-plan"
 version = "0.1.0"
 dependencies = [

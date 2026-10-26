@@ -1,0 +1,18 @@
+[package]
+name = "lemmaspec-intent"
+version = "0.1.0"
+edition = "2021"
+description = "Typed intent catalog for LemmaSpec"
+license = "MIT"
+repository = "https://github.com/MortenHusted/lemmaspec"
+readme = "README.md"
+
+[dependencies]
+lemmaspec = { path = "../..", version = "0.4.0" }
+proc-macro2 = { version = "1", default-features = false, features = ["span-locations"] }
+quote = { version = "1", default-features = false }
+sha2 = "0.10"
+syn = { version = "3", default-features = false, features = ["full", "parsing", "printing"] }
+
+[package.metadata.dist]
+dist = false

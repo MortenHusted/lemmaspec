@@ -7,6 +7,18 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- Optional `lemmaspec-intent` workspace consumer: a typed intent catalog of
+  intents, domain definitions, exceptions and channels across imported files;
+  tagged `cargo test` integration tests as examples; an append-only approval
+  log; a run ledger keyed by source identity, with the diff behind each
+  failing run; and a report that gives every statement one standing of
+  unapproved, stale, unverified or verified. `lemmaspec-intent intro` prints
+  the agent workflow. It is not bundled in core binary releases.
+- The LemmaSpec skill points agents at `lemmaspec-intent intro` when a
+  repository has an `intent/` catalog.
+
 ### Fixed
 
 - A rule comparison against a symbol that no fact mentions now evaluates

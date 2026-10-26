@@ -1,0 +1,17 @@
+catalog walk {
+  use "./channels.intent" as ch
+
+  intent walk_tells_whether_expectations_hold {
+    text: "Walking an artifact tells the caller whether every expectation the artifact declares holds."
+  }
+  definition walk_exit_status {
+    refines: walk_tells_whether_expectations_hold
+    text: "The walk command exits 0 when every expectation holds, 1 when the artifact is valid but an expectation does not hold, and 2 when the artifact cannot be read."
+  }
+  exception library_walk_reports_its_status {
+    narrows: walk_exit_status
+    channels: [ch.library]
+    kind: holds_instead
+    text: "The library sets no exit status and reads no file. walk_artifact returns a report whose status is clean when every expectation holds, and incomplete, with the expectation that does not hold marked unsatisfied, when one does not."
+  }
+}

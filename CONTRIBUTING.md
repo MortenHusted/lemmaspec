@@ -6,10 +6,13 @@ Before opening a pull request:
 
 ```sh
 cargo fmt --check
-cargo clippy --locked --all-targets -- -D warnings
-cargo test --locked --all-targets
+cargo clippy --workspace --locked --all-targets -- -D warnings
+cargo test --workspace --locked --all-targets
 cargo package --locked
 ```
+
+`--workspace` matters: the root `Cargo.toml` sets `default-members = ["."]`, so
+without it Cargo skips the crates under `crates/`.
 
 Changes to an example's committed HTML view must be regenerated with the same
 source revision:

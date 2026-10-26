@@ -1,0 +1,5 @@
+catalog escape_target {
+  intent escaped {
+    text: "A file outside the catalog directory."
+  }
+}

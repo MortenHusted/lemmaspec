@@ -25,6 +25,7 @@ fn version_flags_report_the_package_version_globally() {
     }
 }
 
+/// intent: example walk_clean_exits_zero exemplifies walk_exit_status on cli
 #[test]
 fn walk_command_emits_machine_readable_report() {
     let output = Command::new(env!("CARGO_BIN_EXE_lemmaspec"))
@@ -117,6 +118,7 @@ spec named_condition_cli {
     );
 }
 
+/// intent: example mutate_survivor_exits_one exemplifies surviving_mutant_fails_mutate on cli
 #[test]
 fn surviving_mutant_exits_one() {
     let source = r#"
@@ -481,6 +483,7 @@ fn bare_invocation_prints_help_and_fails() {
     assert!(String::from_utf8_lossy(&output.stderr).contains("Usage:"));
 }
 
+/// intent: example walk_open_expectation_exits_one exemplifies walk_exit_status on cli
 #[test]
 fn incomplete_walk_exits_one_and_reports_failure() {
     let source =
@@ -742,6 +745,7 @@ fn incomplete_project_exits_one_and_omits_proof_edges() {
         .all(|edge| edge["rel"] != "proves"));
 }
 
+/// intent: example walk_unreadable_artifact_exits_two exemplifies walk_exit_status on cli
 #[test]
 fn missing_artifact_exits_two() {
     let output = Command::new(env!("CARGO_BIN_EXE_lemmaspec"))

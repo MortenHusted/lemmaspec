@@ -1,0 +1,14 @@
+catalog broken {
+  intent goal {
+    text: "A goal."
+  }
+  exception orphan {
+    narrows: missing_definition
+    channels: [cli]
+    kind: does_not_apply
+    text: "An exception whose definition does not exist."
+  }
+  channel cli {
+    text: "The command line."
+  }
+}

@@ -13,6 +13,7 @@ fn parses_typed_self_contained_artifact() {
     assert_eq!(artifact.expectations.len(), 1);
 }
 
+/// intent: example walk_report_clean exemplifies library_walk_reports_its_status on library
 #[test]
 fn walk_derives_expected_fact_with_proof() {
     let report = walk_artifact(EXAMPLE).expect("walk example");
@@ -250,6 +251,7 @@ fn malformed_artifacts_return_diagnostics() {
     }
 }
 
+/// intent: example walk_report_incomplete exemplifies library_walk_reports_its_status on library
 #[test]
 fn failed_expectation_marks_walk_incomplete() {
     let source = EXAMPLE.replace("count: 1", "count: 0");

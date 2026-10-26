@@ -1,0 +1,8 @@
+// The catalog is this root file and everything it imports.
+// approvals.intent and runs.intent are written by lemmaspec-intent and read by
+// fixed path, never imported.
+catalog lemmaspec {
+  use "./channels.intent" as channels
+  use "./walk.intent" as walk
+  use "./mutate.intent" as mutate
+}
